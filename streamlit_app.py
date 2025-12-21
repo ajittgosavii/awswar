@@ -3396,27 +3396,18 @@ def render_main_content():
     
     # Tab 7: EKS Modernization (shifted from index 5 to 6)
     with tabs[6]:
-        # Always show this - debugging
-        st.markdown("### 🚀 EKS Modernization Hub")
-        st.info("Loading EKS module...")
-        
         try:
-            # Import the function
             render_eks = get_eks_module()
-            
-            if render_eks is None:
-                st.error("❌ Module load returned None")
-                if 'EKS Modernization' in MODULE_ERRORS:
-                    st.code(f"Error: {MODULE_ERRORS['EKS Modernization']}")
-            elif callable(render_eks):
-                st.success("✅ Module loaded successfully!")
-                # Call the render function
+            if render_eks and callable(render_eks):
                 render_eks()
             else:
-                st.error(f"❌ Module is not callable: {type(render_eks)}")
-                
+                st.warning("EKS Modernization module not available")
+                st.info("The EKS Modernization module provides AI-powered Kubernetes architecture design.")
+                if 'EKS Modernization' in MODULE_ERRORS:
+                    with st.expander("Error Details"):
+                        st.code(MODULE_ERRORS['EKS Modernization'])
         except Exception as e:
-            st.error(f"❌ Exception: {str(e)}")
+            st.error(f"Error loading EKS Modernization: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
     
