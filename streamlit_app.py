@@ -52,48 +52,85 @@ def get_logger_cached(name: str):
 logger = get_logger_cached(__name__)
 
 # Lazy import functions - only load modules when actually needed
+import threading
 _module_cache = {}
+_import_lock = threading.Lock()
 
 def _lazy_import(module_name: str, func_name: str = None):
-    """Lazily import a module or function from a module"""
-    if module_name not in _module_cache:
-        import importlib
-        _module_cache[module_name] = importlib.import_module(module_name)
+    """Lazily import a module or function from a module - thread safe"""
+    # Fast path - module already loaded
+    if module_name in _module_cache:
+        module = _module_cache[module_name]
+        if module is None:
+            return lambda *args, **kwargs: None
+        if func_name:
+            return getattr(module, func_name, lambda *args, **kwargs: None)
+        return module
+    
+    # Slow path - need to import
+    with _import_lock:
+        # Double-check after acquiring lock
+        if module_name in _module_cache:
+            module = _module_cache[module_name]
+        else:
+            try:
+                import importlib
+                import sys
+                # Clear any partial import
+                if module_name in sys.modules:
+                    module = sys.modules[module_name]
+                else:
+                    module = importlib.import_module(module_name)
+                _module_cache[module_name] = module
+            except Exception as e:
+                print(f"Warning: Failed to import {module_name}: {e}")
+                _module_cache[module_name] = None
+                module = None
+    
+    if module is None:
+        return lambda *args, **kwargs: None
     
     if func_name:
-        return getattr(_module_cache[module_name], func_name)
-    return _module_cache[module_name]
+        return getattr(module, func_name, lambda *args, **kwargs: None)
+    return module
 
 # Don't import heavy modules at startup - use lazy loading
 def render_unified_waf_workflow():
     """Lazy wrapper for unified workflow"""
     func = _lazy_import('waf_unified_workflow', 'render_unified_waf_workflow')
-    return func()
+    if func:
+        return func()
 
 def render_integrated_waf_scanner():
     """Lazy wrapper for integrated scanner"""
     func = _lazy_import('waf_scanner_integrated', 'render_integrated_waf_scanner')
-    return func()
+    if func:
+        return func()
 
 def get_demo_manager():
     """Lazy wrapper for demo manager"""
     func = _lazy_import('demo_mode_manager', 'get_demo_manager')
-    return func()
+    if func:
+        return func()
+    return None
 
 def render_mode_toggle():
     """Lazy wrapper for mode toggle"""
     func = _lazy_import('demo_mode_manager', 'render_mode_toggle')
-    return func()
+    if func:
+        return func()
 
 def render_mode_banner():
     """Lazy wrapper for mode banner"""
     func = _lazy_import('demo_mode_manager', 'render_mode_banner')
-    return func()
+    if func:
+        return func()
 
 def render_demo_account_info():
     """Lazy wrapper for demo account info"""
     func = _lazy_import('demo_mode_manager', 'render_demo_account_info')
-    return func()
+    if func:
+        return func()
 
 
 # Performance: Initialize session state for caching (only once)
