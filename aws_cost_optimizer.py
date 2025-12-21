@@ -234,10 +234,12 @@ class AWSCostOptimizer:
 
 
 @st.cache_data(ttl=900)  # 15 min cache - recommendations rarely change
-def get_cost_optimization_recommendations(session: boto3.Session) -> List[Dict]:
+def get_cost_optimization_recommendations(_session: boto3.Session) -> List[Dict]:
     """
     Main function to get cost optimization recommendations from AWS
     This replaces dummy data in Live mode
+    
+    Note: _session has underscore prefix to tell Streamlit not to hash it
     """
-    optimizer = AWSCostOptimizer(session)
+    optimizer = AWSCostOptimizer(_session)
     return optimizer.get_all_recommendations()

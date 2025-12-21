@@ -155,12 +155,12 @@ class AWSBudgetsManager:
 
 
 @st.cache_data(ttl=300)  # 5 min cache for Live mode
-def get_budgets_from_aws(session: boto3.Session) -> Dict:
+def get_budgets_from_aws(_session: boto3.Session) -> Dict:
     """
     Main function to get budget data from AWS
     This replaces the "not integrated" message in Live mode
     """
-    manager = AWSBudgetsManager(session)
+    manager = AWSBudgetsManager(_session)
     summary = manager.get_budget_summary()
     
     return {
