@@ -1,0 +1,52 @@
+# AWS WAF Scanner Enterprise - .gitignore
+
+# Secrets - NEVER COMMIT
+secrets.toml
+.streamlit/secrets.toml
+*.pem
+*.key
+.env
+.env.*
+
+# Backup files
+*_backup.py
+*_OLD.py
+*_original.py
+*.py.backup
+*.py.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs & Data
+logs/
+*.log
+data/
+*.db
+*.sqlite
+
+# OS
+.DS_Store
+Thumbs.db
