@@ -24,7 +24,6 @@ class AWSCostOptimizer:
         except ClientError:
             pass  # Compute Optimizer might not be enabled
     
-    @st.cache_data(ttl=900)
     def get_rightsizing_recommendations(self) -> List[Dict]:
         """Get EC2 rightsizing recommendations from Cost Explorer"""
         recommendations = []
@@ -207,7 +206,6 @@ class AWSCostOptimizer:
         
         return recommendations
     
-    @st.cache_data(ttl=900)
     def get_all_recommendations(self) -> List[Dict]:
         """Get all cost optimization recommendations"""
         all_recommendations = []
