@@ -252,92 +252,107 @@ MODULE_STATUS = {}
 MODULE_ERRORS = {}
 
 # ============================================================================
-# IMPORT AWS MODULES
+# LAZY MODULE LOADING - Only load modules when their tab is accessed
 # ============================================================================
 
-print("Loading AWS modules...")
+print("Initializing module loaders...")
 
-# Core modules
-try:
-    from aws_connector import get_aws_session, test_aws_connection
-    MODULE_STATUS['AWS Connector'] = True
-except Exception as e:
-    MODULE_STATUS['AWS Connector'] = False
-    MODULE_ERRORS['AWS Connector'] = str(e)
+# Module references (will be populated lazily)
+_lazy_modules = {}
 
-try:
-    from landscape_scanner import AWSLandscapeScanner
-    MODULE_STATUS['Landscape Scanner'] = True
-except Exception as e:
-    MODULE_STATUS['Landscape Scanner'] = False
-    MODULE_ERRORS['Landscape Scanner'] = str(e)
+def _get_module(module_name: str, import_from: str, class_or_func: str):
+    """
+    Lazily load a module and return a specific class or function.
+    Only imports when first called.
+    """
+    cache_key = f"{import_from}.{class_or_func}"
+    
+    if cache_key not in _lazy_modules:
+        try:
+            import importlib
+            module = importlib.import_module(import_from)
+            _lazy_modules[cache_key] = getattr(module, class_or_func)
+            MODULE_STATUS[module_name] = True
+        except Exception as e:
+            _lazy_modules[cache_key] = None
+            MODULE_STATUS[module_name] = False
+            MODULE_ERRORS[module_name] = str(e)
+    
+    return _lazy_modules[cache_key]
 
-try:
-    from waf_review_module import render_waf_review_tab
-    MODULE_STATUS['WAF Review'] = True
-except Exception as e:
-    MODULE_STATUS['WAF Review'] = False
-    MODULE_ERRORS['WAF Review'] = str(e)
+# Pre-set module status to True (will be validated on first access)
+MODULE_STATUS['AWS Connector'] = True
+MODULE_STATUS['Landscape Scanner'] = True
+MODULE_STATUS['WAF Review'] = True
+MODULE_STATUS['Architecture Designer'] = True
+MODULE_STATUS['Compliance'] = True
+MODULE_STATUS['FinOps'] = True
+MODULE_STATUS['AI Assistant'] = True
+MODULE_STATUS['EKS Modernization'] = True
+MODULE_STATUS['EKS Modernization Legacy'] = False  # Legacy removed
 
-# Try new AI-powered Architecture Designer first, fallback to old module
+# Lazy accessor functions - these only import when called
+def get_aws_session():
+    """Lazy import of AWS session getter"""
+    func = _get_module('AWS Connector', 'aws_connector', 'get_aws_session')
+    return func() if func else None
+
+def test_aws_connection():
+    """Lazy import of AWS connection tester"""
+    func = _get_module('AWS Connector', 'aws_connector', 'test_aws_connection')
+    return func() if func else False
+
+def get_landscape_scanner():
+    """Lazy import of Landscape Scanner"""
+    return _get_module('Landscape Scanner', 'landscape_scanner', 'AWSLandscapeScanner')
+
+def render_waf_review_tab():
+    """Lazy import and render of WAF Review tab"""
+    func = _get_module('WAF Review', 'waf_review_module', 'render_waf_review_tab')
+    if func:
+        return func()
+    else:
+        st.error("WAF Review module not available")
+
+def get_architecture_designer():
+    """Lazy import of Architecture Designer - tries revamped, AI, then legacy"""
+    # Try revamped first
+    designer = _get_module('Architecture Designer', 'architecture_designer_revamped', 'render_architecture_designer_revamped')
+    if designer:
+        return designer, 'revamped'
+    
+    # Try AI version
+    designer = _get_module('Architecture Designer', 'architecture_designer_ai', 'render_architecture_designer_ai')
+    if designer:
+        return designer, 'ai'
+    
+    # Try legacy
+    designer = _get_module('Architecture Designer', 'modules_architecture_designer_waf', 'ArchitectureDesignerModule')
+    if designer:
+        return designer, 'legacy'
+    
+    return None, None
+
+def get_compliance_module():
+    """Lazy import of Compliance Module"""
+    return _get_module('Compliance', 'compliance_module', 'ComplianceModule')
+
+def get_finops_module():
+    """Lazy import of FinOps Module"""
+    return _get_module('FinOps', 'modules_finops', 'FinOpsEnterpriseModule')
+
+def get_ai_assistant_module():
+    """Lazy import of AI Assistant Module"""
+    return _get_module('AI Assistant', 'modules_ai_assistant', 'AIAssistantModule')
+
+def get_eks_module():
+    """Lazy import of EKS Architecture Wizard Module"""
+    return _get_module('EKS Modernization', 'eks_architecture_wizard_module', 'EKSArchitectureWizardModule')
+
+# Compatibility variables (set to None, will be populated on first access)
 ARCHITECTURE_DESIGNER_AI = False
 ARCHITECTURE_DESIGNER_REVAMPED = False
 ArchitectureDesignerModule = None
-
-try:
-    # Try the new revamped use-case based designer first
-    from architecture_designer_revamped import ArchitectureDesignerRevamped, render_architecture_designer_revamped
-    MODULE_STATUS['Architecture Designer'] = True
-    ARCHITECTURE_DESIGNER_REVAMPED = True
-except Exception as e_revamped:
-    try:
-        from architecture_designer_ai import ArchitectureDesignerAI, render_architecture_designer_ai
-        MODULE_STATUS['Architecture Designer'] = True
-        ARCHITECTURE_DESIGNER_AI = True
-    except Exception as e:
-        try:
-            from modules_architecture_designer_waf import ArchitectureDesignerModule
-            MODULE_STATUS['Architecture Designer'] = True
-            ARCHITECTURE_DESIGNER_AI = False
-        except Exception as e2:
-            MODULE_STATUS['Architecture Designer'] = False
-            MODULE_ERRORS['Architecture Designer'] = f"Revamped: {str(e_revamped)}, AI: {str(e)}, Legacy: {str(e2)}"
-            ARCHITECTURE_DESIGNER_AI = False
-
-# EKS Modernization Module - Legacy module removed for performance
-# AI-Enhanced EKS Architecture Wizard is now the only EKS module
-MODULE_STATUS['EKS Modernization Legacy'] = False  # Legacy removed
-
-try:
-    from compliance_module import ComplianceModule
-    MODULE_STATUS['Compliance'] = True
-except Exception as e:
-    MODULE_STATUS['Compliance'] = False
-    MODULE_ERRORS['Compliance'] = str(e)
-
-# FinOps / Cost Optimization Module
-try:
-    from modules_finops import FinOpsEnterpriseModule
-    MODULE_STATUS['FinOps'] = True
-except Exception as e:
-    MODULE_STATUS['FinOps'] = False
-    MODULE_ERRORS['FinOps'] = str(e)
-
-# AI Assistant Module
-try:
-    from modules_ai_assistant import AIAssistantModule
-    MODULE_STATUS['AI Assistant'] = True
-except Exception as e:
-    MODULE_STATUS['AI Assistant'] = False
-    MODULE_ERRORS['AI Assistant'] = str(e)
-
-# EKS Architecture Wizard Module (AI-Enhanced v2.0) - Replaces EKS Modernization
-try:
-    from eks_architecture_wizard_module import EKSArchitectureWizardModule, render_eks_architecture_wizard
-    MODULE_STATUS['EKS Modernization'] = True  # Use same key for compatibility
-except Exception as e:
-    MODULE_STATUS['EKS Modernization'] = False
-    MODULE_ERRORS['EKS Modernization'] = str(e)
 
 # ============================================================================
 # HEADER
@@ -3298,86 +3313,89 @@ def render_main_content():
     
     # Tab 4: WAF Assessment (shifted from index 2 to 3)
     with tabs[3]:
-        if MODULE_STATUS.get('WAF Review'):
-            try:
-                render_waf_review_tab()
-            except Exception as e:
-                st.error(f"Error loading WAF Review: {str(e)}")
-        else:
-            st.error("WAF Review module not available")
+        try:
+            render_waf_review_tab()  # This is now a lazy loader
+        except Exception as e:
+            st.error(f"Error loading WAF Review: {str(e)}")
     
     # Tab 5: Architecture Designer (shifted from index 3 to 4)
     with tabs[4]:
-        if MODULE_STATUS.get('Architecture Designer'):
-            try:
-                # Use revamped use-case based designer first
-                if ARCHITECTURE_DESIGNER_REVAMPED:
-                    render_architecture_designer_revamped()
-                elif ARCHITECTURE_DESIGNER_AI:
-                    render_architecture_designer_ai()
-                elif ArchitectureDesignerModule is not None:
-                    ArchitectureDesignerModule.render()
+        try:
+            designer, designer_type = get_architecture_designer()
+            if designer:
+                if designer_type == 'legacy':
+                    designer.render()
                 else:
-                    st.error("Architecture Designer module not properly loaded")
-            except Exception as e:
-                st.error(f"Error loading Architecture Designer: {str(e)}")
-                import traceback
-                with st.expander("Error Details"):
-                    st.code(traceback.format_exc())
-        else:
-            st.error("Architecture Designer module not available")
+                    designer()
+            else:
+                st.error("Architecture Designer module not available")
+                if 'Architecture Designer' in MODULE_ERRORS:
+                    st.info(f"Error: {MODULE_ERRORS['Architecture Designer']}")
+        except Exception as e:
+            st.error(f"Error loading Architecture Designer: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
     
     # Tab 6: Cost Optimization (shifted from index 4 to 5)
     with tabs[5]:
-        if MODULE_STATUS.get('FinOps'):
-            try:
-                FinOpsEnterpriseModule.render()
-            except Exception as e:
-                st.error(f"Error loading FinOps: {str(e)}")
-                import traceback
-                with st.expander("Error Details"):
-                    st.code(traceback.format_exc())
-        else:
-            st.warning("FinOps module not available")
-            st.info("Cost optimization features require the FinOps module.")
+        try:
+            finops = get_finops_module()
+            if finops:
+                finops.render()
+            else:
+                st.warning("FinOps module not available")
+                st.info("Cost optimization features require the FinOps module.")
+        except Exception as e:
+            st.error(f"Error loading FinOps: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
     
     # Tab 7: EKS Modernization (shifted from index 5 to 6)
     with tabs[6]:
-        if MODULE_STATUS.get('EKS Modernization'):
-            try:
-                EKSArchitectureWizardModule.render()
-            except Exception as e:
-                st.error(f"Error loading EKS Modernization: {str(e)}")
-                import traceback
-                with st.expander("Error Details"):
-                    st.code(traceback.format_exc())
-        else:
-            st.warning("EKS Modernization module not available")
-            st.info("The EKS Modernization module provides AI-powered Kubernetes architecture design with Terraform/CloudFormation generation.")
+        try:
+            with st.spinner("Loading EKS Architecture Wizard..."):
+                eks_module = get_eks_module()
+            if eks_module:
+                eks_module.render()
+            else:
+                st.warning("EKS Modernization module not available")
+                st.info("The EKS Modernization module provides AI-powered Kubernetes architecture design with Terraform/CloudFormation generation.")
+                if 'EKS Modernization' in MODULE_ERRORS:
+                    with st.expander("Error Details"):
+                        st.code(MODULE_ERRORS['EKS Modernization'])
+        except Exception as e:
+            st.error(f"Error loading EKS Modernization: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
     
     # Tab 8: Compliance (shifted from index 6 to 7)
     with tabs[7]:
-        if MODULE_STATUS.get('Compliance'):
-            try:
-                ComplianceModule.render()
-            except Exception as e:
-                st.error(f"Error loading Compliance: {str(e)}")
-        else:
-            st.warning("Compliance module not available")
+        try:
+            compliance = get_compliance_module()
+            if compliance:
+                compliance.render()
+            else:
+                st.warning("Compliance module not available")
+        except Exception as e:
+            st.error(f"Error loading Compliance: {str(e)}")
     
     # Tab 9: AI Assistant (shifted from index 7 to 8)
     with tabs[8]:
-        if MODULE_STATUS.get('AI Assistant'):
-            try:
-                AIAssistantModule.render()
-            except Exception as e:
-                st.error(f"Error loading AI Assistant: {str(e)}")
-                import traceback
-                with st.expander("Error Details"):
-                    st.code(traceback.format_exc())
-        else:
-            st.warning("AI Assistant module not available")
-            st.info("AI-powered assistance requires the AI Assistant module and Anthropic API key.")
+        try:
+            ai_assistant = get_ai_assistant_module()
+            if ai_assistant:
+                ai_assistant.render()
+            else:
+                st.warning("AI Assistant module not available")
+                st.info("AI-powered assistance requires the AI Assistant module and Anthropic API key.")
+        except Exception as e:
+            st.error(f"Error loading AI Assistant: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
     
     # Tab 10: Admin Panel (shifted from index 8 to 9) - only for admins
     if show_admin_tab and len(tabs) > 9:
