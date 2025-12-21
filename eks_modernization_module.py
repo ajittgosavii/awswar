@@ -196,16 +196,16 @@ class EKSDesignWizard:
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
             if current_step > 0:
-                if st.button("⬅️ Previous", use_container_width=True):
+                if st.button("⬅️ Previous", width="stretch"):
                     st.session_state.wizard_step -= 1
                     st.rerun()
         with col3:
             if current_step < len(EKSDesignWizard.STEPS) - 1:
-                if st.button("Next ➡️", use_container_width=True):
+                if st.button("Next ➡️", width="stretch"):
                     st.session_state.wizard_step += 1
                     st.rerun()
             elif current_step == len(EKSDesignWizard.STEPS) - 1:
-                if st.button("✅ Complete Design", type="primary", use_container_width=True):
+                if st.button("✅ Complete Design", type="primary", width="stretch"):
                     st.success("🎉 Design completed! Ready to export.")
     
     @staticmethod
@@ -824,7 +824,7 @@ class EKSDesignWizard:
         if validator.available:
             st.success(f"{validator.status_message}")
             
-            if st.button("🔍 Validate Architecture with AI", type="primary", use_container_width=True):
+            if st.button("🔍 Validate Architecture with AI", type="primary", width="stretch"):
                 with st.spinner("🤖 AI analyzing your architecture..."):
                     validation_results = validator.validate_architecture(spec)
                     st.session_state.validation_results = validation_results
@@ -846,7 +846,7 @@ class EKSDesignWizard:
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            if st.button("📄 Export to Word", use_container_width=True):
+            if st.button("📄 Export to Word", width="stretch"):
                 doc_generator = DocumentationGenerator()
                 doc_bytes_io = doc_generator.generate_word_doc(spec)
                 
@@ -856,12 +856,12 @@ class EKSDesignWizard:
                     data=doc_bytes_io.getvalue(),
                     file_name=f"eks_architecture_{spec.project_name.replace(' ', '_')}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True
+                    width="stretch"
                 )
                 st.success("✅ Word document ready for download!")
         
         with col2:
-            if st.button("🔧 Generate Terraform", use_container_width=True):
+            if st.button("🔧 Generate Terraform", width="stretch"):
                 iac_generator = IaCGenerator()
                 tf_code = iac_generator.generate_terraform(spec)
                 st.download_button(
@@ -872,7 +872,7 @@ class EKSDesignWizard:
                 )
         
         with col3:
-            if st.button("☁️ Generate CloudFormation", use_container_width=True):
+            if st.button("☁️ Generate CloudFormation", width="stretch"):
                 iac_generator = IaCGenerator()
                 cfn_code = iac_generator.generate_cloudformation(spec)
                 st.download_button(
@@ -883,7 +883,7 @@ class EKSDesignWizard:
                 )
         
         with col4:
-            if st.button("📊 Architecture Diagram", use_container_width=True):
+            if st.button("📊 Architecture Diagram", width="stretch"):
                 diagram_generator = DiagramGenerator()
                 diagram_generator.generate_diagram(spec)
                 st.success("✅ Diagram generated!")
@@ -2011,7 +2011,7 @@ class DiagramGenerator:
                 data=svg_content,
                 file_name=f"{spec.project_name.replace(' ', '_')}_eks_architecture.svg",
                 mime="image/svg+xml",
-                use_container_width=True
+                width="stretch"
             )
         with col2:
             st.info("✨ Professional diagram generated!")
@@ -2122,7 +2122,7 @@ def render_documentation_export():
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("📄 Export to Word", use_container_width=True):
+            if st.button("📄 Export to Word", width="stretch"):
                 if not DOCX_AVAILABLE:
                     st.error("⚠️ Word export requires 'python-docx'. Please install it:\n```pip install python-docx```")
                 else:
@@ -2136,16 +2136,16 @@ def render_documentation_export():
                             data=doc_bytes_io.getvalue(),
                             file_name=f"eks_architecture_{spec.project_name.replace(' ', '_')}.docx",
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True
+                            width="stretch"
                         )
                         st.success("✅ Word document ready for download!")
         
         with col2:
-            if st.button("📄 Export to PDF", use_container_width=True):
+            if st.button("📄 Export to PDF", width="stretch"):
                 st.info("PDF export coming soon!")
         
         with col3:
-            if st.button("📋 Export to JSON", use_container_width=True):
+            if st.button("📋 Export to JSON", width="stretch"):
                 spec_json = json.dumps(spec.__dict__, indent=2, default=str)
                 st.download_button(
                     "Download JSON",

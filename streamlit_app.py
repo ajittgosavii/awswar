@@ -265,18 +265,23 @@ def _get_module(module_name: str, import_from: str, class_or_func: str):
     Lazily load a module and return a specific class or function.
     Only imports when first called.
     """
+    import time
     cache_key = f"{import_from}.{class_or_func}"
     
     if cache_key not in _lazy_modules:
+        start_time = time.time()
         try:
             import importlib
             module = importlib.import_module(import_from)
             _lazy_modules[cache_key] = getattr(module, class_or_func)
             MODULE_STATUS[module_name] = True
+            elapsed = time.time() - start_time
+            logger.info(f"Loaded {module_name} in {elapsed:.2f}s")
         except Exception as e:
             _lazy_modules[cache_key] = None
             MODULE_STATUS[module_name] = False
             MODULE_ERRORS[module_name] = str(e)
+            logger.error(f"Failed to load {module_name}: {e}")
     
     return _lazy_modules[cache_key]
 
@@ -346,8 +351,8 @@ def get_ai_assistant_module():
     return _get_module('AI Assistant', 'modules_ai_assistant', 'AIAssistantModule')
 
 def get_eks_module():
-    """Lazy import of EKS Architecture Wizard Module"""
-    return _get_module('EKS Modernization', 'eks_architecture_wizard_module', 'EKSArchitectureWizardModule')
+    """Lazy import of EKS Architecture Wizard Module - returns function"""
+    return _get_module('EKS Modernization', 'eks_architecture_wizard_module', 'render_eks_architecture_wizard')
 
 # Compatibility variables (set to None, will be populated on first access)
 ARCHITECTURE_DESIGNER_AI = False
@@ -570,11 +575,11 @@ def render_sidebar():
                 col_a, col_b = st.columns(2)
                 with col_a:
                     if user_role == 'admin':
-                        if st.button("⚙️ Admin", use_container_width=True, key="sidebar_admin_btn"):
+                        if st.button("⚙️ Admin", width="stretch", key="sidebar_admin_btn"):
                             st.session_state.show_admin_panel = True
                             st.rerun()
                 with col_b:
-                    if st.button("Logout", use_container_width=True, key="sidebar_logout_btn"):
+                    if st.button("Logout", width="stretch", key="sidebar_logout_btn"):
                         # Clear session state
                         st.session_state.authenticated = False
                         st.session_state.user_info = None
@@ -592,7 +597,7 @@ def render_sidebar():
             demo_selected = st.button(
                 "🎭 Demo",
                 type="primary" if demo_mgr.is_demo_mode else "secondary",
-                use_container_width=True,
+                width="stretch",
                 help="Use simulated data for demonstrations"
             )
             if demo_selected and not demo_mgr.is_demo_mode:
@@ -603,7 +608,7 @@ def render_sidebar():
             live_selected = st.button(
                 "🔴 Live",
                 type="primary" if not demo_mgr.is_demo_mode else "secondary",
-                use_container_width=True,
+                width="stretch",
                 help="Connect to real AWS accounts"
             )
             if live_selected and demo_mgr.is_demo_mode:
@@ -827,7 +832,7 @@ def render_single_account_connector():
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("💾 Save & Connect", type="primary", use_container_width=True):
+            if st.button("💾 Save & Connect", type="primary", width="stretch"):
                 if aws_access_key and aws_secret_key:
                     st.session_state.aws_access_key = aws_access_key
                     st.session_state.aws_secret_key = aws_secret_key
@@ -838,7 +843,7 @@ def render_single_account_connector():
                     st.error("❌ Provide both Access Key and Secret Key")
         
         with col2:
-            if st.button("🔍 Test Connection", use_container_width=True):
+            if st.button("🔍 Test Connection", width="stretch"):
                 if aws_access_key and aws_secret_key:
                     with st.spinner("Testing connection..."):
                         try:
@@ -863,7 +868,7 @@ def render_single_account_connector():
                     st.warning("Enter credentials first")
         
         with col3:
-            if st.button("🗑️ Clear", use_container_width=True):
+            if st.button("🗑️ Clear", width="stretch"):
                 if 'aws_access_key' in st.session_state:
                     del st.session_state.aws_access_key
                 if 'aws_secret_key' in st.session_state:
@@ -941,7 +946,7 @@ def render_single_account_connector():
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("🔐 Assume Role & Connect", type="primary", use_container_width=True, key="assume_connect"):
+            if st.button("🔐 Assume Role & Connect", type="primary", width="stretch", key="assume_connect"):
                 if not (base_access_key and base_secret_key and role_arn):
                     st.error("❌ Provide base credentials and role ARN")
                 else:
@@ -982,7 +987,7 @@ def render_single_account_connector():
                             st.error(f"❌ Error: {str(e)}")
         
         with col2:
-            if st.button("🔍 Test AssumeRole", use_container_width=True, key="assume_test"):
+            if st.button("🔍 Test AssumeRole", width="stretch", key="assume_test"):
                 if not (base_access_key and base_secret_key and role_arn):
                     st.warning("Fill in all required fields first")
                 else:
@@ -1181,7 +1186,7 @@ def render_multi_account_connector():
         with col3:
             acc_region = st.selectbox("Region", ["us-east-1", "us-east-2", "us-west-1", "us-west-2"], key="multi_region")
             st.write("")
-            if st.button("➕ Add Account", type="primary", use_container_width=True):
+            if st.button("➕ Add Account", type="primary", width="stretch"):
                 if acc_name and acc_access_key and acc_secret_key:
                     account = {
                         'name': acc_name,
@@ -1484,7 +1489,7 @@ def render_multi_account_connector():
             if st.session_state.selected_org_accounts:
                 st.info(f"📋 {len(st.session_state.selected_org_accounts)} account(s) selected")
                 
-                if st.button("✅ Import Selected Accounts", type="primary", use_container_width=True):
+                if st.button("✅ Import Selected Accounts", type="primary", width="stretch"):
                     # Import selected accounts
                     imported_count = 0
                     for account in st.session_state.discovered_accounts:
@@ -1612,7 +1617,7 @@ def render_demo_waf_scanner():
     st.markdown("---")
     
     # Scan button
-    if st.button("🚀 Run Demo Scan", type="primary", use_container_width=True):
+    if st.button("🚀 Run Demo Scan", type="primary", width="stretch"):
         run_demo_scan(demo_mgr, scan_mode, selected_account, demo_region, pillars)
     
     # Show sample results if available
@@ -1736,15 +1741,15 @@ def display_demo_scan_results(results):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("📄 Generate PDF Report", use_container_width=True):
+        if st.button("📄 Generate PDF Report", width="stretch"):
             st.info("📄 PDF report generation available in full version")
     
     with col2:
-        if st.button("📊 Export to Excel", use_container_width=True):
+        if st.button("📊 Export to Excel", width="stretch"):
             st.info("📊 Excel export available in full version")
     
     with col3:
-        if st.button("📋 Copy Summary", use_container_width=True):
+        if st.button("📋 Copy Summary", width="stretch"):
             st.info("📋 Summary copied to clipboard!")
 
 
@@ -1810,7 +1815,7 @@ def render_demo_pillar_scores(findings):
         title="WAF Pillar Scores"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     
     # Score breakdown
     st.markdown("### 📈 Score Breakdown")
@@ -1872,7 +1877,7 @@ def render_demo_resources_tab(resources):
                  color_continuous_scale='Oranges',
                  title='Resource Distribution by Service')
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def render_demo_compliance_tab(compliance):
@@ -1938,7 +1943,7 @@ def render_demo_costs_tab(costs):
                  title='Cost Distribution by Service',
                  color_discrete_sequence=px.colors.sequential.Oranges)
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     
     # Optimization opportunities
     st.markdown("### 💡 Optimization Opportunities")
@@ -3133,7 +3138,7 @@ def render_admin_panel_firebase():
         # Refresh button
         col1, col2 = st.columns([3, 1])
         with col2:
-            if st.button("🔄 Refresh", use_container_width=True):
+            if st.button("🔄 Refresh", width="stretch"):
                 st.rerun()
         
         # Get all users
@@ -3186,7 +3191,7 @@ def render_admin_panel_firebase():
                             label_visibility="collapsed"
                         )
                     with col2:
-                        if st.button("💾 Update Role", key=f"update_btn_{user_id}", use_container_width=True):
+                        if st.button("💾 Update Role", key=f"update_btn_{user_id}", width="stretch"):
                             if db.update_user_role(user_id, new_role):
                                 st.success(f"✅ Updated to {new_role}")
                                 st.rerun()
@@ -3354,22 +3359,29 @@ def render_main_content():
     
     # Tab 7: EKS Modernization (shifted from index 5 to 6)
     with tabs[6]:
+        # Always show this - debugging
+        st.markdown("### 🚀 EKS Modernization Hub")
+        st.info("Loading EKS module...")
+        
         try:
-            with st.spinner("Loading EKS Architecture Wizard..."):
-                eks_module = get_eks_module()
-            if eks_module:
-                eks_module.render()
-            else:
-                st.warning("EKS Modernization module not available")
-                st.info("The EKS Modernization module provides AI-powered Kubernetes architecture design with Terraform/CloudFormation generation.")
+            # Import the function
+            render_eks = get_eks_module()
+            
+            if render_eks is None:
+                st.error("❌ Module load returned None")
                 if 'EKS Modernization' in MODULE_ERRORS:
-                    with st.expander("Error Details"):
-                        st.code(MODULE_ERRORS['EKS Modernization'])
+                    st.code(f"Error: {MODULE_ERRORS['EKS Modernization']}")
+            elif callable(render_eks):
+                st.success("✅ Module loaded successfully!")
+                # Call the render function
+                render_eks()
+            else:
+                st.error(f"❌ Module is not callable: {type(render_eks)}")
+                
         except Exception as e:
-            st.error(f"Error loading EKS Modernization: {str(e)}")
+            st.error(f"❌ Exception: {str(e)}")
             import traceback
-            with st.expander("Error Details"):
-                st.code(traceback.format_exc())
+            st.code(traceback.format_exc())
     
     # Tab 8: Compliance (shifted from index 6 to 7)
     with tabs[7]:

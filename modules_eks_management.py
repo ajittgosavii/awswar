@@ -172,7 +172,7 @@ class EKSManagementModule:
         # Add health score styling
         st.dataframe(
             clusters_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True
         )
         
@@ -203,16 +203,16 @@ class EKSManagementModule:
         with col2:
             st.markdown("**Quick Actions:**")
             
-            if st.button("⚡ Fix Critical Issues", key="dash_fix_critical", type="primary", use_container_width=True):
+            if st.button("⚡ Fix Critical Issues", key="dash_fix_critical", type="primary", width="stretch"):
                 st.success("Initiating automated remediation...")
             
-            if st.button("🔍 Deep Dive Analysis", key="dash_deep_dive", use_container_width=True):
+            if st.button("🔍 Deep Dive Analysis", key="dash_deep_dive", width="stretch"):
                 st.info("Generating comprehensive analysis...")
             
-            if st.button("📊 Generate Report", key="dash_gen_report", use_container_width=True):
+            if st.button("📊 Generate Report", key="dash_gen_report", width="stretch"):
                 st.info("Creating operations report...")
             
-            if st.button("🔔 Configure Alerts", key="dash_config_alerts", use_container_width=True):
+            if st.button("🔔 Configure Alerts", key="dash_config_alerts", width="stretch"):
                 st.info("Opening alert configuration...")
         
         # Recent events
@@ -255,7 +255,7 @@ class EKSManagementModule:
         ]
         
         events_df = pd.DataFrame(events)
-        st.dataframe(events_df, use_container_width=True, hide_index=True)
+        st.dataframe(events_df, width="stretch", hide_index=True)
         
         # Live pod status
         st.markdown("---")
@@ -293,7 +293,7 @@ class EKSManagementModule:
         cols = st.columns(2)
         for i, issue in enumerate(sample_issues):
             with cols[i % 2]:
-                if st.button(f"🔍 {issue}", key=f"troubleshoot_q_{i}", use_container_width=True):
+                if st.button(f"🔍 {issue}", key=f"troubleshoot_q_{i}", width="stretch"):
                     st.session_state.troubleshoot_query = issue
         
         st.markdown("---")
@@ -312,7 +312,7 @@ class EKSManagementModule:
         col1, col2, col3 = st.columns([1, 1, 3])
         
         with col1:
-            if st.button("🤖 Analyze with AI", type="primary", key="eks_analyze_ai", use_container_width=True):
+            if st.button("🤖 Analyze with AI", type="primary", key="eks_analyze_ai", width="stretch"):
                 if query:
                     with st.spinner("🤖 Claude is analyzing your issue..."):
                         import time
@@ -325,7 +325,7 @@ class EKSManagementModule:
                         st.markdown(response)
         
         with col2:
-            if st.button("📋 Run Diagnostics", key="eks_run_diagnostics", use_container_width=True):
+            if st.button("📋 Run Diagnostics", key="eks_run_diagnostics", width="stretch"):
                 st.info("Running comprehensive diagnostics...")
         
         # Recent troubleshooting sessions
@@ -360,7 +360,7 @@ class EKSManagementModule:
         ]
         
         sessions_df = pd.DataFrame(sessions)
-        st.dataframe(sessions_df, use_container_width=True, hide_index=True)
+        st.dataframe(sessions_df, width="stretch", hide_index=True)
         
         # AI-powered diagnostics tools
         st.markdown("---")
@@ -379,7 +379,7 @@ class EKSManagementModule:
             namespace = st.text_input("Namespace", value="default", key="pod_diag_namespace")
             pod_name = st.text_input("Pod Name", placeholder="my-pod-abc123", key="pod_diag_pod")
             
-            if st.button("🔍 Diagnose Pod", key="diagnose_pod_btn", use_container_width=True):
+            if st.button("🔍 Diagnose Pod", key="diagnose_pod_btn", width="stretch"):
                 st.code("""
 kubectl get pod my-pod-abc123 -n default -o yaml
 
@@ -397,7 +397,7 @@ AI Analysis:
             st.markdown("**Node Diagnostics**")
             node_name = st.text_input("Node Name", placeholder="ip-10-0-1-123", key="node_diag_name")
             
-            if st.button("🔍 Diagnose Node", key="diagnose_node_btn", use_container_width=True):
+            if st.button("🔍 Diagnose Node", key="diagnose_node_btn", width="stretch"):
                 st.code("""
 kubectl describe node ip-10-0-1-123
 
@@ -416,7 +416,7 @@ AI Analysis:
             st.markdown("**Service Diagnostics**")
             service_name = st.text_input("Service Name", placeholder="my-service", key="svc_diag_name")
             
-            if st.button("🔍 Diagnose Service", key="diagnose_svc_btn", use_container_width=True):
+            if st.button("🔍 Diagnose Service", key="diagnose_svc_btn", width="stretch"):
                 st.code("""
 kubectl get svc my-service -o yaml
 
@@ -958,20 +958,20 @@ How can I help you further?
         ]
         
         findings_df = pd.DataFrame(findings)
-        st.dataframe(findings_df, use_container_width=True, hide_index=True)
+        st.dataframe(findings_df, width="stretch", hide_index=True)
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("⚡ Auto-Fix All (Safe)", type="primary", key="sec_auto_fix_all", use_container_width=True):
+            if st.button("⚡ Auto-Fix All (Safe)", type="primary", key="sec_auto_fix_all", width="stretch"):
                 st.success("Auto-remediation initiated for safe fixes...")
         
         with col2:
-            if st.button("📊 Security Report", key="sec_gen_report", use_container_width=True):
+            if st.button("📊 Security Report", key="sec_gen_report", width="stretch"):
                 st.info("Generating comprehensive security report...")
         
         with col3:
-            if st.button("🔍 Deep Scan", key="sec_deep_scan", use_container_width=True):
+            if st.button("🔍 Deep Scan", key="sec_deep_scan", width="stretch"):
                 st.info("Starting deep security scan...")
         
         # RBAC Analysis
@@ -1006,7 +1006,7 @@ How can I help you further?
         ]
         
         rbac_df = pd.DataFrame(rbac_issues)
-        st.dataframe(rbac_df, use_container_width=True, hide_index=True)
+        st.dataframe(rbac_df, width="stretch", hide_index=True)
         
         # Pod Security Standards
         st.markdown("---")
@@ -1032,7 +1032,7 @@ How can I help you further?
             """)
         
         with col2:
-            if st.button("📋 Generate PSA Config", key="sec_gen_psa", use_container_width=True):
+            if st.button("📋 Generate PSA Config", key="sec_gen_psa", width="stretch"):
                 st.code("""
 apiVersion: v1
 kind: Namespace
@@ -1082,7 +1082,7 @@ metadata:
         ]
         
         vulns_df = pd.DataFrame(image_vulns)
-        st.dataframe(vulns_df, use_container_width=True, hide_index=True)
+        st.dataframe(vulns_df, width="stretch", hide_index=True)
         
         # Compliance frameworks
         st.markdown("---")
@@ -1096,7 +1096,7 @@ metadata:
         ]
         
         compliance_df = pd.DataFrame(compliance_data)
-        st.dataframe(compliance_df, use_container_width=True, hide_index=True)
+        st.dataframe(compliance_df, width="stretch", hide_index=True)
     
     @staticmethod
     def _render_cost_optimization(account_mgr):
@@ -1195,21 +1195,21 @@ metadata:
         ]
         
         opps_df = pd.DataFrame(opportunities)
-        st.dataframe(opps_df, use_container_width=True, hide_index=True)
+        st.dataframe(opps_df, width="stretch", hide_index=True)
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("⚡ Apply Top 3 Recommendations", type="primary", key="cost_apply_top3", use_container_width=True):
+            if st.button("⚡ Apply Top 3 Recommendations", type="primary", key="cost_apply_top3", width="stretch"):
                 st.success("Initiating cost optimization for top 3 recommendations...")
                 st.info("Expected savings: $1,930/month = $23,160/year")
         
         with col2:
-            if st.button("📊 Detailed Cost Report", key="cost_detailed_report", use_container_width=True):
+            if st.button("📊 Detailed Cost Report", key="cost_detailed_report", width="stretch"):
                 st.info("Generating comprehensive cost breakdown...")
         
         with col3:
-            if st.button("🎯 Custom Analysis", key="cost_custom_analysis", use_container_width=True):
+            if st.button("🎯 Custom Analysis", key="cost_custom_analysis", width="stretch"):
                 st.info("Running custom cost analysis...")
         
         # Cost breakdown by cluster
@@ -1250,7 +1250,7 @@ metadata:
         ]
         
         costs_df = pd.DataFrame(cluster_costs)
-        st.dataframe(costs_df, use_container_width=True, hide_index=True)
+        st.dataframe(costs_df, width="stretch", hide_index=True)
         
         # Resource waste detection
         st.markdown("---")
@@ -1292,7 +1292,7 @@ metadata:
         ]
         
         waste_df = pd.DataFrame(waste)
-        st.dataframe(waste_df, use_container_width=True, hide_index=True)
+        st.dataframe(waste_df, width="stretch", hide_index=True)
         
         # AI insights
         st.markdown("---")
@@ -1403,7 +1403,7 @@ metadata:
         ]
         
         util_df = pd.DataFrame(utilization)
-        st.dataframe(util_df, use_container_width=True, hide_index=True)
+        st.dataframe(util_df, width="stretch", hide_index=True)
         
         # Scaling recommendations
         st.markdown("---")
@@ -1440,16 +1440,16 @@ metadata:
         ]
         
         scaling_df = pd.DataFrame(scaling_recs)
-        st.dataframe(scaling_df, use_container_width=True, hide_index=True)
+        st.dataframe(scaling_df, width="stretch", hide_index=True)
         
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("⚡ Apply Scaling Recommendations", type="primary", key="perf_apply_scaling", use_container_width=True):
+            if st.button("⚡ Apply Scaling Recommendations", type="primary", key="perf_apply_scaling", width="stretch"):
                 st.success("Applying scaling recommendations via GitOps...")
         
         with col2:
-            if st.button("📊 Performance Report", key="perf_gen_report", use_container_width=True):
+            if st.button("📊 Performance Report", key="perf_gen_report", width="stretch"):
                 st.info("Generating performance analysis report...")
         
         # Application performance
@@ -1490,7 +1490,7 @@ metadata:
         ]
         
         app_perf_df = pd.DataFrame(app_perf)
-        st.dataframe(app_perf_df, use_container_width=True, hide_index=True)
+        st.dataframe(app_perf_df, width="stretch", hide_index=True)
         
         # HPA/VPA recommendations
         st.markdown("---")
@@ -1508,9 +1508,9 @@ metadata:
             ]
             
             hpa_df = pd.DataFrame(hpa_candidates)
-            st.dataframe(hpa_df, use_container_width=True, hide_index=True)
+            st.dataframe(hpa_df, width="stretch", hide_index=True)
             
-            if st.button("📋 Generate HPA Configs", key="perf_gen_hpa", use_container_width=True):
+            if st.button("📋 Generate HPA Configs", key="perf_gen_hpa", width="stretch"):
                 st.code("""
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -1542,9 +1542,9 @@ spec:
             ]
             
             vpa_df = pd.DataFrame(vpa_candidates)
-            st.dataframe(vpa_df, use_container_width=True, hide_index=True)
+            st.dataframe(vpa_df, width="stretch", hide_index=True)
             
-            if st.button("📋 Generate VPA Configs", key="perf_gen_vpa", use_container_width=True):
+            if st.button("📋 Generate VPA Configs", key="perf_gen_vpa", width="stretch"):
                 st.code("""
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
@@ -1617,20 +1617,20 @@ spec:
         ]
         
         deploy_df = pd.DataFrame(deployments)
-        st.dataframe(deploy_df, use_container_width=True, hide_index=True)
+        st.dataframe(deploy_df, width="stretch", hide_index=True)
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("🔄 Sync All with GitOps", type="primary", key="cicd_sync_all", use_container_width=True):
+            if st.button("🔄 Sync All with GitOps", type="primary", key="cicd_sync_all", width="stretch"):
                 st.success("Syncing all deployments with GitOps repositories...")
         
         with col2:
-            if st.button("⏮️ Rollback Degraded", key="cicd_rollback_degraded", use_container_width=True):
+            if st.button("⏮️ Rollback Degraded", key="cicd_rollback_degraded", width="stretch"):
                 st.info("Rolling back frontend to v1.8.2...")
         
         with col3:
-            if st.button("📊 Deployment Report", key="cicd_deploy_report", use_container_width=True):
+            if st.button("📊 Deployment Report", key="cicd_deploy_report", width="stretch"):
                 st.info("Generating deployment health report...")
         
         # GitOps status
@@ -1668,7 +1668,7 @@ spec:
         ]
         
         gitops_df = pd.DataFrame(gitops_status)
-        st.dataframe(gitops_df, use_container_width=True, hide_index=True)
+        st.dataframe(gitops_df, width="stretch", hide_index=True)
         
         # Pipeline to cluster mapping
         st.markdown("---")
@@ -1730,7 +1730,7 @@ spec:
         ]
         
         history_df = pd.DataFrame(history)
-        st.dataframe(history_df, use_container_width=True, hide_index=True)
+        st.dataframe(history_df, width="stretch", hide_index=True)
         
         # Quick rollback
         st.markdown("---")
@@ -1784,13 +1784,13 @@ spec:
                 key="quick_node_select"
             )
             
-            if st.button("🔴 Drain Node", key="quick_drain_node", use_container_width=True):
+            if st.button("🔴 Drain Node", key="quick_drain_node", width="stretch"):
                 st.warning("Draining node - pods will be evicted gracefully...")
             
-            if st.button("🛑 Cordon Node", key="quick_cordon_node", use_container_width=True):
+            if st.button("🛑 Cordon Node", key="quick_cordon_node", width="stretch"):
                 st.info("Node cordoned - no new pods will be scheduled")
             
-            if st.button("✅ Uncordon Node", key="quick_uncordon_node", use_container_width=True):
+            if st.button("✅ Uncordon Node", key="quick_uncordon_node", width="stretch"):
                 st.success("Node uncordoned - resuming normal scheduling")
         
         with col2:
@@ -1808,13 +1808,13 @@ spec:
                 key="quick_namespace_input"
             )
             
-            if st.button("🔄 Restart Pod", key="quick_restart_pod", use_container_width=True):
+            if st.button("🔄 Restart Pod", key="quick_restart_pod", width="stretch"):
                 st.success("Pod deleted - will be recreated by deployment...")
             
-            if st.button("📋 Get Logs", key="quick_get_logs", use_container_width=True):
+            if st.button("📋 Get Logs", key="quick_get_logs", width="stretch"):
                 st.code("kubectl logs my-app-abc123 -n default --tail=100", language="bash")
             
-            if st.button("💻 Exec Shell", key="quick_exec_shell", use_container_width=True):
+            if st.button("💻 Exec Shell", key="quick_exec_shell", width="stretch"):
                 st.code("kubectl exec -it my-app-abc123 -n default -- /bin/sh", language="bash")
         
         with col3:
@@ -1826,13 +1826,13 @@ spec:
                 key="quick_deploy_input"
             )
             
-            if st.button("📈 Scale Up", key="quick_scale_up", use_container_width=True):
+            if st.button("📈 Scale Up", key="quick_scale_up", width="stretch"):
                 st.success("Scaling deployment up by 2 replicas...")
             
-            if st.button("📉 Scale Down", key="quick_scale_down", use_container_width=True):
+            if st.button("📉 Scale Down", key="quick_scale_down", width="stretch"):
                 st.info("Scaling deployment down by 2 replicas...")
             
-            if st.button("⏮️ Rollback", key="quick_rollback_deploy", use_container_width=True):
+            if st.button("⏮️ Rollback", key="quick_rollback_deploy", width="stretch"):
                 st.warning("Rolling back to previous version...")
         
         # Incident response playbooks
@@ -1875,16 +1875,16 @@ spec:
         ]
         
         playbooks_df = pd.DataFrame(playbooks)
-        st.dataframe(playbooks_df, use_container_width=True, hide_index=True)
+        st.dataframe(playbooks_df, width="stretch", hide_index=True)
         
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("⚡ Enable All Playbooks", type="primary", key="quick_enable_playbooks", use_container_width=True):
+            if st.button("⚡ Enable All Playbooks", type="primary", key="quick_enable_playbooks", width="stretch"):
                 st.success("All incident response playbooks enabled!")
         
         with col2:
-            if st.button("📋 Create Custom Playbook", key="quick_create_playbook", use_container_width=True):
+            if st.button("📋 Create Custom Playbook", key="quick_create_playbook", width="stretch"):
                 st.info("Opening playbook builder...")
         
         # Quick diagnostics
@@ -1896,7 +1896,7 @@ spec:
         with col1:
             st.markdown("**Cluster Health Check**")
             
-            if st.button("🏥 Run Health Check", key="quick_health_check", use_container_width=True):
+            if st.button("🏥 Run Health Check", key="quick_health_check", width="stretch"):
                 st.code("""
 ✅ Control Plane: Healthy
 ✅ API Server: Responding (45ms)
@@ -1912,7 +1912,7 @@ Overall Status: HEALTHY (1 warning)
         with col2:
             st.markdown("**Resource Availability**")
             
-            if st.button("📊 Check Capacity", key="quick_check_capacity", use_container_width=True):
+            if st.button("📊 Check Capacity", key="quick_check_capacity", width="stretch"):
                 st.code("""
 CPU Capacity:
   Total: 32 cores
@@ -1948,7 +1948,7 @@ Status: ✅ Sufficient capacity
             key="quick_log_timerange"
         )
         
-        if st.button("🔍 Search Logs", type="primary", key="quick_search_logs", use_container_width=True):
+        if st.button("🔍 Search Logs", type="primary", key="quick_search_logs", width="stretch"):
             st.markdown("**Search Results:**")
             st.code("""
 [prod-eks] api-service-7d9f8-abc12 | 2024-12-06 10:23:45 | ERROR: Database connection timeout
@@ -1969,7 +1969,7 @@ Clusters affected: prod-eks-us-east-1, staging-eks
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("📋 Get All Resources", key="quick_cmd_get_all", use_container_width=True):
+            if st.button("📋 Get All Resources", key="quick_cmd_get_all", width="stretch"):
                 st.code("""
 kubectl get all -A
 kubectl get nodes -o wide
@@ -1978,7 +1978,7 @@ kubectl get ing -A
                 """, language="bash")
         
         with col2:
-            if st.button("🔍 Troubleshooting Commands", key="quick_cmd_troubleshoot", use_container_width=True):
+            if st.button("🔍 Troubleshooting Commands", key="quick_cmd_troubleshoot", width="stretch"):
                 st.code("""
 kubectl describe node <node-name>
 kubectl logs -f <pod-name>
@@ -1988,7 +1988,7 @@ kubectl top pods -A
                 """, language="bash")
         
         with col3:
-            if st.button("⚡ Emergency Commands", key="quick_cmd_emergency", use_container_width=True):
+            if st.button("⚡ Emergency Commands", key="quick_cmd_emergency", width="stretch"):
                 st.code("""
 kubectl drain <node> --ignore-daemonsets
 kubectl cordon <node>

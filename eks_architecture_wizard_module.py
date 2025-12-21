@@ -1502,7 +1502,7 @@ class EKSMigrationAssessment:
         )
         
         # Assessment button
-        if st.button("🔍 Assess Migration Readiness", type="primary", use_container_width=True):
+        if st.button("🔍 Assess Migration Readiness", type="primary", width="stretch"):
             st.markdown("---")
             st.markdown("### 📊 Migration Assessment Results")
             
@@ -1649,7 +1649,7 @@ class EKSClusterOptimization:
             min_value=0, max_value=1000000, value=5000
         )
         
-        if st.button("🔍 Analyze & Recommend Optimizations", type="primary", use_container_width=True):
+        if st.button("🔍 Analyze & Recommend Optimizations", type="primary", width="stretch"):
             st.markdown("---")
             st.markdown("### 📈 Optimization Recommendations")
             
@@ -2140,7 +2140,7 @@ class EKSModernizationModuleRevamped:
         
         col1, col2 = st.columns([1, 4])
         with col1:
-            analyze_button = st.button("🔍 Analyze & Configure", type="primary", use_container_width=True)
+            analyze_button = st.button("🔍 Analyze & Configure", type="primary", width="stretch")
         
         if analyze_button and requirements_text:
             with st.spinner("🤖 Analyzing your requirements..."):
@@ -2193,7 +2193,7 @@ class EKSModernizationModuleRevamped:
         
         # Save button
         st.markdown("---")
-        if st.button("✅ Save Configuration & Generate Architecture", type="primary", use_container_width=True, key="save_ai"):
+        if st.button("✅ Save Configuration & Generate Architecture", type="primary", width="stretch", key="save_ai"):
             st.session_state.eks_config = config
             st.session_state.eks_config_saved = True
             st.success("✅ Configuration saved! Go to **Architecture & Diagram** tab to see your cluster design.")
@@ -2334,7 +2334,7 @@ class EKSModernizationModuleRevamped:
         for rec in recommendations:
             st.info(rec)
         
-        if st.button("✅ Save Configuration & Generate Architecture", type="primary", use_container_width=True, key="save_manual"):
+        if st.button("✅ Save Configuration & Generate Architecture", type="primary", width="stretch", key="save_manual"):
             st.session_state.eks_config_saved = True
             st.success("Configuration saved! Go to Architecture tab to see your diagram.")
     
@@ -2648,7 +2648,7 @@ spec:
         
         # Run security assessment button (now connected!)
         st.markdown("---")
-        if st.button("🔍 Run Security Assessment", type="primary", use_container_width=True):
+        if st.button("🔍 Run Security Assessment", type="primary", width="stretch"):
             st.session_state.eks_use_case = 'security'
             st.rerun()
     

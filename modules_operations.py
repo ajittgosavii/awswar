@@ -144,7 +144,7 @@ class OperationsModule:
         for i, question in enumerate(sample_questions):
             with cols[i % 2]:
                 # FIXED: Added session_id to ensure uniqueness
-                if st.button(f"💡 {question}", key=f"sample_ops_q_{i}_{st.session_state.ops_session_id}", use_container_width=True):
+                if st.button(f"💡 {question}", key=f"sample_ops_q_{i}_{st.session_state.ops_session_id}", width="stretch"):
                     st.session_state.ops_query = question
         
         st.markdown("---")
@@ -161,10 +161,10 @@ class OperationsModule:
         col1, col2, col3 = st.columns([1, 1, 4])
         
         with col1:
-            ask_button = st.button("🤖 Ask Claude", type="primary", key=f"ops_ask_claude_{st.session_state.ops_session_id}", use_container_width=True)
+            ask_button = st.button("🤖 Ask Claude", type="primary", key=f"ops_ask_claude_{st.session_state.ops_session_id}", width="stretch")
         
         with col2:
-            if st.button("🗑️ Clear Chat", key=f"ops_clear_chat_{st.session_state.ops_session_id}", use_container_width=True):
+            if st.button("🗑️ Clear Chat", key=f"ops_clear_chat_{st.session_state.ops_session_id}", width="stretch"):
                 st.session_state.ops_chat_history = []
                 st.session_state.ops_query = ''
                 st.rerun()
@@ -220,7 +220,7 @@ class OperationsModule:
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("📋 Export Chat", key=f"ops_export_chat_{st.session_state.ops_session_id}", use_container_width=True):
+                if st.button("📋 Export Chat", key=f"ops_export_chat_{st.session_state.ops_session_id}", width="stretch"):
                     chat_export = json.dumps(st.session_state.ops_chat_history, default=str, indent=2)
                     st.download_button(
                         label="⬇️ Download JSON",
@@ -231,11 +231,11 @@ class OperationsModule:
                     )
             
             with col2:
-                if st.button("📊 Generate Report", key=f"ops_gen_report_{st.session_state.ops_session_id}", use_container_width=True):
+                if st.button("📊 Generate Report", key=f"ops_gen_report_{st.session_state.ops_session_id}", width="stretch"):
                     st.info("Generating comprehensive operations report...")
             
             with col3:
-                if st.button("🔧 Execute Actions", key=f"ops_exec_actions_{st.session_state.ops_session_id}", use_container_width=True):
+                if st.button("🔧 Execute Actions", key=f"ops_exec_actions_{st.session_state.ops_session_id}", width="stretch"):
                     st.warning("⚠️ Action execution requires confirmation")
     
     @staticmethod
@@ -463,7 +463,7 @@ What would you like to know more about?
                 if st.button(
                     f"{issue['title']}",
                     key=f"issue_{i}_{st.session_state.ops_session_id}",
-                    use_container_width=True,
+                    width="stretch",
                     help=issue['description']
                 ):
                     st.session_state.troubleshoot_issue = issue['title']
@@ -482,7 +482,7 @@ What would you like to know more about?
         col1, col2 = st.columns([1, 4])
         
         with col1:
-            if st.button("🔍 Diagnose", type="primary", key=f"diagnose_btn_{st.session_state.ops_session_id}", use_container_width=True):
+            if st.button("🔍 Diagnose", type="primary", key=f"diagnose_btn_{st.session_state.ops_session_id}", width="stretch"):
                 if issue_description:
                     with st.spinner("🤖 Claude is analyzing the issue..."):
                         import time
@@ -538,7 +538,7 @@ Would you like me to execute these fixes automatically?
                         col1, col2, col3 = st.columns(3)
                         
                         with col1:
-                            if st.button("🚀 Auto-Fix", key=f"auto_fix_btn_{st.session_state.ops_session_id}", use_container_width=True):
+                            if st.button("🚀 Auto-Fix", key=f"auto_fix_btn_{st.session_state.ops_session_id}", width="stretch"):
                                 st.success("✅ Automated fix initiated!")
                                 st.info("Step 1/3: Terminating idle connections...")
                                 time.sleep(1)
@@ -551,11 +551,11 @@ Would you like me to execute these fixes automatically?
                                 st.success("✅ Issue resolved! Response time back to normal (175ms)")
                         
                         with col2:
-                            if st.button("📊 Detailed Report", key=f"detail_report_btn_{st.session_state.ops_session_id}", use_container_width=True):
+                            if st.button("📊 Detailed Report", key=f"detail_report_btn_{st.session_state.ops_session_id}", width="stretch"):
                                 st.info("Generating comprehensive analysis...")
                         
                         with col3:
-                            if st.button("📋 Create Ticket", key=f"create_ticket_btn_{st.session_state.ops_session_id}", use_container_width=True):
+                            if st.button("📋 Create Ticket", key=f"create_ticket_btn_{st.session_state.ops_session_id}", width="stretch"):
                                 st.success("Ticket created: OPS-2847")
         
         # Recent issues
@@ -590,7 +590,7 @@ Would you like me to execute these fixes automatically?
         ]
         
         df = pd.DataFrame(resolved_issues)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
         
         # MTTR metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -716,7 +716,7 @@ Would you like me to execute these fixes automatically?
                     })
                 
                 df = pd.DataFrame(df_data)
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.dataframe(df, width="stretch", hide_index=True)
                 
             else:
                 st.info(f"No EC2 instances found in {region}")
@@ -793,7 +793,7 @@ Would you like me to execute these fixes automatically?
         ]
         
         df = pd.DataFrame(models)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
         
         # Model monitoring
         st.markdown("---")
@@ -909,13 +909,13 @@ Would you like me to execute these fixes automatically?
                 
                 with col2:
                     # FIXED: Added index and session_id to ensure uniqueness
-                    if st.button(f"🔧 Auto-Fix", key=f"fix_{idx}_{st.session_state.ops_session_id}", use_container_width=True):
+                    if st.button(f"🔧 Auto-Fix", key=f"fix_{idx}_{st.session_state.ops_session_id}", width="stretch"):
                         st.success(f"✅ Preventive action scheduled for {pred['Resource']}")
                     
-                    if st.button(f"📊 Details", key=f"details_{idx}_{st.session_state.ops_session_id}", use_container_width=True):
+                    if st.button(f"📊 Details", key=f"details_{idx}_{st.session_state.ops_session_id}", width="stretch"):
                         st.info("Showing detailed analysis...")
                     
-                    if st.button(f"⏸️ Snooze", key=f"snooze_{idx}_{st.session_state.ops_session_id}", use_container_width=True):
+                    if st.button(f"⏸️ Snooze", key=f"snooze_{idx}_{st.session_state.ops_session_id}", width="stretch"):
                         st.warning("Snoozed for 24 hours")
     
     @staticmethod
@@ -986,15 +986,15 @@ steps:
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        if st.button("💾 Save Runbook", key=f"ops_save_rb_{st.session_state.ops_session_id}", use_container_width=True):
+                        if st.button("💾 Save Runbook", key=f"ops_save_rb_{st.session_state.ops_session_id}", width="stretch"):
                             st.success("Runbook saved to automation library")
                     
                     with col2:
-                        if st.button("▶️ Test Run", key=f"ops_test_run_{st.session_state.ops_session_id}", use_container_width=True):
+                        if st.button("▶️ Test Run", key=f"ops_test_run_{st.session_state.ops_session_id}", width="stretch"):
                             st.info("Executing test run in dry-run mode...")
                     
                     with col3:
-                        if st.button("🚀 Deploy", key=f"ops_deploy_rb_{st.session_state.ops_session_id}", use_container_width=True):
+                        if st.button("🚀 Deploy", key=f"ops_deploy_rb_{st.session_state.ops_session_id}", width="stretch"):
                             st.success("Runbook deployed and scheduled!")
         
         # Existing runbooks
@@ -1029,4 +1029,4 @@ steps:
         ]
         
         df = pd.DataFrame(runbooks)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)

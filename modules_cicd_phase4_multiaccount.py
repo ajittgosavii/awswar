@@ -183,7 +183,7 @@ def render_cicd_phase4_module(session, account_id: str, region: str):
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("🚀 Create Multi-Account Pipeline", type="primary", use_container_width=True):
+            if st.button("🚀 Create Multi-Account Pipeline", type="primary", width="stretch"):
                 if not pipeline_name:
                     st.error("Please enter a pipeline name")
                 elif len(stages) == 0:
@@ -214,7 +214,7 @@ def render_cicd_phase4_module(session, account_id: str, region: str):
                         """)
         
         with col2:
-            if st.button("📄 Export Configuration", use_container_width=True):
+            if st.button("📄 Export Configuration", width="stretch"):
                 config = {
                     'pipeline_name': pipeline_name,
                     'source_account': source_account,
@@ -227,11 +227,11 @@ def render_cicd_phase4_module(session, account_id: str, region: str):
                     data=json.dumps(config, indent=2),
                     file_name=f"{pipeline_name}-config.json",
                     mime="application/json",
-                    use_container_width=True
+                    width="stretch"
                 )
         
         with col3:
-            if st.button("🔍 Validate Configuration", use_container_width=True):
+            if st.button("🔍 Validate Configuration", width="stretch"):
                 errors = []
                 warnings = []
                 
@@ -354,29 +354,29 @@ def render_cicd_phase4_module(session, account_id: str, region: str):
             return colors.get(val, '')
         
         styled_df = df.style.applymap(color_status, subset=['Status'])
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        st.dataframe(styled_df, width="stretch", hide_index=True)
         
         # Action buttons for orchestration
         st.markdown("---")
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            if st.button("⏸️ Pause All", use_container_width=True):
+            if st.button("⏸️ Pause All", width="stretch"):
                 st.warning("All active pipelines will be paused")
         
         with col2:
-            if st.button("▶️ Resume All", use_container_width=True):
+            if st.button("▶️ Resume All", width="stretch"):
                 st.info("All paused pipelines will be resumed")
         
         with col3:
-            if st.button("🔄 Sync Status", use_container_width=True):
+            if st.button("🔄 Sync Status", width="stretch"):
                 with st.spinner("Syncing pipeline status..."):
                     import time
                     time.sleep(1)
                     st.success("✅ Status synchronized across all accounts")
         
         with col4:
-            if st.button("📊 Generate Report", use_container_width=True):
+            if st.button("📊 Generate Report", width="stretch"):
                 st.info("Multi-account pipeline report will be generated")
         
         # Account-level controls
@@ -575,19 +575,19 @@ def render_cicd_phase4_module(session, account_id: str, region: str):
         ]
         
         df_roles = pd.DataFrame(roles_data)
-        st.dataframe(df_roles, use_container_width=True, hide_index=True)
+        st.dataframe(df_roles, width="stretch", hide_index=True)
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("🔄 Refresh Roles", use_container_width=True):
+            if st.button("🔄 Refresh Roles", width="stretch"):
                 st.info("Refreshing role list...")
         
         with col2:
-            if st.button("✅ Validate All", use_container_width=True):
+            if st.button("✅ Validate All", width="stretch"):
                 st.success("All roles validated successfully!")
         
         with col3:
-            if st.button("📊 Usage Report", use_container_width=True):
+            if st.button("📊 Usage Report", width="stretch"):
                 st.info("Generating role usage report...")
     
     # ============================================================================
@@ -608,7 +608,7 @@ def render_cicd_phase4_module(session, account_id: str, region: str):
             )
         
         with col2:
-            if st.button("🔄 Refresh", use_container_width=True):
+            if st.button("🔄 Refresh", width="stretch"):
                 st.rerun()
         
         st.markdown("---")
@@ -725,26 +725,26 @@ def render_cicd_phase4_module(session, account_id: str, region: str):
         ]
         
         df_activity = pd.DataFrame(activity_data)
-        st.dataframe(df_activity, use_container_width=True, hide_index=True)
+        st.dataframe(df_activity, width="stretch", hide_index=True)
         
         # Export options
         st.markdown("---")
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("📊 Export Dashboard Data", use_container_width=True):
+            if st.button("📊 Export Dashboard Data", width="stretch"):
                 st.download_button(
                     label="⬇️ Download CSV",
                     data=df_activity.to_csv(index=False),
                     file_name=f"cicd-dashboard-{datetime.now().strftime('%Y%m%d')}.csv",
                     mime="text/csv",
-                    use_container_width=True
+                    width="stretch"
                 )
         
         with col2:
-            if st.button("📧 Email Report", use_container_width=True):
+            if st.button("📧 Email Report", width="stretch"):
                 st.success("✅ Report will be emailed to configured recipients")
         
         with col3:
-            if st.button("📅 Schedule Reports", use_container_width=True):
+            if st.button("📅 Schedule Reports", width="stretch"):
                 st.info("Configure automated report scheduling")

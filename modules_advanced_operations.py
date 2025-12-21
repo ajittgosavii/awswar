@@ -174,7 +174,7 @@ class AdvancedOperationsModule:
         ]
         
         df = pd.DataFrame(models)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
         
         # Model actions
         st.markdown("---")
@@ -189,20 +189,20 @@ class AdvancedOperationsModule:
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            if st.button("🚀 Promote to Production", use_container_width=True):
+            if st.button("🚀 Promote to Production", width="stretch"):
                 st.success(f"✅ {selected_model} promoted to production")
                 st.info("Gradual rollout starting: 0% → 10% → 50% → 100%")
         
         with col2:
-            if st.button("🧪 Start A/B Test", use_container_width=True):
+            if st.button("🧪 Start A/B Test", width="stretch"):
                 st.info(f"A/B test configured for {selected_model}")
         
         with col3:
-            if st.button("📊 View Metrics", use_container_width=True):
+            if st.button("📊 View Metrics", width="stretch"):
                 st.info(f"Loading metrics for {selected_model}...")
         
         with col4:
-            if st.button("🗑️ Retire Model", use_container_width=True):
+            if st.button("🗑️ Retire Model", width="stretch"):
                 st.warning(f"Model {selected_model} will be retired in 7 days")
         
         # Model deployment workflow
@@ -223,7 +223,7 @@ class AdvancedOperationsModule:
         }
         
         df_workflow = pd.DataFrame(workflow_stages)
-        st.dataframe(df_workflow, use_container_width=True, hide_index=True)
+        st.dataframe(df_workflow, width="stretch", hide_index=True)
     
     @staticmethod
     def _render_model_monitoring(session, region):
@@ -306,7 +306,7 @@ class AdvancedOperationsModule:
             ]
             
             df_drift = pd.DataFrame(feature_drift)
-            st.dataframe(df_drift, use_container_width=True, hide_index=True)
+            st.dataframe(df_drift, width="stretch", hide_index=True)
             
             st.info("""
 **Drift Analysis:**
@@ -327,7 +327,7 @@ class AdvancedOperationsModule:
             }
             
             df_pred = pd.DataFrame(prediction_dist)
-            st.dataframe(df_pred, use_container_width=True, hide_index=True)
+            st.dataframe(df_pred, width="stretch", hide_index=True)
             
             st.warning("""
 **Anomaly Detected:**
@@ -375,7 +375,7 @@ class AdvancedOperationsModule:
                 key="drift_alert"
             )
         
-        if st.button("💾 Save Alert Configuration", use_container_width=True):
+        if st.button("💾 Save Alert Configuration", width="stretch"):
             st.success("✅ Alert thresholds updated!")
         
         # Recent alerts
@@ -410,7 +410,7 @@ class AdvancedOperationsModule:
         ]
         
         df_alerts = pd.DataFrame(alerts)
-        st.dataframe(df_alerts, use_container_width=True, hide_index=True)
+        st.dataframe(df_alerts, width="stretch", hide_index=True)
     
     @staticmethod
     def _render_ab_testing(session, region):
@@ -443,7 +443,7 @@ class AdvancedOperationsModule:
         ]
         
         df_exp = pd.DataFrame(experiments)
-        st.dataframe(df_exp, use_container_width=True, hide_index=True)
+        st.dataframe(df_exp, width="stretch", hide_index=True)
         
         st.markdown("---")
         
@@ -525,15 +525,15 @@ The challenger model (v3.0) shows statistically significant improvements:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("✅ Promote Challenger", type="primary", use_container_width=True):
+            if st.button("✅ Promote Challenger", type="primary", width="stretch"):
                 st.success("Challenger promoted! Starting gradual rollout...")
         
         with col2:
-            if st.button("⏸️ Pause Experiment", use_container_width=True):
+            if st.button("⏸️ Pause Experiment", width="stretch"):
                 st.warning("Experiment paused. Champion maintains 100% traffic.")
         
         with col3:
-            if st.button("📊 Export Results", use_container_width=True):
+            if st.button("📊 Export Results", width="stretch"):
                 st.info("Experiment results exported to S3")
         
         # Create new experiment
@@ -573,7 +573,7 @@ The challenger model (v3.0) shows statistically significant improvements:
                 key="exp_duration"
             )
         
-        if st.button("🚀 Start Experiment", use_container_width=True):
+        if st.button("🚀 Start Experiment", width="stretch"):
             st.success(f"""
 ✅ **Experiment Created!**
 
@@ -677,7 +677,7 @@ Experiment is now live. You'll receive daily reports.
         ]
         
         df_rules = pd.DataFrame(rules)
-        st.dataframe(df_rules, use_container_width=True, hide_index=True)
+        st.dataframe(df_rules, width="stretch", hide_index=True)
         
         # Recent auto-remediations
         st.markdown("---")
@@ -711,7 +711,7 @@ Experiment is now live. You'll receive daily reports.
         ]
         
         df_rem = pd.DataFrame(remediations)
-        st.dataframe(df_rem, use_container_width=True, hide_index=True)
+        st.dataframe(df_rem, width="stretch", hide_index=True)
         
         # Create new rule
         st.markdown("---")
@@ -795,11 +795,11 @@ rule:
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        if st.button("💾 Save Rule", use_container_width=True):
+                        if st.button("💾 Save Rule", width="stretch"):
                             st.success("Rule saved and activated!")
                     
                     with col2:
-                        if st.button("🧪 Test Rule", use_container_width=True):
+                        if st.button("🧪 Test Rule", width="stretch"):
                             st.info("Testing rule in dry-run mode...")
     
     @staticmethod
@@ -909,7 +909,7 @@ rule:
             return colors.get(val, '')
         
         styled_df = df_opp.style.applymap(color_priority, subset=['Priority'])
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        st.dataframe(styled_df, width="stretch", hide_index=True)
         
         # Implementation plan
         st.markdown("---")
@@ -932,7 +932,7 @@ rule:
             st.metric("Total Time", "~6 hours")
             st.metric("ROI", "487%")
             
-            if st.button("🚀 Execute All", type="primary", use_container_width=True):
+            if st.button("🚀 Execute All", type="primary", width="stretch"):
                 st.success("Optimization plan activated!")
     
     @staticmethod

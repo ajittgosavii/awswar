@@ -1878,7 +1878,7 @@ def render_landscape_scanner_tab():
     # Run scan button
     btn_text = "🎭 Run Demo Assessment" if is_demo else "🚀 Run Live Assessment"
     
-    if st.button(btn_text, type="primary", use_container_width=True):
+    if st.button(btn_text, type="primary", width="stretch"):
         progress = st.progress(0)
         status = st.empty()
         

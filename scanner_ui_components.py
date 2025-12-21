@@ -268,7 +268,7 @@ def render_findings_table(
     if available_cols:
         st.dataframe(
             df[available_cols],
-            use_container_width=True,
+            width="stretch",
             hide_index=True
         )
 
@@ -404,7 +404,7 @@ def render_scan_button(
         label,
         type="primary",
         disabled=disabled,
-        use_container_width=True,
+        width="stretch",
         key=key
     )
 
@@ -425,17 +425,17 @@ def render_export_buttons(
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("📄 Export PDF", use_container_width=True):
+        if st.button("📄 Export PDF", width="stretch"):
             if on_pdf:
                 on_pdf()
     
     with col2:
-        if st.button("📊 Export Excel", use_container_width=True):
+        if st.button("📊 Export Excel", width="stretch"):
             if on_excel:
                 on_excel()
     
     with col3:
-        if st.button("📋 Export JSON", use_container_width=True):
+        if st.button("📋 Export JSON", width="stretch"):
             if on_json:
                 on_json()
 

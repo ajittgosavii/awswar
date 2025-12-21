@@ -102,7 +102,7 @@ class AIAssistantModule:
         for i, question in enumerate(quick_questions):
             col = [col1, col2, col3][i % 3]
             with col:
-                if st.button(question, key=f"quick_{i}", use_container_width=True):
+                if st.button(question, key=f"quick_{i}", width="stretch"):
                     st.session_state.quick_question = question
         
         # Initialize chat history
@@ -231,7 +231,7 @@ class AIAssistantModule:
                 height=100
             )
             
-            submitted = st.form_submit_button("🎯 Generate Architecture Recommendation", use_container_width=True)
+            submitted = st.form_submit_button("🎯 Generate Architecture Recommendation", width="stretch")
         
         if submitted and services:
             with st.spinner("🤖 Generating architecture recommendations..."):
@@ -293,7 +293,7 @@ Please provide:
         if analysis_type == "Quick Scan":
             st.info("Quick scan analyzes common cost optimization opportunities across EC2, RDS, and S3")
             
-            if st.button("🔍 Run Quick Scan", use_container_width=True):
+            if st.button("🔍 Run Quick Scan", width="stretch"):
                 with st.spinner("🤖 Analyzing resources for cost optimization..."):
                     # Simulate resource analysis
                     resources_text = """
@@ -335,7 +335,7 @@ Provide specific cost optimization recommendations with estimated savings.
                 default=["EC2", "RDS", "S3"]
             )
             
-            if st.button("🔬 Run Deep Analysis", use_container_width=True):
+            if st.button("🔬 Run Deep Analysis", width="stretch"):
                 with st.spinner("🤖 Performing deep cost analysis..."):
                     analysis_text = f"""
 Perform a deep cost optimization analysis for: {', '.join(services_to_analyze)}
@@ -370,7 +370,7 @@ Provide detailed recommendations with:
                 height=100
             )
             
-            if st.button("🎯 Analyze", use_container_width=True):
+            if st.button("🎯 Analyze", width="stretch"):
                 if custom_query:
                     with st.spinner("🤖 Analyzing..."):
                         analysis = helper.chat(custom_query, [],
@@ -406,7 +406,7 @@ Provide detailed recommendations with:
         )
         
         if analysis_mode == "Security Findings":
-            if st.button("🔍 Analyze Recent Security Findings", use_container_width=True):
+            if st.button("🔍 Analyze Recent Security Findings", width="stretch"):
                 with st.spinner("🤖 Analyzing security findings..."):
                     findings_text = """
 Analyze these AWS Security Hub / GuardDuty findings and provide remediation steps:
@@ -454,7 +454,7 @@ For each finding, provide:
                 height=200
             )
             
-            if st.button("🔒 Analyze Policy", use_container_width=True):
+            if st.button("🔒 Analyze Policy", width="stretch"):
                 if policy_input:
                     with st.spinner("🤖 Analyzing IAM policy..."):
                         policy_text = f"""
@@ -486,7 +486,7 @@ Provide:
                         st.markdown(analysis)
         
         elif analysis_mode == "Network Security":
-            if st.button("🌐 Analyze Network Security", use_container_width=True):
+            if st.button("🌐 Analyze Network Security", width="stretch"):
                 with st.spinner("🤖 Analyzing network security configuration..."):
                     network_text = """
 Analyze this AWS network security configuration:
@@ -528,7 +528,7 @@ Analyze for:
                 ["PCI-DSS", "HIPAA", "SOC 2", "GDPR", "CIS AWS Foundations", "NIST"]
             )
             
-            if st.button(f"✅ Check {framework} Compliance", use_container_width=True):
+            if st.button(f"✅ Check {framework} Compliance", width="stretch"):
                 with st.spinner(f"🤖 Checking {framework} compliance..."):
                     compliance_text = f"""
 Perform a {framework} compliance check for AWS environment and provide:
@@ -599,7 +599,7 @@ I need a production-ready web application with:
             height=250
         )
         
-        if st.button("🚀 Generate IaC Template", use_container_width=True):
+        if st.button("🚀 Generate IaC Template", width="stretch"):
             if infrastructure_desc:
                 with st.spinner(f"🤖 Generating {format_type} template..."):
                     iac_prompt = f"""
@@ -718,7 +718,7 @@ Example:
             height=150
         )
         
-        if st.button("📖 Generate Runbook", use_container_width=True):
+        if st.button("📖 Generate Runbook", width="stretch"):
             if operation_name:
                 with st.spinner("🤖 Generating detailed runbook..."):
                     runbook_prompt = f"""

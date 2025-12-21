@@ -140,24 +140,24 @@ def render_trigger_dashboard(cp_client, events_client):
                 })
             
             df = pd.DataFrame(trigger_data)
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, width="stretch")
             
             # Quick actions
             st.markdown("### ⚡ Quick Actions")
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("➕ Add Scheduled Trigger", use_container_width=True):
+                if st.button("➕ Add Scheduled Trigger", width="stretch"):
                     st.session_state['goto_tab'] = 'scheduled'
                     st.info("👉 Go to 'Scheduled Triggers' tab")
             
             with col2:
-                if st.button("➕ Add Event Trigger", use_container_width=True):
+                if st.button("➕ Add Event Trigger", width="stretch"):
                     st.session_state['goto_tab'] = 'event'
                     st.info("👉 Go to 'Event-Driven Triggers' tab")
             
             with col3:
-                if st.button("🔄 Refresh Dashboard", use_container_width=True):
+                if st.button("🔄 Refresh Dashboard", width="stretch"):
                     st.rerun()
         
         else:
@@ -165,10 +165,10 @@ def render_trigger_dashboard(cp_client, events_client):
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("⏱️ Create Scheduled Trigger", use_container_width=True):
+                if st.button("⏱️ Create Scheduled Trigger", width="stretch"):
                     st.info("👉 Switch to 'Scheduled Triggers' tab")
             with col2:
-                if st.button("🎪 Create Event Trigger", use_container_width=True):
+                if st.button("🎪 Create Event Trigger", width="stretch"):
                     st.info("👉 Switch to 'Event-Driven Triggers' tab")
     
     except Exception as e:
@@ -841,7 +841,7 @@ def render_pipeline_parameters(cp_client):
         # Export parameters
         st.markdown("---")
         
-        if st.button("📥 Export Parameters (JSON)", use_container_width=True):
+        if st.button("📥 Export Parameters (JSON)", width="stretch"):
             json_data = json.dumps(parameters, indent=2)
             st.download_button(
                 label="💾 Download JSON",
@@ -1233,7 +1233,7 @@ def render_trigger_analytics(cp_client, events_client):
         height=400
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     
     # Success rate by trigger type
     col1, col2 = st.columns(2)
@@ -1247,7 +1247,7 @@ def render_trigger_analytics(cp_client, events_client):
             'Total Runs': [456, 234, 128, 189, 87]
         })
         
-        st.dataframe(success_data, use_container_width=True, hide_index=True)
+        st.dataframe(success_data, width="stretch", hide_index=True)
     
     with col2:
         st.markdown("### ⏱️ Avg Duration by Pipeline")
@@ -1258,7 +1258,7 @@ def render_trigger_analytics(cp_client, events_client):
             'Trend': ['↓ -12%', '↑ +5%', '↓ -8%', '→ 0%']
         })
         
-        st.dataframe(duration_data, use_container_width=True, hide_index=True)
+        st.dataframe(duration_data, width="stretch", hide_index=True)
     
     # Cost analysis
     st.markdown("---")
@@ -1295,7 +1295,7 @@ def render_trigger_analytics(cp_client, events_client):
         height=350
     )
     
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width="stretch")
     
     # Recommendations
     st.markdown("---")

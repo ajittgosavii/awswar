@@ -66,13 +66,13 @@ class DevExModule:
         
         with col1:
             st.markdown("### 🚀 Quick Actions")
-            if st.button("📋 Generate AWS CLI command", use_container_width=True):
+            if st.button("📋 Generate AWS CLI command", width="stretch"):
                 st.info("Jump to AWS CLI Commands tab →")
-            if st.button("💻 Get code snippet", use_container_width=True):
+            if st.button("💻 Get code snippet", width="stretch"):
                 st.info("Jump to Code Generator tab →")
-            if st.button("🐛 Debug my issue", use_container_width=True):
+            if st.button("🐛 Debug my issue", width="stretch"):
                 st.info("Jump to Debug Assistant tab →")
-            if st.button("🤖 Ask AI", use_container_width=True):
+            if st.button("🤖 Ask AI", width="stretch"):
                 st.info("Jump to AI Helper tab →")
         
         with col2:
@@ -897,7 +897,7 @@ aws lambda delete-function --function-name my-function
         col1, col2 = st.columns(2)
         for i, q in enumerate(questions):
             with col1 if i % 2 == 0 else col2:
-                if st.button(f"💬 {q}", key=f"q_{i}", use_container_width=True):
+                if st.button(f"💬 {q}", key=f"q_{i}", width="stretch"):
                     st.info(f"🤖 Let me help with: {q}")
         
         st.markdown("---")
@@ -907,7 +907,7 @@ aws lambda delete-function --function-name my-function
             height=100
         )
         
-        if st.button("🚀 Get AI Answer", type="primary", use_container_width=True):
+        if st.button("🚀 Get AI Answer", type="primary", width="stretch"):
             if user_question:
                 st.success(f'''
 **AI Response:**

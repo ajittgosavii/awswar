@@ -237,7 +237,7 @@ class DashboardModule:
         
         if table_data:
             df = pd.DataFrame(table_data)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width="stretch", hide_index=True)
         else:
             st.info("No accounts to display")
     
@@ -280,6 +280,6 @@ class DashboardModule:
         
         if resources:
             df = pd.DataFrame(resources)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width="stretch", hide_index=True)
         else:
             st.info("No recent resources found. Launch some EC2 instances to see them here!")

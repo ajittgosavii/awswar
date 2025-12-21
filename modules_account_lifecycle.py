@@ -359,7 +359,7 @@ class AccountLifecycleModule:
         ]
         
         df = pd.DataFrame(activity)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, width="stretch")
     
     # ========================================================================
     # TAB 2: CREATE ACCOUNT
@@ -457,7 +457,7 @@ class AccountLifecycleModule:
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            if st.button("🚀 Create Account", type="primary", use_container_width=True):
+            if st.button("🚀 Create Account", type="primary", width="stretch"):
                 if not account_name or not account_email:
                     st.error("Please fill in all required fields")
                 else:
@@ -487,7 +487,7 @@ class AccountLifecycleModule:
                             st.warning("⏳ Account pending approval from management")
         
         with col2:
-            if st.button("💾 Save as Draft", use_container_width=True):
+            if st.button("💾 Save as Draft", width="stretch"):
                 st.info("Draft saved!")
     
     # ========================================================================
@@ -566,7 +566,7 @@ class AccountLifecycleModule:
         }
         
         template_df = pd.DataFrame(template_data)
-        st.dataframe(template_df, use_container_width=True)
+        st.dataframe(template_df, width="stretch")
         
         if st.button("📥 Download CSV Template"):
             st.success("Template downloaded!")
@@ -580,17 +580,17 @@ class AccountLifecycleModule:
             df = pd.read_csv(uploaded_file)
             
             st.write(f"**Accounts to create:** {len(df)}")
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, width="stretch")
             
             col1, col2 = st.columns(2)
             
             with col1:
-                if st.button("✅ Validate Batch", type="primary", use_container_width=True):
+                if st.button("✅ Validate Batch", type="primary", width="stretch"):
                     st.success("✅ All 3 accounts validated successfully!")
                     st.info("Estimated time: 30 minutes for 3 accounts")
             
             with col2:
-                if st.button("🚀 Provision All", use_container_width=True):
+                if st.button("🚀 Provision All", width="stretch"):
                     progress_bar = st.progress(0)
                     for i in range(len(df)):
                         progress_bar.progress((i + 1) / len(df))
@@ -864,7 +864,7 @@ class AccountLifecycleModule:
         ]
         
         df = pd.DataFrame(approved)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, width="stretch")
     
     # ========================================================================
     # TAB 9: AI ASSISTANT
@@ -1172,19 +1172,19 @@ class AccountLifecycleModule:
         ]
         
         df = pd.DataFrame(detected)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, width="stretch")
         
         st.markdown("---")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("🔍 Scan for New Accounts", type="primary", use_container_width=True):
+            if st.button("🔍 Scan for New Accounts", type="primary", width="stretch"):
                 with st.spinner("Scanning AWS Organizations..."):
                     st.success("✅ Scan complete! 0 new accounts found")
         
         with col2:
-            if st.button("🤖 Auto-Onboard Pending", use_container_width=True):
+            if st.button("🤖 Auto-Onboard Pending", width="stretch"):
                 st.success("✅ 1 account queued for auto-onboarding")
         
         st.markdown("---")

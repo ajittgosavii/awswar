@@ -229,7 +229,7 @@ status = "{account.status}"
             
             # Display results
             df = pd.DataFrame(results)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width="stretch", hide_index=True)
             
             # Summary
             successful = len([r for r in results if '✅' in r['Status']])
@@ -466,7 +466,7 @@ status = "{new_status}"
         ]
         
         df = pd.DataFrame(regions_data)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
         
         st.markdown("#### Region Usage Across Accounts")
         

@@ -474,10 +474,10 @@ def render_login_page():
             col_btn1, col_btn2 = st.columns(2)
             
             with col_btn1:
-                submit = st.form_submit_button("🔓 Sign In", use_container_width=True, type="primary")
+                submit = st.form_submit_button("🔓 Sign In", width="stretch", type="primary")
             
             with col_btn2:
-                forgot = st.form_submit_button("🔄 Forgot Password", use_container_width=True)
+                forgot = st.form_submit_button("🔄 Forgot Password", width="stretch")
             
             if submit:
                 if not email or not password:
@@ -576,7 +576,7 @@ def render_create_user_form():
                 icon = "✅" if enabled else "❌"
                 st.markdown(f"{icon} {perm.replace('_', ' ').title()}")
         
-        submitted = st.form_submit_button("👤 Create User", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("👤 Create User", type="primary", width="stretch")
         
         if submitted:
             if not all([display_name, email, password]):
@@ -711,7 +711,7 @@ def render_user_list():
                         key=f"role_{user.get('uid')}"
                     )
                     
-                    if st.button("💾 Update Role", key=f"update_{user.get('uid')}", use_container_width=True):
+                    if st.button("💾 Update Role", key=f"update_{user.get('uid')}", width="stretch"):
                         success, message = firebase_manager.update_user_role(user.get('uid'), new_role)
                         if success:
                             st.success(message)
@@ -721,7 +721,7 @@ def render_user_list():
                     
                     # Enable/Disable
                     if user.get('active', True):
-                        if st.button("🚫 Disable User", key=f"disable_{user.get('uid')}", use_container_width=True):
+                        if st.button("🚫 Disable User", key=f"disable_{user.get('uid')}", width="stretch"):
                             success, message = firebase_manager.disable_user(user.get('uid'))
                             if success:
                                 st.success(message)
@@ -729,7 +729,7 @@ def render_user_list():
                             else:
                                 st.error(message)
                     else:
-                        if st.button("✅ Enable User", key=f"enable_{user.get('uid')}", use_container_width=True):
+                        if st.button("✅ Enable User", key=f"enable_{user.get('uid')}", width="stretch"):
                             success, message = firebase_manager.enable_user(user.get('uid'))
                             if success:
                                 st.success(message)
@@ -738,7 +738,7 @@ def render_user_list():
                                 st.error(message)
                     
                     # Delete (with confirmation)
-                    if st.button("🗑️ Delete User", key=f"delete_{user.get('uid')}", use_container_width=True):
+                    if st.button("🗑️ Delete User", key=f"delete_{user.get('uid')}", width="stretch"):
                         st.warning("⚠️ This action cannot be undone!")
                         if st.button("✔️ Confirm Delete", key=f"confirm_delete_{user.get('uid')}"):
                             success, message = firebase_manager.delete_user(user.get('uid'))
@@ -855,7 +855,7 @@ def render_user_profile_sidebar():
         Role: {role.title()}
         """)
         
-        if st.button("🚪 Sign Out", use_container_width=True):
+        if st.button("🚪 Sign Out", width="stretch"):
             firebase_manager.sign_out()
             st.rerun()
 

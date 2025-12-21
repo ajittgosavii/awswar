@@ -135,7 +135,7 @@ def render_quick_sizing_estimate():
         target_utilization = st.slider("Target EKS Utilization %", 50, 80, 65)
         growth_factor = st.slider("Expected Growth in 12 Months %", 0, 200, 20)
     
-    if st.button("Calculate Cluster Size", use_container_width=True):
+    if st.button("Calculate Cluster Size", width="stretch"):
         # Calculate current capacity
         total_cpu = current_vms * avg_cpu_cores
         total_memory = current_vms * avg_memory_gb
@@ -299,7 +299,7 @@ def render_detailed_workload_sizing():
                     st.rerun()
         
         # Calculate cluster size
-        if st.button("🧮 Calculate Required Cluster Size", use_container_width=True):
+        if st.button("🧮 Calculate Required Cluster Size", width="stretch"):
             result = calculate_cluster_from_workloads(st.session_state.workloads)
             display_sizing_results(result, st.session_state.workloads)
 
@@ -744,7 +744,7 @@ def render_autoscaling_decision():
         ]
     )
     
-    if st.button("Get Recommendation", use_container_width=True):
+    if st.button("Get Recommendation", width="stretch"):
         # Decision logic
         if team_experience == "Beginner (< 6 months with K8s)":
             recommendation = "cluster_autoscaler"
@@ -899,7 +899,7 @@ def render_service_mesh_decision():
         ]
     )
     
-    if st.button("Get Service Mesh Recommendation", use_container_width=True):
+    if st.button("Get Service Mesh Recommendation", width="stretch"):
         # Decision logic
         services_numeric = {"1-5": 3, "6-20": 13, "21-50": 35, "51-100": 75, "100+": 150}
         num_services = services_numeric.get(microservices_count, 10)
@@ -1083,7 +1083,7 @@ def render_gitops_decision():
         ["1 cluster", "2-3 clusters", "4-10 clusters", "10+ clusters"]
     )
     
-    if st.button("Get GitOps Recommendation", use_container_width=True):
+    if st.button("Get GitOps Recommendation", width="stretch"):
         # Simple decision logic
         if team_size == "Just me (1)" and deployment_frequency == "Few times per month":
             recommendation = "manual"

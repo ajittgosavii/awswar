@@ -136,7 +136,7 @@ def render_cicd_phase5_module(session, account_id: str, region: str):
             return colors.get(val, '')
         
         styled_df = df_risk.style.applymap(color_risk, subset=['Risk Level'])
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        st.dataframe(styled_df, width="stretch", hide_index=True)
         
         # Detailed risk analysis for selected pipeline
         st.markdown("---")
@@ -210,22 +210,22 @@ def render_cicd_phase5_module(session, account_id: str, region: str):
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("🚨 Create Alert", type="primary", use_container_width=True):
+            if st.button("🚨 Create Alert", type="primary", width="stretch"):
                 st.success(f"✅ Alert created for {selected_pipeline}")
                 st.info("Team will be notified of high-risk deployment")
         
         with col2:
-            if st.button("📋 Generate Report", use_container_width=True):
+            if st.button("📋 Generate Report", width="stretch"):
                 st.download_button(
                     label="⬇️ Download Risk Report",
                     data=df_risk.to_csv(index=False),
                     file_name=f"risk-analysis-{datetime.now().strftime('%Y%m%d')}.csv",
                     mime="text/csv",
-                    use_container_width=True
+                    width="stretch"
                 )
         
         with col3:
-            if st.button("🔄 Retrain Model", use_container_width=True):
+            if st.button("🔄 Retrain Model", width="stretch"):
                 with st.spinner("Retraining AI model with latest data..."):
                     import time
                     time.sleep(2)
@@ -374,15 +374,15 @@ def render_cicd_phase5_module(session, account_id: str, region: str):
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    if st.button("✅ Implement", key=f"impl_{idx}", use_container_width=True):
+                    if st.button("✅ Implement", key=f"impl_{idx}", width="stretch"):
                         st.success(f"Implementing: {opt['Insight']}")
                 
                 with col2:
-                    if st.button("📋 Learn More", key=f"learn_{idx}", use_container_width=True):
+                    if st.button("📋 Learn More", key=f"learn_{idx}", width="stretch"):
                         st.info("Detailed implementation guide will be displayed")
                 
                 with col3:
-                    if st.button("⏸️ Snooze", key=f"snooze_{idx}", use_container_width=True):
+                    if st.button("⏸️ Snooze", key=f"snooze_{idx}", width="stretch"):
                         st.warning("Snoozed for 7 days")
         
         # Implementation roadmap
@@ -406,7 +406,7 @@ def render_cicd_phase5_module(session, account_id: str, region: str):
             st.metric("Total Time", "14 hours")
             st.metric("ROI", "450%")
             
-            if st.button("🚀 Start Optimization", type="primary", use_container_width=True):
+            if st.button("🚀 Start Optimization", type="primary", width="stretch"):
                 st.success("✅ Optimization plan created!")
                 st.info("Implementation tasks added to your backlog")
     
@@ -557,7 +557,7 @@ def render_cicd_phase5_module(session, account_id: str, region: str):
             return colors.get(val, '')
         
         styled_anomaly = filtered_anomaly.style.applymap(color_severity, subset=['Severity'])
-        st.dataframe(styled_anomaly, use_container_width=True, hide_index=True)
+        st.dataframe(styled_anomaly, width="stretch", hide_index=True)
         
         # Anomaly details
         st.markdown("---")
@@ -617,13 +617,13 @@ def render_cicd_phase5_module(session, account_id: str, region: str):
             # Action buttons
             st.markdown("---")
             if status != 'Resolved':
-                if st.button("✅ Mark Resolved", use_container_width=True):
+                if st.button("✅ Mark Resolved", width="stretch"):
                     st.success("Anomaly marked as resolved")
             
-            if st.button("📧 Alert Team", use_container_width=True):
+            if st.button("📧 Alert Team", width="stretch"):
                 st.info("Team notified about this anomaly")
             
-            if st.button("🔕 Suppress", use_container_width=True):
+            if st.button("🔕 Suppress", width="stretch"):
                 st.warning("Anomaly suppressed for 24 hours")
     
     # ============================================================================
@@ -650,7 +650,7 @@ def render_cicd_phase5_module(session, account_id: str, region: str):
         cols = st.columns(2)
         for i, question in enumerate(sample_questions):
             with cols[i % 2]:
-                if st.button(f"💡 {question}", key=f"sample_q_{i}", use_container_width=True):
+                if st.button(f"💡 {question}", key=f"sample_q_{i}", width="stretch"):
                     st.session_state['ai_query'] = question
         
         st.markdown("---")
@@ -667,10 +667,10 @@ def render_cicd_phase5_module(session, account_id: str, region: str):
         col1, col2 = st.columns([1, 5])
         
         with col1:
-            ask_button = st.button("🤖 Ask AI", type="primary", use_container_width=True)
+            ask_button = st.button("🤖 Ask AI", type="primary", width="stretch")
         
         with col2:
-            if st.button("🗑️ Clear", use_container_width=True):
+            if st.button("🗑️ Clear", width="stretch"):
                 st.session_state['ai_query'] = ''
                 st.rerun()
         
@@ -884,15 +884,15 @@ def render_cicd_phase5_module(session, account_id: str, region: str):
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    if st.button("📊 View Detailed Report", use_container_width=True):
+                    if st.button("📊 View Detailed Report", width="stretch"):
                         st.info("Detailed report will be generated")
                 
                 with col2:
-                    if st.button("📧 Email This Analysis", use_container_width=True):
+                    if st.button("📧 Email This Analysis", width="stretch"):
                         st.success("Analysis emailed to your team!")
                 
                 with col3:
-                    if st.button("🔖 Save to Dashboard", use_container_width=True):
+                    if st.button("🔖 Save to Dashboard", width="stretch"):
                         st.success("Saved to your AI Insights dashboard!")
         
         elif ask_button and not query:

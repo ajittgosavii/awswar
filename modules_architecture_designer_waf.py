@@ -797,7 +797,7 @@ I need a production-ready 3-tier web application with:
             arch_name = st.text_input("Architecture Name", "My Architecture")
         
         with col2:
-            if st.button("🚀 Generate Architecture", type="primary", use_container_width=True):
+            if st.button("🚀 Generate Architecture", type="primary", width="stretch"):
                 if description:
                     with st.spinner("Parsing your description..."):
                         components = NLPArchitectureParser.parse(description)
@@ -931,7 +931,7 @@ I need a production-ready 3-tier web application with:
             scan_network = st.checkbox("Scan Network (VPC, ALB)", value=True)
         
         # Scan button
-        if st.button("🔍 Scan AWS Environment", type="primary", use_container_width=True):
+        if st.button("🔍 Scan AWS Environment", type="primary", width="stretch"):
             
             with st.status("Scanning AWS environment...", expanded=True) as status:
                 

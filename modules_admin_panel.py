@@ -290,7 +290,7 @@ class AdminPanelModule:
                 with col1:
                     st.bar_chart(df_roles.set_index('Role'))
                 with col2:
-                    st.dataframe(df_roles, hide_index=True, use_container_width=True)
+                    st.dataframe(df_roles, hide_index=True, width="stretch")
             else:
                 st.info("No user data available")
             
@@ -319,7 +319,7 @@ class AdminPanelModule:
                     }
                     for u in recent_users
                 ])
-                st.dataframe(df_recent, hide_index=True, use_container_width=True)
+                st.dataframe(df_recent, hide_index=True, width="stretch")
             else:
                 st.info("No recent activity")
                 

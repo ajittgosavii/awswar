@@ -447,7 +447,7 @@ def render_resource_dependencies_enhanced(account_mgr):
             }
             return colors.get(val, '')
         
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
         
         # Summary metrics
         st.markdown("---")
@@ -576,11 +576,11 @@ def get_application_dependencies(application_name: str, session, region: str):
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📊 View Network Graph", use_container_width=True, key="view_network_graph"):
+        if st.button("📊 View Network Graph", width="stretch", key="view_network_graph"):
             st.info("Network graph visualization coming soon! Will show interactive node-based dependency graph.")
     
     with col2:
-        if st.button("📥 Export Dependencies", use_container_width=True, key="export_dependencies"):
+        if st.button("📥 Export Dependencies", width="stretch", key="export_dependencies"):
             st.success("Export functionality coming soon! Will export to CSV, JSON, or Visio format.")
     
     st.markdown("---")
