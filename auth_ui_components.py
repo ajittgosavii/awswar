@@ -102,7 +102,7 @@ def render_login_page():
         with st.expander("🔧 Developer Mode (Local Only)"):
             st.warning("⚠️ For local development only - DO NOT use in production!")
             dev_email = st.text_input("Email", "developer@company.com")
-            if st.button("Login as Developer", use_container_width=True):
+            if st.button("Login as Developer", width="stretch"):
                 # Create mock user session for development
                 mock_user = {
                     'id': 'dev-user-123',
@@ -234,10 +234,10 @@ def render_user_profile():
         # Actions
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("⚙️ Settings", use_container_width=True):
+            if st.button("⚙️ Settings", width="stretch"):
                 st.session_state.show_settings = True
         with col2:
-            if st.button("🚪 Logout", use_container_width=True):
+            if st.button("🚪 Logout", width="stretch"):
                 user_manager.logout()
                 st.rerun()
 

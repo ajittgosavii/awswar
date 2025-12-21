@@ -2092,7 +2092,7 @@ class ArchitectureDesignerRevamped:
                 data=cf_template,
                 file_name="architecture.yaml",
                 mime="text/yaml",
-                use_container_width=True
+                width="stretch"
             )
         
         with col2:
@@ -2103,7 +2103,7 @@ class ArchitectureDesignerRevamped:
                 data=tf_template,
                 file_name="architecture.tf",
                 mime="text/plain",
-                use_container_width=True
+                width="stretch"
             )
         
         with col3:
@@ -2119,7 +2119,7 @@ class ArchitectureDesignerRevamped:
                 data=json_export,
                 file_name="architecture.json",
                 mime="application/json",
-                use_container_width=True
+                width="stretch"
             )
     
     @staticmethod
@@ -3449,7 +3449,7 @@ module "rds" {
                 data=diagram_html,
                 file_name="optimized_architecture.html",
                 mime="text/html",
-                use_container_width=True
+                width="stretch"
             )
         
         with col2:
@@ -3748,7 +3748,7 @@ module "rds" {
                 </div>
                 """, unsafe_allow_html=True)
                 
-                if st.button(f"Select", key=f"dr_{key}", use_container_width=True):
+                if st.button(f"Select", key=f"dr_{key}", width="stretch"):
                     config['dr_strategy'] = key
                     st.rerun()
         
@@ -3889,9 +3889,9 @@ module "rds" {
         
         col1, col2 = st.columns(2)
         with col1:
-            st.download_button("📥 Download Diagram", diagram_html, "multi_region.html", "text/html", use_container_width=True)
+            st.download_button("📥 Download Diagram", diagram_html, "multi_region.html", "text/html", width="stretch")
         with col2:
-            st.download_button("📋 Export Config", json.dumps(config, indent=2, default=str), "dr_config.json", "application/json", use_container_width=True)
+            st.download_button("📋 Export Config", json.dumps(config, indent=2, default=str), "dr_config.json", "application/json", width="stretch")
     
     @staticmethod
     def _generate_mr_diagram(config: Dict) -> str:

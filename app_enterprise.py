@@ -278,20 +278,20 @@ def render_trends_tab():
             if not trends.empty:
                 # Display trend chart
                 fig = dashboard.create_trend_chart(trends)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
                 
                 # Get pillar trends
                 pillar_trends = db.get_pillar_trends(account_id, days=days)
                 if not pillar_trends.empty:
                     st.subheader("WAF Pillar Trends")
-                    st.dataframe(pillar_trends, use_container_width=True)
+                    st.dataframe(pillar_trends, width="stretch")
                 
                 # Finding age statistics
                 age_stats = db.get_finding_age_stats(account_id)
                 if not age_stats.empty:
                     st.subheader("Finding Age Analysis")
                     fig = dashboard.create_finding_age_histogram(age_stats)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
             else:
                 st.info("ℹ️ No historical data available for this account")
                 
@@ -320,7 +320,7 @@ def render_compliance_tab():
             
             # Compliance heatmap
             fig = dashboard.create_compliance_heatmap(compliance_report)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             
             # Framework summary
             st.subheader("Compliance Framework Summary")
@@ -382,7 +382,7 @@ def render_cost_tab():
             
             # Cost waterfall
             fig = dashboard.create_cost_impact_waterfall(portfolio_cost)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             
             # Top opportunities
             st.subheader("💡 Top Cost Savings Opportunities")

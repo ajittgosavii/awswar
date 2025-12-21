@@ -57,7 +57,7 @@ class Navigation:
                 if st.button(
                     f"{item['icon']} {item['label']}",
                     key=f"nav_{item['key']}",
-                    use_container_width=True,
+                    width="stretch",
                     type=button_type
                 ):
                     st.session_state.active_module = item['key']
@@ -73,7 +73,7 @@ class Navigation:
                 if st.button(
                     f"{item['icon']} {item['label']}",
                     key=f"nav_{item['key']}",
-                    use_container_width=True,
+                    width="stretch",
                     type=button_type
                 ):
                     st.session_state.active_module = item['key']
@@ -100,7 +100,7 @@ class Navigation:
                     if st.button(
                         f"{item['icon']} {item['label']}",
                         key=f"nav_{item['key']}",
-                        use_container_width=True,
+                        width="stretch",
                         type=button_type
                     ):
                         st.session_state.active_module = item['key']

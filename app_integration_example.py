@@ -117,7 +117,7 @@ def render_home_page():
     
     with col1:
         st.subheader("🚀 Get Started")
-        if st.button("Create New Assessment", type="primary", use_container_width=True):
+        if st.button("Create New Assessment", type="primary", width="stretch"):
             st.session_state.current_page = "📋 Assessments"
             st.rerun()
     
