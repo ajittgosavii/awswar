@@ -10,10 +10,49 @@ This module KEEPS all existing functionality and ADDS AI features:
 + AI-powered analysis
 + WAF pillar mapping
 + PDF report generation
+
+Version: 5.0.1 - Performance Optimized
 """
 
 # Module-level imports for caching decorators
 import streamlit as st
+
+# ============================================================================
+# CACHING FOR PERFORMANCE
+# ============================================================================
+
+@st.cache_resource(ttl=300, show_spinner=False)
+def _get_cached_aws_session():
+    """Get cached AWS session (5 min TTL)"""
+    try:
+        from aws_connector import get_aws_session
+        return get_aws_session()
+    except Exception:
+        return None
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _get_cached_account_id():
+    """Get cached account ID (5 min TTL)"""
+    session = _get_cached_aws_session()
+    if not session:
+        return None
+    try:
+        sts = session.client('sts')
+        identity = sts.get_caller_identity()
+        return identity['Account']
+    except Exception:
+        return None
+
+@st.cache_data(ttl=600, show_spinner=False) 
+def _get_cached_regions():
+    """Get cached regions list (10 min TTL)"""
+    return [
+        "us-east-1", "us-east-2", "us-west-1", "us-west-2",
+        "eu-west-1", "eu-west-2", "eu-central-1",
+        "ap-southeast-1", "ap-southeast-2", "ap-northeast-1",
+        "sa-east-1", "ca-central-1"
+    ]
+
 
 def render_integrated_waf_scanner():
     """
@@ -65,26 +104,19 @@ def render_single_account_scanner_enhanced():
     Keeps original functionality + adds AI analysis
     """
     import streamlit as st
-    from aws_connector import get_aws_session
     
     st.markdown("### 📡 Single Account WAF Scan")
     st.info("🤖 **AI-Enhanced**: Scan results will include AI-powered insights, WAF pillar scores, and PDF reports")
     
-    # Check AWS connection
-    try:
-        session = get_aws_session()
-        if not session:
-            st.warning("⚠️ AWS not connected. Go to AWS Connector tab first.")
-            return
-        
-        sts = session.client('sts')
-        identity = sts.get_caller_identity()
-        account_id = identity['Account']
-        
-        st.success(f"✅ Connected to Account: **{account_id}**")
-    except Exception as e:
-        st.error(f"❌ Could not connect to AWS: {str(e)}")
+    # Check AWS connection using cached session
+    session = _get_cached_aws_session()
+    account_id = _get_cached_account_id()
+    
+    if not session or not account_id:
+        st.warning("⚠️ AWS not connected. Go to AWS Connector tab first.")
         return
+    
+    st.success(f"✅ Connected to Account: **{account_id}**")
     
     st.markdown("---")
     
@@ -97,7 +129,7 @@ def render_single_account_scanner_enhanced():
     with col1:
         scan_region = st.selectbox(
             "Region to Scan",
-            ["us-east-1", "us-east-2", "us-west-1", "us-west-2", 
+            _get_cached_regions(), 
              "eu-west-1", "eu-central-1", "ap-southeast-1", "ap-northeast-1"],
             help="AWS region to scan"
         )

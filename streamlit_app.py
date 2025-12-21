@@ -2,9 +2,10 @@
 AI-Based AWS Well-Architected Framework Advisor
 AWS-focused architecture design and assessment platform
 
-Version: 5.0.0 - Production Ready
+Version: 5.0.1 - Performance Optimized
 
 RECENT UPDATES:
+- Performance optimizations with lazy loading and caching
 - Added Unified WAF Assessment (combines Scanner + Assessment workflow)
 - Integrated AI-Enhanced WAF Scanner (replaces basic scanner)
 - Quick Scan moved from WAF Assessment to WAF Scanner (as scan mode)
@@ -22,56 +23,119 @@ import streamlit as st
 import sys
 from datetime import datetime
 
-# Production logging
-from logging_config import get_logger
-logger = get_logger(__name__)
+# ============================================================================
+# PERFORMANCE OPTIMIZATIONS - Lazy loading and caching
+# ============================================================================
 
-from waf_unified_workflow import render_unified_waf_workflow
+# Use Streamlit's native caching for expensive operations
+@st.cache_resource(ttl=300)
+def get_logger_cached(name: str):
+    """Cached logger initialization"""
+    from logging_config import get_logger
+    return get_logger(name)
 
-# Import integrated WAF scanner (keeps all functionality + adds AI)
-from waf_scanner_integrated import render_integrated_waf_scanner
+logger = get_logger_cached(__name__)
 
-# Import demo mode manager
-from demo_mode_manager import (
-    get_demo_manager, 
-    render_mode_toggle, 
-    render_mode_banner,
-    render_demo_account_info
-)
+# Lazy import functions - only load modules when actually needed
+_module_cache = {}
+
+def _lazy_import(module_name: str, func_name: str = None):
+    """Lazily import a module or function from a module"""
+    if module_name not in _module_cache:
+        import importlib
+        _module_cache[module_name] = importlib.import_module(module_name)
+    
+    if func_name:
+        return getattr(_module_cache[module_name], func_name)
+    return _module_cache[module_name]
+
+# Don't import heavy modules at startup - use lazy loading
+def render_unified_waf_workflow():
+    """Lazy wrapper for unified workflow"""
+    func = _lazy_import('waf_unified_workflow', 'render_unified_waf_workflow')
+    return func()
+
+def render_integrated_waf_scanner():
+    """Lazy wrapper for integrated scanner"""
+    func = _lazy_import('waf_scanner_integrated', 'render_integrated_waf_scanner')
+    return func()
+
+def get_demo_manager():
+    """Lazy wrapper for demo manager"""
+    func = _lazy_import('demo_mode_manager', 'get_demo_manager')
+    return func()
+
+def render_mode_toggle():
+    """Lazy wrapper for mode toggle"""
+    func = _lazy_import('demo_mode_manager', 'render_mode_toggle')
+    return func()
+
+def render_mode_banner():
+    """Lazy wrapper for mode banner"""
+    func = _lazy_import('demo_mode_manager', 'render_mode_banner')
+    return func()
+
+def render_demo_account_info():
+    """Lazy wrapper for demo account info"""
+    func = _lazy_import('demo_mode_manager', 'render_demo_account_info')
+    return func()
 
 
-# Performance: Initialize session state for caching
-if 'app_cache_initialized' not in st.session_state:
-    st.session_state.app_cache_initialized = True
+# Performance: Initialize session state for caching (only once)
+@st.cache_resource
+def _init_app_state():
+    """One-time initialization marker"""
+    return True
+
+if not st.session_state.get('app_cache_initialized'):
+    st.session_state.app_cache_initialized = _init_app_state()
     st.session_state.cached_accounts = None
     st.session_state.cached_identity = None
     st.session_state.last_scan_results = None
 
 # ============================================================================
-# PERFORMANCE OPTIMIZATIONS - Added for faster tab loading
+# CACHED AWS SESSION - Using Streamlit's native caching
 # ============================================================================
 
+@st.cache_resource(ttl=300, show_spinner=False)
 def get_cached_session():
-    """Get cached AWS session from session state"""
-    if 'aws_session_cache' not in st.session_state:
-        st.session_state.aws_session_cache = None
-        st.session_state.aws_session_time = None
-    
-    # Check if session is still valid (5 min cache)
-    import time
-    if st.session_state.aws_session_cache and st.session_state.aws_session_time:
-        if time.time() - st.session_state.aws_session_time < 300:
-            return st.session_state.aws_session_cache
-    
-    # Get fresh session
+    """Get cached AWS session (5 min TTL) - uses Streamlit native caching"""
     try:
         from aws_connector import get_aws_session
+        from botocore.exceptions import ClientError, NoCredentialsError
         session = get_aws_session()
-        st.session_state.aws_session_cache = session
-        st.session_state.aws_session_time = time.time()
+        if session:
+            # Validate session works
+            sts = session.client('sts')
+            sts.get_caller_identity()
         return session
-    except ClientError:
+    except (ClientError, NoCredentialsError, Exception):
         return None
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_cached_identity():
+    """Get cached AWS identity (5 min TTL)"""
+    session = get_cached_session()
+    if not session:
+        return None
+    try:
+        sts = session.client('sts')
+        return sts.get_caller_identity()
+    except Exception:
+        return None
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_cached_regions():
+    """Get cached AWS regions (10 min TTL)"""
+    session = get_cached_session()
+    if not session:
+        return ['us-east-1', 'us-west-2', 'eu-west-1', 'eu-central-1', 'ap-southeast-1']
+    try:
+        ec2 = session.client('ec2', region_name='us-east-1')
+        response = ec2.describe_regions()
+        return sorted([r['RegionName'] for r in response['Regions']])
+    except Exception:
+        return ['us-east-1', 'us-west-2', 'eu-west-1', 'eu-central-1', 'ap-southeast-1']
 
 def init_performance_cache():
     """Initialize session state for performance"""
@@ -93,19 +157,34 @@ init_performance_cache()
 # ============================================================================
 
 # ==================================================================================
-# AUTHENTICATION - Azure AD SSO + Firebase (Multicloud Approach)
+# AUTHENTICATION - Azure AD SSO + Firebase (Lazy Loading)
 # ==================================================================================
-try:
-    from auth_azure_sso import render_login, RoleManager
-    from auth_database_firebase import get_database_manager
-    SSO_AVAILABLE = True
-except ImportError as e:
-    SSO_AVAILABLE = False
-    print(f"Authentication modules not found: {e}")
-    print("Running without authentication")
+SSO_AVAILABLE = False
+_auth_modules_loaded = False
+
+def _load_auth_modules():
+    """Lazily load authentication modules"""
+    global SSO_AVAILABLE, _auth_modules_loaded
+    if _auth_modules_loaded:
+        return SSO_AVAILABLE
+    
+    try:
+        global render_login, RoleManager, get_database_manager
+        from auth_azure_sso import render_login, RoleManager
+        from auth_database_firebase import get_database_manager
+        SSO_AVAILABLE = True
+    except ImportError as e:
+        SSO_AVAILABLE = False
+        logger.debug(f"Authentication modules not found: {e}")
+    
+    _auth_modules_loaded = True
+    return SSO_AVAILABLE
+
+# Check auth availability (lazy)
+SSO_AVAILABLE = _load_auth_modules()
 
 
-# Page configuration
+# Page configuration - This MUST be the first Streamlit command
 st.set_page_config(
     page_title="AI-Based Well-Architected Framework Advisor",
     page_icon="☁️",
