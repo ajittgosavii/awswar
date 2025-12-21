@@ -1189,7 +1189,7 @@ def render_unified_waf_workflow():
             - Complete 6-pillar coverage
             """)
         
-        if st.button("🚀 Start Unified Assessment", type="primary", use_container_width=True):
+        if st.button("🚀 Start Unified Assessment", type="primary", width="stretch"):
             # Initialize
             session = st.session_state.get('aws_session') if not use_demo else None
             workflow = UnifiedWAFWorkflow(session=session, use_demo=use_demo)
@@ -1459,7 +1459,7 @@ def render_unified_waf_workflow():
         
         with col1:
             if PDF_AVAILABLE:
-                if st.button("📄 Generate PDF Report", use_container_width=True):
+                if st.button("📄 Generate PDF Report", width="stretch"):
                     try:
                         generator = UnifiedReportGenerator()
                         pdf_bytes = generator.generate_report(assessment)
@@ -1469,7 +1469,7 @@ def render_unified_waf_workflow():
                             data=pdf_bytes,
                             file_name=f"waf_unified_{assessment.account_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
                             mime="application/pdf",
-                            use_container_width=True
+                            width="stretch"
                         )
                     except Exception as e:
                         st.error(f"Error generating PDF: {str(e)}")
@@ -1503,7 +1503,7 @@ def render_unified_waf_workflow():
                 data=json.dumps(export_data, indent=2),
                 file_name=f"waf_unified_{assessment.account_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.json",
                 mime="application/json",
-                use_container_width=True
+                width="stretch"
             )
         
         # Reset button

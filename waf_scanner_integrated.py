@@ -192,7 +192,7 @@ def render_single_account_scanner_enhanced():
     col1, col2, col3 = st.columns([2, 1, 1])
     
     with col1:
-        if st.button("🚀 Start WAF Scan", type="primary", use_container_width=True):
+        if st.button("🚀 Start WAF Scan", type="primary", width="stretch"):
             # Extract scan mode
             if "Quick" in scan_depth:
                 mode = "quick"
@@ -215,14 +215,14 @@ def render_single_account_scanner_enhanced():
             )
     
     with col2:
-        if st.button("📊 View Last Scan", use_container_width=True):
+        if st.button("📊 View Last Scan", width="stretch"):
             if 'last_single_scan' in st.session_state:
                 display_enhanced_scan_results(st.session_state.last_single_scan)
             else:
                 st.info("No previous scan found")
     
     with col3:
-        if st.button("📥 Export Results", use_container_width=True):
+        if st.button("📥 Export Results", width="stretch"):
             if 'last_single_scan' in st.session_state:
                 export_scan_results(st.session_state.last_single_scan)
             else:
@@ -421,7 +421,7 @@ def render_security_hub_scanner():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        if st.button("🔍 Fetch from Security Hub", type="primary", use_container_width=True):
+        if st.button("🔍 Fetch from Security Hub", type="primary", width="stretch"):
             fetch_and_analyze_security_hub(
                 hub_region=hub_region,
                 use_hub_creds=use_hub_creds,
@@ -434,7 +434,7 @@ def render_security_hub_scanner():
             )
     
     with col2:
-        if st.button("📊 View Results", use_container_width=True):
+        if st.button("📊 View Results", width="stretch"):
             if 'security_hub_results' in st.session_state:
                 display_multi_account_results(st.session_state.security_hub_results)
             else:
@@ -610,7 +610,7 @@ def render_direct_multi_account_scanner():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        if st.button("🚀 Start Multi-Account Scan", type="primary", use_container_width=True):
+        if st.button("🚀 Start Multi-Account Scan", type="primary", width="stretch"):
             run_enhanced_multi_account_scan(
                 selected_accounts=selected_accounts,
                 scan_depth=scan_depth,
@@ -625,7 +625,7 @@ def render_direct_multi_account_scanner():
             )
     
     with col2:
-        if st.button("📊 View Results", use_container_width=True):
+        if st.button("📊 View Results", width="stretch"):
             if 'multi_scan_results' in st.session_state:
                 display_multi_account_results(st.session_state.multi_scan_results)
             else:
@@ -2095,7 +2095,7 @@ def display_enhanced_scan_results(scan_results):
             data=scan_results['pdf_report'],
             file_name=f"waf_scan_{scan_results.get('account_id', 'report')}.pdf",
             mime="application/pdf",
-            use_container_width=True
+            width="stretch"
         )
     
     # Detailed Findings
@@ -2185,7 +2185,7 @@ def display_multi_account_results(results):
                 data=results['consolidated_pdf'],
                 file_name=f"multi_account_waf_scan_{len(results)}_accounts.pdf",
                 mime="application/pdf",
-                use_container_width=True
+                width="stretch"
             )
         
         with col2:
@@ -2209,7 +2209,7 @@ def display_multi_account_results(results):
                     data=pdf_bytes,
                     file_name=f"waf_scan_{account_id}.pdf",
                     mime="application/pdf",
-                    use_container_width=True,
+                    width="stretch",
                     key=f"pdf_download_{account_id}"
                 )
     
@@ -2227,7 +2227,7 @@ def display_multi_account_results(results):
                 data=json_data,
                 file_name=f"multi_account_scan_{len(results)}_accounts.json",
                 mime="application/json",
-                use_container_width=True
+                width="stretch"
             )
         
         with export_col2:
@@ -2262,7 +2262,7 @@ def display_multi_account_results(results):
                 data=output.getvalue(),
                 file_name=f"multi_account_scan_{len(results)}_accounts.csv",
                 mime="text/csv",
-                use_container_width=True
+                width="stretch"
             )
     
     st.markdown("---")
@@ -2313,7 +2313,7 @@ def export_scan_results(scan_results):
             data=json_data,
             file_name=f"waf_scan_{scan_results.get('account_id', 'results')}.json",
             mime="application/json",
-            use_container_width=True
+            width="stretch"
         )
     
     with col2:
@@ -2340,5 +2340,5 @@ def export_scan_results(scan_results):
                 data=output.getvalue(),
                 file_name=f"waf_scan_{scan_results.get('account_id', 'results')}.csv",
                 mime="text/csv",
-                use_container_width=True
+                width="stretch"
             )

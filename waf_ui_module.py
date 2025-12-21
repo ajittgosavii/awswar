@@ -319,7 +319,7 @@ def render_new_assessment_form():
         
         owner = st.text_input("Owner/Lead", "John Doe")
         
-        submitted = st.form_submit_button("🚀 Start Assessment", use_container_width=True)
+        submitted = st.form_submit_button("🚀 Start Assessment", width="stretch")
         
         if submitted:
             # Create new assessment
@@ -534,7 +534,7 @@ def render_dashboard_tab(assessment: WAFAssessment, questions: List[Question]):
             st.progress(row['Score'] / 100, text=f"{row['Status']} {row['Pillar']}: {row['Score']:.1f}%")
     
     with col2:
-        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.dataframe(df, hide_index=True, width="stretch")
 
 def render_ai_insights_tab(assessment: WAFAssessment, questions: List[Question]):
     """Render AI-powered insights"""
@@ -545,7 +545,7 @@ def render_ai_insights_tab(assessment: WAFAssessment, questions: List[Question])
         st.warning("⏳ Complete at least 10 questions to generate AI insights")
         return
     
-    if st.button("🔄 Generate AI Analysis", use_container_width=True):
+    if st.button("🔄 Generate AI Analysis", width="stretch"):
         with st.spinner("Analyzing your assessment..."):
             recommendations = generate_ai_recommendations(assessment, questions)
             assessment.ai_recommendations = recommendations
@@ -638,17 +638,17 @@ def render_reports_tab(assessment: WAFAssessment, questions: List[Question]):
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📄 Executive Summary (PDF)", use_container_width=True):
+        if st.button("📄 Executive Summary (PDF)", width="stretch"):
             st.info("PDF generation would be implemented here")
         
-        if st.button("📊 Technical Report (PDF)", use_container_width=True):
+        if st.button("📊 Technical Report (PDF)", width="stretch"):
             st.info("Technical report generation would be implemented here")
     
     with col2:
-        if st.button("📋 Action Items (Excel)", use_container_width=True):
+        if st.button("📋 Action Items (Excel)", width="stretch"):
             st.info("Excel export would be implemented here")
         
-        if st.button("💾 Export Assessment (JSON)", use_container_width=True):
+        if st.button("💾 Export Assessment (JSON)", width="stretch"):
             json_data = json.dumps(assessment.export_to_dict(), indent=2)
             st.download_button(
                 "Download JSON",

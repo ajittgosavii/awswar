@@ -1138,13 +1138,13 @@ def render_assessments_list():
                         st.caption(f"Created: {assessment.get('created_at', 'Unknown')[:10]} | {metric_text}")
                     
                     with col_b:
-                        if st.button("📖 Open", key=f"open_{assessment_id}", use_container_width=True):
+                        if st.button("📖 Open", key=f"open_{assessment_id}", width="stretch"):
                             st.session_state.current_waf_assessment_id = assessment_id
                             st.rerun()
                     
                     with col_c:
                         if assessment.get('status') == 'completed' or assessment.get('progress', 0) >= 80:
-                            if st.button("📄 Report", key=f"report_{assessment_id}", use_container_width=True):
+                            if st.button("📄 Report", key=f"report_{assessment_id}", width="stretch"):
                                 st.session_state.current_waf_assessment_id = assessment_id
                                 st.session_state.show_report = True
                                 st.rerun()
@@ -1220,7 +1220,7 @@ def render_assessments_list():
             if enable_ai:
                 st.success("✅ AI will explain all questions")
             
-            submitted = st.form_submit_button("🚀 Create Assessment", use_container_width=True, type="primary")
+            submitted = st.form_submit_button("🚀 Create Assessment", width="stretch", type="primary")
             
             if submitted:
                 if not assessment_name or not workload_name:
@@ -1301,7 +1301,7 @@ def render_quick_scan():
         aws_account = st.text_input("AWS Account (optional)", placeholder="123456789012")
         region = st.selectbox("Primary Region", ["us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"])
         
-        if st.button("🔍 Run Quick Scan", use_container_width=True, type="primary"):
+        if st.button("🔍 Run Quick Scan", width="stretch", type="primary"):
             run_standalone_scan(aws_account, region)
     
     # Show last scan results if available
@@ -1720,7 +1720,7 @@ def render_compliance_view():
     with col_ev2:
         st.markdown("**Audit-Ready Reports**")
         
-        if st.button("📥 Generate Compliance Report", use_container_width=True, type="primary"):
+        if st.button("📥 Generate Compliance Report", width="stretch", type="primary"):
             st.success("✅ Compliance report generated!")
             st.info(f"""
             **Report Contents:**
@@ -1732,7 +1732,7 @@ def render_compliance_view():
             - Action plan
             """)
         
-        if st.button("📊 Export Evidence Package", use_container_width=True):
+        if st.button("📊 Export Evidence Package", width="stretch"):
             st.info("Evidence package export coming soon!")
     
     # Gap analysis
@@ -1831,7 +1831,7 @@ def render_compliance_view():
                 - Higher accuracy based on actual config
                 """)
             
-            submitted = st.form_submit_button("🚀 Create Assessment", use_container_width=True)
+            submitted = st.form_submit_button("🚀 Create Assessment", width="stretch")
             
             if submitted:
                 if not assessment_name:
@@ -1892,12 +1892,12 @@ def render_assessment_workspace():
     
     with col2:
         if assessment.get('progress', 0) >= 80:
-            if st.button("📄 View Report", use_container_width=True):
+            if st.button("📄 View Report", width="stretch"):
                 st.session_state.show_report = True
                 st.rerun()
     
     with col3:
-        if st.button("← Back to List", key="back_to_list", use_container_width=True):
+        if st.button("← Back to List", key="back_to_list", width="stretch"):
             st.session_state.current_waf_assessment_id = None
             st.session_state.show_report = False
             st.rerun()
@@ -1941,7 +1941,7 @@ def render_full_report(assessment: Dict):
         st.caption(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     
     with col2:
-        if st.button("📥 Export PDF", use_container_width=True):
+        if st.button("📥 Export PDF", width="stretch"):
             try:
                 # Import PDF generator
                 from pdf_report_generator import generate_waf_pdf_report
@@ -1960,7 +1960,7 @@ def render_full_report(assessment: Dict):
                         data=pdf_bytes,
                         file_name=filename,
                         mime="application/pdf",
-                        use_container_width=True
+                        width="stretch"
                     )
                     
                     st.success("✅ PDF generated successfully!")
@@ -1972,7 +1972,7 @@ def render_full_report(assessment: Dict):
                 st.info("💡 Make sure reportlab is installed: pip install reportlab")
     
     with col3:
-        if st.button("📊 Back to Dashboard", use_container_width=True):
+        if st.button("📊 Back to Dashboard", width="stretch"):
             st.session_state.show_report = False
             st.rerun()
     
@@ -2102,10 +2102,10 @@ def render_dashboard_tab(assessment: Dict):
         
         with col_scan2:
             if assessment.get('scan_results') is None:
-                if st.button("🔍 Run Scan", use_container_width=True, type="primary"):
+                if st.button("🔍 Run Scan", width="stretch", type="primary"):
                     run_aws_scan(assessment)
             else:
-                if st.button("🔄 Re-scan", use_container_width=True):
+                if st.button("🔄 Re-scan", width="stretch"):
                     run_aws_scan(assessment)
         
         st.divider()
@@ -2127,7 +2127,7 @@ def render_dashboard_tab(assessment: Dict):
         if assessment.get('overall_score', 0) == 0 or assessment.get('progress', 0) != 100:
             st.warning("⚠️ Scores need recalculation. Click the button below to fix.")
         
-        if st.button("🔄 Recalculate All Scores Now", use_container_width=True, type="primary"):
+        if st.button("🔄 Recalculate All Scores Now", width="stretch", type="primary"):
             with st.spinner("Recalculating all scores..."):
                 try:
                     # Get ALL questions
@@ -2293,7 +2293,7 @@ def render_assessment_tab(assessment: Dict):
                 # AI Assistant Button
                 col_ai, col_scan_info = st.columns([1, 3])
                 with col_ai:
-                    if st.button(f"🤖 Get AI Help", key=f"ai_help_{question.id}", use_container_width=True, type="secondary"):
+                    if st.button(f"🤖 Get AI Help", key=f"ai_help_{question.id}", width="stretch", type="secondary"):
                         with st.spinner("🤖 AI is analyzing this question for you..."):
                             ai_assistance = get_ai_question_assistance(question, assessment)
                             if ai_assistance:
@@ -2381,7 +2381,7 @@ def render_assessment_tab(assessment: Dict):
                 )
                 
                 # SAVE BUTTON - Now with Firebase integration
-                if st.button("💾 Save Response", key=f"save_{question.id}", use_container_width=True, type="primary"):
+                if st.button("💾 Save Response", key=f"save_{question.id}", width="stretch", type="primary"):
                     # Import Firebase helper
                     try:
                         from firebase_database_helper import save_assessment_to_firebase, auto_sync_response
@@ -2600,13 +2600,13 @@ def render_ai_insights_tab(assessment: Dict):
     with col1:
         generate_button = st.button(
             "🚀 Generate Comprehensive AI Insights",
-            use_container_width=True,
+            width="stretch",
             type="primary"
         )
     
     with col2:
         if cache_key in st.session_state:
-            if st.button("🔄 Regenerate", use_container_width=True):
+            if st.button("🔄 Regenerate", width="stretch"):
                 # Clear cache to regenerate
                 del st.session_state[cache_key]
                 st.rerun()
@@ -2743,11 +2743,11 @@ def render_reports_tab(assessment: Dict):
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📊 Executive Summary (PDF)", use_container_width=True):
+        if st.button("📊 Executive Summary (PDF)", width="stretch"):
             st.info("📄 PDF generation coming soon...")
     
     with col2:
-        if st.button("📥 Export Data (JSON)", use_container_width=True):
+        if st.button("📥 Export Data (JSON)", width="stretch"):
             export_data = json.dumps(assessment, indent=2, default=str)
             assessment_id = assessment.get('assessment_id') or assessment.get('id', 'unknown')
             st.download_button(

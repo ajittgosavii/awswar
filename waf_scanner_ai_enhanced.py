@@ -1089,7 +1089,7 @@ def render_enhanced_waf_scanner():
             use_ai = st.checkbox("Enable AI Analysis", value=True, help="Use Claude API for insights")
     
     # Scan button
-    if st.button("🚀 Start WAF Scan", type="primary", use_container_width=True):
+    if st.button("🚀 Start WAF Scan", type="primary", width="stretch"):
         
         # Progress tracking
         progress_bar = st.progress(0)
@@ -1187,7 +1187,7 @@ def render_enhanced_waf_scanner():
         st.subheader("📥 Download Report")
         
         if PDF_AVAILABLE:
-            if st.button("📄 Generate PDF Report", use_container_width=True):
+            if st.button("📄 Generate PDF Report", width="stretch"):
                 with st.spinner("Generating comprehensive PDF report..."):
                     try:
                         generator = ComprehensivePDFReportGenerator()
@@ -1198,7 +1198,7 @@ def render_enhanced_waf_scanner():
                             data=pdf_bytes,
                             file_name=f"waf_scan_{scan_result.account_name.replace(' ', '_')}_{scan_result.scan_date.strftime('%Y%m%d')}.pdf",
                             mime="application/pdf",
-                            use_container_width=True
+                            width="stretch"
                         )
                         
                         st.success("✅ PDF report generated successfully!")
@@ -1208,14 +1208,14 @@ def render_enhanced_waf_scanner():
             st.warning("PDF generation requires reportlab library: `pip install reportlab`")
         
         # JSON Export
-        if st.button("📊 Export as JSON", use_container_width=True):
+        if st.button("📊 Export as JSON", width="stretch"):
             json_data = json.dumps(asdict(scan_result), default=str, indent=2)
             st.download_button(
                 label="⬇️ Download JSON Data",
                 data=json_data,
                 file_name=f"waf_scan_{scan_result.account_name.replace(' ', '_')}_{scan_result.scan_date.strftime('%Y%m%d')}.json",
                 mime="application/json",
-                use_container_width=True
+                width="stretch"
             )
 
 # ============================================================================

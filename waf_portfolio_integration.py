@@ -161,7 +161,7 @@ def handle_portfolio_creation():
         submitted = st.form_submit_button(
             "🚀 Create Portfolio",
             type="primary",
-            use_container_width=True
+            width="stretch"
         )
         
         if submitted:
@@ -421,14 +421,14 @@ def handle_portfolio_scan(assessment: Dict):
         scan_all = st.button(
             "🔍 Scan All Accounts",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             help="Scan all accounts in portfolio"
         )
     
     with col2:
         rescan = st.button(
             "🔄 Re-scan Portfolio",
-            use_container_width=True,
+            width="stretch",
             help="Re-scan previously scanned accounts"
         )
     
@@ -515,7 +515,7 @@ def export_portfolio_pdf(assessment: Dict):
             data=pdf_bytes,
             file_name=filename,
             mime="application/pdf",
-            use_container_width=True
+            width="stretch"
         )
         
         st.success("✅ PDF generated successfully!")

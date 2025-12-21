@@ -89,12 +89,12 @@ def render_questions_with_pagination(assessment: Dict, questions: List, pillar_f
     nav_col1, nav_col2, nav_col3, nav_col4, nav_col5 = st.columns([1, 1, 2, 1, 1])
     
     with nav_col1:
-        if st.button("⏮️ First", disabled=(current_index == 0), use_container_width=True):
+        if st.button("⏮️ First", disabled=(current_index == 0), width="stretch"):
             st.session_state.current_question_index = 0
             st.rerun()
     
     with nav_col2:
-        if st.button("◀️ Previous", disabled=(current_index == 0), use_container_width=True):
+        if st.button("◀️ Previous", disabled=(current_index == 0), width="stretch"):
             st.session_state.current_question_index = max(0, current_index - 1)
             st.rerun()
     
@@ -102,12 +102,12 @@ def render_questions_with_pagination(assessment: Dict, questions: List, pillar_f
         st.markdown(f"### Question {current_index + 1} of {total_questions}")
     
     with nav_col4:
-        if st.button("Next ▶️", disabled=(current_index >= total_questions - 1), use_container_width=True):
+        if st.button("Next ▶️", disabled=(current_index >= total_questions - 1), width="stretch"):
             st.session_state.current_question_index = min(total_questions - 1, current_index + 1)
             st.rerun()
     
     with nav_col5:
-        if st.button("Last ⏭️", disabled=(current_index >= total_questions - 1), use_container_width=True):
+        if st.button("Last ⏭️", disabled=(current_index >= total_questions - 1), width="stretch"):
             st.session_state.current_question_index = total_questions - 1
             st.rerun()
     
@@ -197,7 +197,7 @@ def render_questions_with_pagination(assessment: Dict, questions: List, pillar_f
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        if st.button("💾 Save Response", key=f"save_{current_question.id}", use_container_width=True, type="primary"):
+        if st.button("💾 Save Response", key=f"save_{current_question.id}", width="stretch", type="primary"):
             # Prepare response data
             response_data = {
                 'choice_index': selected_choice,
@@ -274,7 +274,7 @@ def render_questions_with_pagination(assessment: Dict, questions: List, pillar_f
             st.rerun()
     
     with col2:
-        if st.button("⏭️ Skip", key=f"skip_{current_question.id}", use_container_width=True):
+        if st.button("⏭️ Skip", key=f"skip_{current_question.id}", width="stretch"):
             if current_index < total_questions - 1:
                 st.session_state.current_question_index = current_index + 1
                 st.rerun()
@@ -312,7 +312,7 @@ def render_questions_with_pagination(assessment: Dict, questions: List, pillar_f
                 if st.button(
                     button_label,
                     key=f"nav_q_{q.id}",
-                    use_container_width=True,
+                    width="stretch",
                     type=button_type,
                     help=f"{q.text[:50]}..."
                 ):
