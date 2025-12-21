@@ -2,9 +2,12 @@
 AI-Based AWS Well-Architected Framework Advisor
 AWS-focused architecture design and assessment platform
 
-Version: 5.0.1 - Performance Optimized
+Version: 5.0.2 - Bug Fixes for Streamlit Cloud
 
 RECENT UPDATES:
+- Fixed NameError: ClientError not defined
+- Fixed KeyError in auth module loading
+- Fixed cache hashing for boto3 sessions
 - Performance optimizations with lazy loading and caching
 - Added Unified WAF Assessment (combines Scanner + Assessment workflow)
 - Integrated AI-Enhanced WAF Scanner (replaces basic scanner)
@@ -22,6 +25,18 @@ RECENT UPDATES:
 import streamlit as st
 import sys
 from datetime import datetime
+
+# Import exceptions that are used throughout the app
+try:
+    from botocore.exceptions import ClientError, NoCredentialsError, BotoCoreError
+except ImportError:
+    # Define fallback exception classes if botocore not installed
+    class ClientError(Exception):
+        pass
+    class NoCredentialsError(Exception):
+        pass
+    class BotoCoreError(Exception):
+        pass
 
 # ============================================================================
 # PERFORMANCE OPTIMIZATIONS - Lazy loading and caching
@@ -161,21 +176,26 @@ init_performance_cache()
 # ==================================================================================
 SSO_AVAILABLE = False
 _auth_modules_loaded = False
+render_login = None
+RoleManager = None
+get_database_manager = None
 
 def _load_auth_modules():
     """Lazily load authentication modules"""
-    global SSO_AVAILABLE, _auth_modules_loaded
+    global SSO_AVAILABLE, _auth_modules_loaded, render_login, RoleManager, get_database_manager
     if _auth_modules_loaded:
         return SSO_AVAILABLE
     
     try:
-        global render_login, RoleManager, get_database_manager
         from auth_azure_sso import render_login, RoleManager
         from auth_database_firebase import get_database_manager
         SSO_AVAILABLE = True
-    except ImportError as e:
+    except (ImportError, KeyError, ModuleNotFoundError) as e:
         SSO_AVAILABLE = False
         logger.debug(f"Authentication modules not found: {e}")
+    except Exception as e:
+        SSO_AVAILABLE = False
+        logger.debug(f"Error loading authentication modules: {e}")
     
     _auth_modules_loaded = True
     return SSO_AVAILABLE
@@ -626,12 +646,12 @@ def render_sidebar():
                             identity = sts.get_caller_identity()
                             account_id = identity['Account']
                             st.info(f"**Account:** {account_id}")
-                        except ClientError:
+                        except (ClientError, Exception):
                             pass
                     else:
                         st.warning("⚠️ Not Connected")
                         st.info("👉 Go to AWS Connector tab")
-                except ClientError:
+                except (ClientError, Exception):
                     st.warning("⚠️ Not Connected")
             else:
                 st.markdown("#### Multi-Account")

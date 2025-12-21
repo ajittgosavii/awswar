@@ -129,8 +129,7 @@ def render_single_account_scanner_enhanced():
     with col1:
         scan_region = st.selectbox(
             "Region to Scan",
-            _get_cached_regions(), 
-             "eu-west-1", "eu-central-1", "ap-southeast-1", "ap-northeast-1"],
+            _get_cached_regions(),
             help="AWS region to scan"
         )
     
@@ -1129,7 +1128,6 @@ def get_services_by_scan_depth(depth):
         return standard_services
 
 
-@st.cache_data(ttl=300, show_spinner=False)  # 5 min cache for Live mode
 def scan_rds_service(session, region, result, status_text, account_name):
     """Scan RDS databases"""
     try:
