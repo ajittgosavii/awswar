@@ -327,7 +327,7 @@ class EKSMigrationAssessment:
         )
         
         # Assessment button
-        if st.button("🔍 Assess Migration Readiness", type="primary", width="stretch"):
+        if st.button("🔍 Assess Migration Readiness", type="primary", use_container_width=True):
             st.markdown("---")
             st.markdown("### 📊 Migration Assessment Results")
             
@@ -474,7 +474,7 @@ class EKSClusterOptimization:
             min_value=0, max_value=1000000, value=5000
         )
         
-        if st.button("🔍 Analyze & Recommend Optimizations", type="primary", width="stretch"):
+        if st.button("🔍 Analyze & Recommend Optimizations", type="primary", use_container_width=True):
             st.markdown("---")
             st.markdown("### 📈 Optimization Recommendations")
             
@@ -822,7 +822,7 @@ class EKSModernizationModuleRevamped:
             with cols[i]:
                 if st.button(f"{uc['icon']}\n{uc['title'].split(' ', 1)[1]}", 
                             key=f"uc_{key}",
-                            width="stretch",
+                            use_container_width=True,
                             type="primary" if selected_use_case == key else "secondary"):
                     st.session_state.eks_use_case = key
                     st.rerun()
@@ -1012,7 +1012,7 @@ class EKSModernizationModuleRevamped:
         for rec in recommendations:
             st.info(rec)
         
-        if st.button("✅ Save Configuration & Generate Architecture", type="primary", width="stretch"):
+        if st.button("✅ Save Configuration & Generate Architecture", type="primary", use_container_width=True):
             st.session_state.eks_config_saved = True
             st.success("Configuration saved! Go to Architecture tab to see your diagram.")
     
@@ -1158,7 +1158,7 @@ class EKSModernizationModuleRevamped:
         
         # Run security assessment button (now connected!)
         st.markdown("---")
-        if st.button("🔍 Run Security Assessment", type="primary", width="stretch"):
+        if st.button("🔍 Run Security Assessment", type="primary", use_container_width=True):
             st.session_state.eks_use_case = 'security'
             st.rerun()
     

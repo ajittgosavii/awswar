@@ -131,7 +131,7 @@ class NetworkManagementUI:
         vpc_df = pd.DataFrame(vpcs)
         st.dataframe(
             vpc_df[['vpc_id', 'cidr_block', 'state', 'is_default', 'dns_support', 'dns_hostnames']],
-            width="stretch"
+            use_container_width=True
         )
         
         # VPC Details
@@ -162,7 +162,7 @@ class NetworkManagementUI:
                         # Display tags as a nice table instead of JSON
                         tags_data = [{"Key": k, "Value": v} for k, v in vpc_details['tags'].items()]
                         tags_df = pd.DataFrame(tags_data)
-                        st.dataframe(tags_df, hide_index=True, width="stretch")
+                        st.dataframe(tags_df, hide_index=True, use_container_width=True)
     
     @staticmethod
     def _render_create_vpc(vpc_mgr: VPCManager):
@@ -218,7 +218,7 @@ class NetworkManagementUI:
         subnet_df = pd.DataFrame(subnets)
         st.dataframe(
             subnet_df[['subnet_id', 'vpc_id', 'cidr_block', 'availability_zone', 'available_ips', 'state', 'public']],
-            width="stretch"
+            use_container_width=True
         )
         
         # Create subnet form
@@ -250,7 +250,7 @@ class NetworkManagementUI:
         
         if igws:
             igw_df = pd.DataFrame(igws)
-            st.dataframe(igw_df, width="stretch")
+            st.dataframe(igw_df, use_container_width=True)
         else:
             st.info("No Internet Gateways found")
         
@@ -281,7 +281,7 @@ class NetworkManagementUI:
         if nats:
             nat_df = pd.DataFrame(nats)
             st.dataframe(nat_df[['nat_id', 'vpc_id', 'subnet_id', 'state', 'public_ip']], 
-                        width="stretch")
+                        use_container_width=True)
         else:
             st.info("No NAT Gateways found")
         
@@ -339,7 +339,7 @@ class NetworkManagementUI:
                 if rt.get('routes'):
                     st.write("**Routes:**")
                     routes_df = pd.DataFrame(rt['routes'])
-                    st.dataframe(routes_df, width="stretch")
+                    st.dataframe(routes_df, use_container_width=True)
     
     @staticmethod
     def _render_security_groups(vpc_mgr: VPCManager):

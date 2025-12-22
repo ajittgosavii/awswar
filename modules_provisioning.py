@@ -536,7 +536,7 @@ class ProvisioningModule:
                             resources = cfn_mgr.list_stack_resources(stack['stack_name'])
                             if resources:
                                 res_df = pd.DataFrame(resources)
-                                st.dataframe(res_df, width="stretch")
+                                st.dataframe(res_df, use_container_width=True)
                     
                     with col3:
                         if st.button("🔍 Drift", key=f"drift_{stack['stack_name']}"):
@@ -639,7 +639,7 @@ class ProvisioningModule:
                             parameters = json.loads(params_input)
                         if tags_input:
                             tags = json.loads(tags_input)
-                    except json.JSONDecodeError:
+                    except:
                         st.error("Invalid JSON format for parameters or tags")
                         return
                     
@@ -690,7 +690,7 @@ class ProvisioningModule:
                     if events:
                         st.markdown("**Recent Events:**")
                         events_df = pd.DataFrame(events)
-                        st.dataframe(events_df, width="stretch")
+                        st.dataframe(events_df, use_container_width=True)
         else:
             st.success("✅ No active deployments")
     

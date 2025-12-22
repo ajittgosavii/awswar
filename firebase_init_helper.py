@@ -82,7 +82,7 @@ def get_firestore_client():
         from firebase_auth_module import firebase_manager
         if firebase_manager and firebase_manager.db:
             return firebase_manager.db
-    except Exception:
+    except:
         pass
     
     # Method 2: Try to get from firebase_admin
@@ -92,7 +92,7 @@ def get_firestore_client():
         
         if firebase_admin._apps:
             return firestore.client()
-    except ClientError:
+    except:
         pass
     
     return None

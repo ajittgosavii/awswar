@@ -456,7 +456,7 @@ def display_integration_status():
         1. Create `.streamlit/secrets.toml` file
         2. Add your keys:
         ```toml
-        ANTHROPIC_API_KEY = "<YOUR_ANTHROPIC_API_KEY>"
+        ANTHROPIC_API_KEY = "sk-ant-api03-..."
         
         [aws]
         access_key_id = "AKIA..."

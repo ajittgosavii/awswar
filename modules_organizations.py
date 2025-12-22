@@ -113,7 +113,7 @@ class OrganizationsManagementUI:
         if org.get('available_policy_types'):
             st.markdown("### Available Policy Types")
             policy_types = pd.DataFrame(org['available_policy_types'])
-            st.dataframe(policy_types, width="stretch")
+            st.dataframe(policy_types, use_container_width=True)
     
     @staticmethod
     def _render_accounts(org_mgr: AWSOrganizationsManager):
@@ -141,7 +141,7 @@ class OrganizationsManagementUI:
         accounts_df = pd.DataFrame(accounts)
         st.dataframe(
             accounts_df[['id', 'name', 'email', 'status', 'joined_method', 'joined_timestamp']],
-            width="stretch"
+            use_container_width=True
         )
         
         # Account details
@@ -178,7 +178,7 @@ class OrganizationsManagementUI:
             
             # OU table
             ou_df = pd.DataFrame(ous)
-            st.dataframe(ou_df, width="stretch")
+            st.dataframe(ou_df, use_container_width=True)
             
             # OU details
             st.markdown("### OU Details & Accounts")
@@ -193,7 +193,7 @@ class OrganizationsManagementUI:
                 if accounts:
                     st.write(f"**Accounts in this OU:** {len(accounts)}")
                     accounts_df = pd.DataFrame(accounts)
-                    st.dataframe(accounts_df, width="stretch")
+                    st.dataframe(accounts_df, use_container_width=True)
                 else:
                     st.info("No accounts in this OU")
         else:
@@ -240,7 +240,7 @@ class OrganizationsManagementUI:
         # Policies table
         policies_df = pd.DataFrame(policies)
         st.dataframe(policies_df[['name', 'type', 'aws_managed', 'description']], 
-                    width="stretch")
+                    use_container_width=True)
         
         # Policy details
         if policies:
@@ -404,7 +404,7 @@ class OrganizationsManagementUI:
             if tags:
                 st.markdown("### Current Tags")
                 tags_df = pd.DataFrame([{'Key': k, 'Value': v} for k, v in tags.items()])
-                st.dataframe(tags_df, width="stretch")
+                st.dataframe(tags_df, use_container_width=True)
             else:
                 st.info("No tags on this account")
             

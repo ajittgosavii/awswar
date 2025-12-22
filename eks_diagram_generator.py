@@ -376,7 +376,7 @@ class EKSArchitectureDiagram:
             data=svg_content,
             file_name=f"{spec.project_name.replace(' ', '_')}_eks_architecture.svg",
             mime="image/svg+xml",
-            width="stretch"
+            use_container_width=True
         )
         
         return svg_content

@@ -246,7 +246,7 @@ class AdminPanelModule:
                     users = db_manager.get_all_users(active_only=False)
                     role_users = [u for u in users if u.get('role') == role_name]
                     st.info(f"👥 **{len(role_users)}** users with this role")
-                except requests.RequestException:
+                except:
                     pass
     
     @staticmethod
@@ -290,7 +290,7 @@ class AdminPanelModule:
                 with col1:
                     st.bar_chart(df_roles.set_index('Role'))
                 with col2:
-                    st.dataframe(df_roles, hide_index=True, width="stretch")
+                    st.dataframe(df_roles, hide_index=True, use_container_width=True)
             else:
                 st.info("No user data available")
             
@@ -319,7 +319,7 @@ class AdminPanelModule:
                     }
                     for u in recent_users
                 ])
-                st.dataframe(df_recent, hide_index=True, width="stretch")
+                st.dataframe(df_recent, hide_index=True, use_container_width=True)
             else:
                 st.info("No recent activity")
                 
@@ -443,7 +443,7 @@ class AdminPanelModule:
                 # Estimate size (rough)
                 estimated_size = (len(users) * 0.5) + (len(logs) * 0.3)  # KB
                 st.metric("Estimated Size", f"~{estimated_size:.1f} KB")
-        except Exception:
+        except:
             st.info("Database information unavailable")
         
         st.markdown("---")

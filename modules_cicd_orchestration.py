@@ -218,7 +218,7 @@ def render_pipeline_dashboard(session, account, region):
             st.markdown("---")
             
             # Quick start button
-            if st.button("🚀 Create Your First Pipeline Now", type="primary", width="stretch"):
+            if st.button("🚀 Create Your First Pipeline Now", type="primary", use_container_width=True):
                 st.info("👆 Click the **'Create Pipeline'** tab above to get started!")
             
             return
@@ -304,7 +304,7 @@ def render_pipeline_dashboard(session, account, region):
         
         if pipeline_data:
             df = pd.DataFrame(pipeline_data)
-            st.dataframe(df, width="stretch", hide_index=True)
+            st.dataframe(df, use_container_width=True, hide_index=True)
             
             # Quick actions
             st.markdown("### ⚡ Quick Actions")
@@ -317,7 +317,7 @@ def render_pipeline_dashboard(session, account, region):
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("🚀 Trigger Now", width="stretch"):
+                if st.button("🚀 Trigger Now", use_container_width=True):
                     try:
                         cp_client.start_pipeline_execution(name=selected_pipeline)
                         st.success(f"✅ Pipeline '{selected_pipeline}' triggered!")
@@ -325,7 +325,7 @@ def render_pipeline_dashboard(session, account, region):
                         st.error(f"Failed: {str(e)}")
             
             with col2:
-                if st.button("📊 View Details", width="stretch"):
+                if st.button("📊 View Details", use_container_width=True):
                     try:
                         pipeline_details = cp_client.get_pipeline(name=selected_pipeline)
                         with st.expander("Pipeline Configuration", expanded=True):
@@ -334,7 +334,7 @@ def render_pipeline_dashboard(session, account, region):
                         st.error(f"Failed: {str(e)}")
             
             with col3:
-                if st.button("📜 View History", width="stretch"):
+                if st.button("📜 View History", use_container_width=True):
                     try:
                         executions = cp_client.list_pipeline_executions(pipelineName=selected_pipeline)
                         exec_list = executions.get('pipelineExecutionSummaries', [])
@@ -349,7 +349,7 @@ def render_pipeline_dashboard(session, account, region):
                                 })
                             
                             df_exec = pd.DataFrame(exec_data)
-                            st.dataframe(df_exec, width="stretch", hide_index=True)
+                            st.dataframe(df_exec, use_container_width=True, hide_index=True)
                         else:
                             st.info("No execution history")
                     except Exception as e:
@@ -357,7 +357,7 @@ def render_pipeline_dashboard(session, account, region):
         
         # Add another pipeline button
         st.markdown("---")
-        if st.button("➕ Create Another Pipeline", width="stretch"):
+        if st.button("➕ Create Another Pipeline", use_container_width=True):
             st.info("👆 Click the **'Create Pipeline'** tab above!")
         
     except Exception as e:
@@ -421,29 +421,29 @@ def render_quick_create(cp_client, cb_client, iam_client, s3_client, codecommit_
     
     with col1:
         st.markdown('<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 10px;"><h3 style="color: white; margin: 0;">🐍 Python App</h3><p style="color: #f0f0f0; margin: 5px 0 0 0;">Flask/Django + Elastic Beanstalk</p></div>', unsafe_allow_html=True)
-        if st.button("Select Python App", key="btn_python", width="stretch"):
+        if st.button("Select Python App", key="btn_python", use_container_width=True):
             st.session_state['quick_template'] = 'python-app'
         
         st.markdown('<div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 10px;"><h3 style="color: white; margin: 0;">⚛️ React App</h3><p style="color: #f0f0f0; margin: 5px 0 0 0;">SPA + S3 + CloudFront</p></div>', unsafe_allow_html=True)
-        if st.button("Select React App", key="btn_react", width="stretch"):
+        if st.button("Select React App", key="btn_react", use_container_width=True):
             st.session_state['quick_template'] = 'react-app'
     
     with col2:
         st.markdown('<div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 10px;"><h3 style="color: white; margin: 0;">🟢 Node.js API</h3><p style="color: #f0f0f0; margin: 5px 0 0 0;">Express + Elastic Beanstalk</p></div>', unsafe_allow_html=True)
-        if st.button("Select Node.js API", key="btn_nodejs", width="stretch"):
+        if st.button("Select Node.js API", key="btn_nodejs", use_container_width=True):
             st.session_state['quick_template'] = 'nodejs-api'
         
         st.markdown('<div style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 10px;"><h3 style="color: white; margin: 0;">☕ Java Spring</h3><p style="color: #f0f0f0; margin: 5px 0 0 0;">Spring Boot + Elastic Beanstalk</p></div>', unsafe_allow_html=True)
-        if st.button("Select Java Spring", key="btn_java", width="stretch"):
+        if st.button("Select Java Spring", key="btn_java", use_container_width=True):
             st.session_state['quick_template'] = 'java-spring'
     
     with col3:
         st.markdown('<div style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%); padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 10px;"><h3 style="color: white; margin: 0;">🐳 Docker App</h3><p style="color: #f0f0f0; margin: 5px 0 0 0;">Container + ECR + ECS</p></div>', unsafe_allow_html=True)
-        if st.button("Select Docker App", key="btn_docker", width="stretch"):
+        if st.button("Select Docker App", key="btn_docker", use_container_width=True):
             st.session_state['quick_template'] = 'docker-app'
         
         st.markdown('<div style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 10px;"><h3 style="color: #333; margin: 0;">🌐 Static Site</h3><p style="color: #666; margin: 5px 0 0 0;">HTML/CSS/JS + S3</p></div>', unsafe_allow_html=True)
-        if st.button("Select Static Site", key="btn_static", width="stretch"):
+        if st.button("Select Static Site", key="btn_static", use_container_width=True):
             st.session_state['quick_template'] = 'static-site'
     
     # Show creation form if template selected
@@ -525,7 +525,7 @@ def render_quick_create(cp_client, cb_client, iam_client, s3_client, codecommit_
                 """)
             
             with col2:
-                submitted = st.form_submit_button("🚀 Create Pipeline", type="primary", width="stretch")
+                submitted = st.form_submit_button("🚀 Create Pipeline", type="primary", use_container_width=True)
             
             if submitted:
                 if not pipeline_name:
@@ -871,12 +871,12 @@ def render_repository_manager(codecommit_client, region):
                             'Clone URL': info.get('cloneUrlHttp', 'N/A'),
                             'Created': info.get('creationDate', 'N/A')
                         })
-                    except requests.RequestException:
+                    except:
                         pass
                 
                 if repo_data:
                     df = pd.DataFrame(repo_data)
-                    st.dataframe(df, width="stretch", hide_index=True)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
             else:
                 st.info("No repositories yet. Create one to get started!")
         except Exception as e:
@@ -889,7 +889,7 @@ def render_repository_manager(codecommit_client, region):
             repo_name = st.text_input("Repository Name", placeholder="my-app-repo")
             repo_desc = st.text_area("Description (optional)", placeholder="My application repository")
             
-            if st.form_submit_button("✨ Create Repository", type="primary", width="stretch"):
+            if st.form_submit_button("✨ Create Repository", type="primary", use_container_width=True):
                 if repo_name:
                     try:
                         response = codecommit_client.create_repository(
@@ -926,7 +926,7 @@ def render_trigger_pipeline(session):
         
         selected = st.selectbox("Select Pipeline", options=pipeline_names)
         
-        if st.button("🚀 Trigger Execution", type="primary", width="stretch"):
+        if st.button("🚀 Trigger Execution", type="primary", use_container_width=True):
             try:
                 response = cp_client.start_pipeline_execution(name=selected)
                 exec_id = response['pipelineExecutionId']
@@ -966,12 +966,12 @@ def render_codebuild(session):
                         'Compute': proj['environment']['computeType'],
                         'Created': proj.get('created', 'N/A')
                     })
-            except requests.RequestException:
+            except:
                 pass
         
         if project_data:
             df = pd.DataFrame(project_data)
-            st.dataframe(df, width="stretch", hide_index=True)
+            st.dataframe(df, use_container_width=True, hide_index=True)
     
     except Exception as e:
         st.error(f"Error: {str(e)}")
@@ -1009,7 +1009,7 @@ def render_cloudformation(session):
             })
         
         df = pd.DataFrame(stack_data)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
     
     except Exception as e:
         st.error(f"Error: {str(e)}")
@@ -1049,7 +1049,7 @@ def render_analytics(session):
                         successful += 1
                     elif exec.get('status') == 'Failed':
                         failed += 1
-            except requests.RequestException:
+            except:
                 pass
         
         col1, col2, col3, col4 = st.columns(4)

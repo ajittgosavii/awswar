@@ -125,6 +125,22 @@ class ResourceInventory:
     # Cost metrics
     reserved_instances: int = 0
     savings_plans: int = 0
+    
+    # AI/ML Services (NEW)
+    sagemaker_notebooks: int = 0
+    sagemaker_endpoints: int = 0
+    sagemaker_models: int = 0
+    sagemaker_pipelines: int = 0
+    bedrock_models: int = 0
+    bedrock_agents: int = 0
+    bedrock_knowledge_bases: int = 0
+    bedrock_guardrails: int = 0
+    rekognition_projects: int = 0
+    comprehend_endpoints: int = 0
+    lex_bots: int = 0
+    kendra_indexes: int = 0
+    ai_ml_services_detected: List[str] = field(default_factory=list)
+    has_ai_ml_workloads: bool = False
 
 @dataclass
 class PillarScore:
@@ -155,6 +171,9 @@ class LandscapeAssessment:
     services_scanned: Dict[str, bool] = field(default_factory=dict)
     scan_errors: Dict[str, str] = field(default_factory=dict)
     scan_duration_seconds: float = 0.0
+    # AI/ML Assessment (NEW)
+    aiml_health_score: int = 0
+    aiml_findings: List[Finding] = field(default_factory=list)
 
 # ============================================================================
 # DEMO DATA GENERATOR
@@ -543,8 +562,122 @@ def generate_demo_assessment() -> LandscapeAssessment:
         # Backup
         backup_vaults=3, backup_plans=8,
         # Cost
-        reserved_instances=45, savings_plans=12
+        reserved_instances=45, savings_plans=12,
+        # AI/ML Services (NEW - Demo data)
+        sagemaker_notebooks=4,
+        sagemaker_endpoints=6,
+        sagemaker_models=12,
+        sagemaker_pipelines=3,
+        bedrock_models=5,
+        bedrock_agents=2,
+        bedrock_knowledge_bases=3,
+        bedrock_guardrails=1,
+        rekognition_projects=2,
+        comprehend_endpoints=1,
+        lex_bots=2,
+        kendra_indexes=1,
+        ai_ml_services_detected=['sagemaker', 'bedrock', 'rekognition', 'comprehend', 'lex', 'kendra'],
+        has_ai_ml_workloads=True
     )
+    
+    # Add AI/ML specific demo findings
+    aiml_findings = [
+        Finding(
+            id="AIML-001",
+            title="SageMaker Endpoints Without Model Monitor",
+            description="4 of 6 SageMaker endpoints do not have Model Monitor configured for drift detection.",
+            severity="HIGH",
+            pillar="Operational Excellence",
+            source_service="SageMaker",
+            affected_resources=["prod-recommendation-endpoint", "staging-nlp-endpoint", "prod-vision-endpoint", "prod-fraud-endpoint"],
+            recommendation="Enable SageMaker Model Monitor for all production endpoints to detect data drift and model quality issues",
+            remediation_steps=[
+                "Configure baseline statistics from training data",
+                "Enable data quality monitoring schedule",
+                "Enable model quality monitoring",
+                "Set up CloudWatch alarms for violations",
+                "Create runbook for drift remediation"
+            ],
+            effort="Medium",
+            compliance_frameworks=["MLOps Best Practices"]
+        ),
+        Finding(
+            id="AIML-002",
+            title="Bedrock Agents With Insufficient Guardrails",
+            description="2 Bedrock agents are configured but only 1 guardrail exists. Agents with tool access require content filtering.",
+            severity="HIGH",
+            pillar="Security",
+            source_service="Bedrock",
+            affected_resources=["customer-support-agent", "research-assistant-agent"],
+            recommendation="Configure Bedrock Guardrails for all agents with comprehensive content filtering",
+            remediation_steps=[
+                "Navigate to Amazon Bedrock console",
+                "Create additional guardrail with denied topics",
+                "Configure word filters for sensitive content",
+                "Associate guardrails with all agents",
+                "Test with adversarial prompts"
+            ],
+            effort="Medium",
+            compliance_frameworks=["Responsible AI", "Content Safety"]
+        ),
+        Finding(
+            id="AIML-003",
+            title="SageMaker Training Jobs Not Using Spot Instances",
+            description="Recent SageMaker training jobs are using on-demand instances, missing up to 90% cost savings.",
+            severity="MEDIUM",
+            pillar="Cost Optimization",
+            source_service="SageMaker",
+            affected_resources=["training-job-20241215-a", "training-job-20241218-b", "training-job-20241220-c"],
+            recommendation="Enable Managed Spot Training for fault-tolerant training jobs",
+            remediation_steps=[
+                "Add checkpointing to training scripts",
+                "Configure max wait time and max run time",
+                "Enable Managed Spot Training in training job config",
+                "Monitor Spot interruption metrics"
+            ],
+            effort="Low",
+            estimated_savings=450.0
+        ),
+        Finding(
+            id="AIML-004",
+            title="No Explainability for Production ML Models",
+            description="Production ML models do not have SageMaker Clarify configured for feature importance and bias detection.",
+            severity="MEDIUM",
+            pillar="Security",
+            source_service="SageMaker",
+            affected_resources=["loan-approval-model", "fraud-detection-model", "recommendation-model"],
+            recommendation="Configure SageMaker Clarify for model explainability and bias detection",
+            remediation_steps=[
+                "Create Clarify processing job for bias analysis",
+                "Configure SHAP baseline for feature importance",
+                "Set up monitoring for bias drift",
+                "Document model card with explainability info"
+            ],
+            effort="Medium",
+            compliance_frameworks=["Responsible AI", "Model Governance"]
+        ),
+        Finding(
+            id="AIML-005",
+            title="Rekognition Usage Requires Responsible AI Review",
+            description="2 Rekognition projects detected. Facial analysis requires careful consideration of bias and consent.",
+            severity="INFO",
+            pillar="Security",
+            source_service="Rekognition",
+            affected_resources=["face-verification-project", "content-moderation-project"],
+            recommendation="Ensure Rekognition usage complies with responsible AI guidelines",
+            remediation_steps=[
+                "Review use case for facial analysis appropriateness",
+                "Document consent mechanisms for data subjects",
+                "Test for demographic bias in detection accuracy",
+                "Implement human review for high-stakes decisions"
+            ],
+            effort="Medium",
+            compliance_frameworks=["Responsible AI", "GDPR"]
+        )
+    ]
+    
+    # Add AI/ML findings to main findings list
+    findings.extend(aiml_findings)
     
     # Calculate pillar scores
     pillar_findings = {}
@@ -610,10 +743,15 @@ def generate_demo_assessment() -> LandscapeAssessment:
             "Auto Scaling": True, "Route53": True, "CloudFront": True,
             "ElastiCache": True, "Backup": True, "Systems Manager": True,
             "Secrets Manager": True, "WAF": True, "EFS": True, "SNS": True,
-            "EventBridge": True, "EBS": True
+            "EventBridge": True, "EBS": True,
+            # AI/ML Services (NEW)
+            "SageMaker": True, "Bedrock": True, "AI Services": True
         },
         scan_errors={},
-        scan_duration_seconds=45.2
+        scan_duration_seconds=45.2,
+        # AI/ML Assessment (NEW)
+        aiml_health_score=72,  # Demo score
+        aiml_findings=aiml_findings
     )
 
 # ============================================================================
@@ -634,7 +772,7 @@ class AWSLandscapeScanner:
         try:
             sts = session.client('sts')
             self.account_id = sts.get_caller_identity()['Account']
-        except ClientError:
+        except:
             pass
     
     def _scan_iam(self):
@@ -674,7 +812,7 @@ class AWSLandscapeScanner:
                             effort="Low",
                             compliance_frameworks=["CIS AWS", "NIST", "ISO27001", "PCI-DSS"]
                         ))
-                    except ClientError:
+                    except:
                         pass
                 
                 # Check for old access keys
@@ -695,7 +833,7 @@ class AWSLandscapeScanner:
                                 effort="Low",
                                 compliance_frameworks=["CIS AWS", "PCI-DSS"]
                             ))
-            except Exception:
+            except:
                 pass
         
         self.inventory.iam_roles = len(iam.list_roles()['Roles'])
@@ -772,7 +910,7 @@ class AWSLandscapeScanner:
                     versioning = s3.get_bucket_versioning(Bucket=bucket_name)
                     if versioning.get('Status') == 'Enabled':
                         self.inventory.s3_versioning_enabled += 1
-                except ClientError:
+                except:
                     pass
                 
             except Exception as e:
@@ -920,7 +1058,7 @@ class AWSLandscapeScanner:
                         effort="Low",
                         compliance_frameworks=["CIS AWS", "PCI-DSS"]
                     ))
-        except Exception:
+        except:
             pass
     
     def _scan_vpc(self, region: str):
@@ -966,7 +1104,7 @@ class AWSLandscapeScanner:
                         recommendation="Enable log file validation",
                         effort="Low"
                     ))
-        except Exception:
+        except:
             pass
     # =============================================================================
 # PRODUCTION SCANNER ADDITIONS
@@ -1019,11 +1157,11 @@ class AWSLandscapeScanner:
                                 effort="Low",
                                 compliance_frameworks=["PCI-DSS", "HIPAA", "ISO27001"]
                             ))
-                    except requests.RequestException:
+                    except:
                         pass
-                except requests.RequestException:
+                except:
                     pass
-        except requests.RequestException:
+        except:
             pass
     
     def _scan_secrets_manager(self):
@@ -1047,7 +1185,7 @@ class AWSLandscapeScanner:
                         effort="Medium",
                         compliance_frameworks=["SOC2", "ISO27001"]
                     ))
-        except ClientError:
+        except:
             pass
     
     def _scan_guardduty(self, region: str):
@@ -1085,7 +1223,7 @@ class AWSLandscapeScanner:
                                         effort="High",
                                         compliance_frameworks=["CIS AWS", "SOC2"]
                                     ))
-                    except ClientError:
+                    except:
                         pass
             else:
                 self.findings.append(Finding(
@@ -1100,7 +1238,7 @@ class AWSLandscapeScanner:
                     effort="Low",
                     compliance_frameworks=["CIS AWS", "PCI-DSS"]
                 ))
-        except Exception:
+        except:
             pass
     
     def _scan_securityhub(self, region: str):
@@ -1111,7 +1249,7 @@ class AWSLandscapeScanner:
             try:
                 hub = sh.describe_hub()
                 self.inventory.securityhub_enabled = True
-            except Exception:
+            except:
                 self.inventory.securityhub_enabled = False
                 self.findings.append(Finding(
                     id="sh-disabled",
@@ -1125,7 +1263,7 @@ class AWSLandscapeScanner:
                     effort="Low",
                     compliance_frameworks=["CIS AWS", "PCI-DSS", "NIST"]
                 ))
-        except ClientError:
+        except:
             pass
     
     def _scan_config(self, region: str):
@@ -1154,7 +1292,7 @@ class AWSLandscapeScanner:
                                     recommendation="Review and remediate non-compliant resources",
                                     effort="Medium"
                                 ))
-                    except requests.RequestException:
+                    except:
                         pass
                 else:
                     self.findings.append(Finding(
@@ -1169,9 +1307,9 @@ class AWSLandscapeScanner:
                         effort="Low",
                         compliance_frameworks=["CIS AWS", "PCI-DSS"]
                     ))
-            except Exception:
+            except:
                 pass
-        except Exception:
+        except:
             pass
     
     def _scan_waf(self, region: str):
@@ -1195,7 +1333,7 @@ class AWSLandscapeScanner:
                     effort="Medium",
                     compliance_frameworks=["PCI-DSS", "OWASP"]
                 ))
-        except ClientError:
+        except:
             pass
     
     def _scan_lambda(self, region: str):
@@ -1241,7 +1379,7 @@ class AWSLandscapeScanner:
                                 compliance_frameworks=["SOC2", "ISO27001"]
                             ))
                             break
-        except Exception:
+        except:
             pass
     
     def _scan_dynamodb(self, region: str):
@@ -1277,11 +1415,11 @@ class AWSLandscapeScanner:
                                 recommendation="Enable point-in-time recovery",
                                 effort="Low"
                             ))
-                    except requests.RequestException:
+                    except:
                         pass
-                except requests.RequestException:
+                except:
                     pass
-        except requests.RequestException:
+        except:
             pass
     
     def _scan_elasticache(self, region: str):
@@ -1306,7 +1444,7 @@ class AWSLandscapeScanner:
                         effort="High",
                         compliance_frameworks=["HIPAA", "PCI-DSS"]
                     ))
-        except ClientError:
+        except:
             pass
     
     def _scan_ecs(self, region: str):
@@ -1320,7 +1458,7 @@ class AWSLandscapeScanner:
             for cluster_arn in clusters:
                 services = ecs.list_services(cluster=cluster_arn)['serviceArns']
                 self.inventory.ecs_services += len(services)
-        except ClientError:
+        except:
             pass
     
     def _scan_eks(self, region: str):
@@ -1363,9 +1501,9 @@ class AWSLandscapeScanner:
                             recommendation="Enable control plane logging",
                             effort="Low"
                         ))
-                except Exception:
+                except:
                     pass
-        except Exception:
+        except:
             pass
     
     def _scan_autoscaling(self, region: str):
@@ -1389,7 +1527,7 @@ class AWSLandscapeScanner:
                         recommendation="Enable ELB health checks",
                         effort="Low"
                     ))
-        except ClientError:
+        except:
             pass
     
     def _scan_ebs_volumes(self, region: str):
@@ -1482,7 +1620,7 @@ class AWSLandscapeScanner:
                     effort="Low",
                     estimated_savings=len(old_snapshots) * 5
                 ))
-        except Exception:
+        except:
             pass
     
     def _scan_elastic_ips(self, region: str):
@@ -1510,7 +1648,7 @@ class AWSLandscapeScanner:
                         effort="Low",
                         estimated_savings=3.65
                     ))
-        except ClientError:
+        except:
             pass
     
     def _scan_elb(self, region: str):
@@ -1542,7 +1680,7 @@ class AWSLandscapeScanner:
             elbv2 = self.session.client('elbv2', region_name=region)
             modern_lbs = elbv2.describe_load_balancers()['LoadBalancers']
             self.inventory.load_balancers = len(classic_lbs) + len(modern_lbs)
-        except ClientError:
+        except:
             pass
     
     def _scan_cloudwatch(self, region: str):
@@ -1573,7 +1711,7 @@ class AWSLandscapeScanner:
                         effort="Low",
                         estimated_savings=5
                     ))
-        except ClientError:
+        except:
             pass
     
     def _scan_systems_manager(self, region: str):
@@ -1589,9 +1727,9 @@ class AWSLandscapeScanner:
                         self.inventory.systems_manager_compliant += 1
                     else:
                         self.inventory.systems_manager_noncompliant += 1
-            except requests.RequestException:
+            except:
                 pass
-        except requests.RequestException:
+        except:
             pass
     
     def _scan_eventbridge(self, region: str):
@@ -1601,7 +1739,7 @@ class AWSLandscapeScanner:
             
             rules = eb.list_rules()['Rules']
             self.inventory.eventbridge_rules = len(rules)
-        except ClientError:
+        except:
             pass
     
     def _scan_sns(self, region: str):
@@ -1611,7 +1749,7 @@ class AWSLandscapeScanner:
             
             topics = sns.list_topics()['Topics']
             self.inventory.sns_topics = len(topics)
-        except ClientError:
+        except:
             pass
     
     def _scan_backup(self, region: str):
@@ -1638,7 +1776,7 @@ class AWSLandscapeScanner:
                     effort="Medium",
                     compliance_frameworks=["SOC2", "ISO27001"]
                 ))
-        except ClientError:
+        except:
             pass
     
     def _scan_efs(self, region: str):
@@ -1663,7 +1801,7 @@ class AWSLandscapeScanner:
                         effort="High",
                         compliance_frameworks=["HIPAA", "PCI-DSS"]
                     ))
-        except ClientError:
+        except:
             pass
     
     def _scan_cloudfront(self):
@@ -1689,7 +1827,7 @@ class AWSLandscapeScanner:
                             recommendation="Enable access logging to S3",
                             effort="Low"
                         ))
-        except ClientError:
+        except:
             pass
     
     def _scan_route53(self):
@@ -1699,7 +1837,227 @@ class AWSLandscapeScanner:
             
             zones = r53.list_hosted_zones()['HostedZones']
             self.inventory.route53_zones = len(zones)
-        except ClientError:
+        except:
+            pass
+
+    # =========================================================================
+    # AI/ML SERVICE SCANNING (NEW)
+    # =========================================================================
+    
+    def _scan_sagemaker(self, region: str):
+        """Scan Amazon SageMaker resources"""
+        try:
+            sm = self.session.client('sagemaker', region_name=region)
+            
+            # Notebooks
+            try:
+                notebooks = sm.list_notebook_instances()
+                self.inventory.sagemaker_notebooks = len(notebooks.get('NotebookInstances', []))
+                
+                # Check notebook security
+                for nb in notebooks.get('NotebookInstances', [])[:10]:
+                    nb_name = nb.get('NotebookInstanceName', '')
+                    
+                    # Check if in VPC
+                    if not nb.get('SubnetId'):
+                        self.findings.append(Finding(
+                            id=f"sm-novpc-{nb_name[:20]}",
+                            title=f"SageMaker Notebook Not in VPC: {nb_name}",
+                            description="Notebook instance has direct internet access instead of VPC isolation",
+                            severity='MEDIUM',
+                            pillar='Security',
+                            source_service="SageMaker",
+                            affected_resources=[nb_name],
+                            recommendation="Deploy notebook instances in VPC with private subnets",
+                            effort="Medium",
+                            compliance_frameworks=["CIS AWS", "SOC 2"]
+                        ))
+                    
+                    # Check root access
+                    if nb.get('RootAccess') == 'Enabled':
+                        self.findings.append(Finding(
+                            id=f"sm-root-{nb_name[:20]}",
+                            title=f"SageMaker Notebook Root Access Enabled: {nb_name}",
+                            description="Root access is enabled on notebook instance",
+                            severity='LOW',
+                            pillar='Security',
+                            source_service="SageMaker",
+                            affected_resources=[nb_name],
+                            recommendation="Disable root access unless required",
+                            effort="Low"
+                        ))
+            except:
+                pass
+            
+            # Endpoints
+            try:
+                endpoints = sm.list_endpoints()
+                self.inventory.sagemaker_endpoints = len(endpoints.get('Endpoints', []))
+                
+                if self.inventory.sagemaker_endpoints > 0:
+                    self.inventory.ai_ml_services_detected.append('sagemaker')
+                    self.inventory.has_ai_ml_workloads = True
+                    
+                    # Add finding for model monitoring check
+                    self.findings.append(Finding(
+                        id="sm-monitor-check",
+                        title="Verify SageMaker Model Monitoring Configuration",
+                        description=f"Found {self.inventory.sagemaker_endpoints} SageMaker endpoints. Ensure Model Monitor is configured for drift detection.",
+                        severity='INFO',
+                        pillar='Operational Excellence',
+                        source_service="SageMaker",
+                        affected_resources=[f"{self.inventory.sagemaker_endpoints} endpoints"],
+                        recommendation="Enable SageMaker Model Monitor for production endpoints",
+                        effort="Medium"
+                    ))
+            except:
+                pass
+            
+            # Models
+            try:
+                models = sm.list_models()
+                self.inventory.sagemaker_models = len(models.get('Models', []))
+            except:
+                pass
+            
+            # Pipelines
+            try:
+                pipelines = sm.list_pipelines()
+                self.inventory.sagemaker_pipelines = len(pipelines.get('PipelineSummaries', []))
+            except:
+                pass
+                
+        except Exception as e:
+            self.scan_errors['SageMaker'] = str(e)
+    
+    def _scan_bedrock(self, region: str):
+        """Scan Amazon Bedrock resources"""
+        try:
+            # Bedrock management
+            try:
+                bedrock = self.session.client('bedrock', region_name=region)
+                
+                # List custom models
+                try:
+                    custom_models = bedrock.list_custom_models()
+                    self.inventory.bedrock_models = len(custom_models.get('modelSummaries', []))
+                except:
+                    pass
+                
+                # List guardrails
+                try:
+                    guardrails = bedrock.list_guardrails()
+                    self.inventory.bedrock_guardrails = len(guardrails.get('guardrails', []))
+                except:
+                    pass
+            except:
+                pass
+            
+            # Bedrock Agent
+            try:
+                bedrock_agent = self.session.client('bedrock-agent', region_name=region)
+                
+                # List agents
+                try:
+                    agents = bedrock_agent.list_agents()
+                    self.inventory.bedrock_agents = len(agents.get('agentSummaries', []))
+                    
+                    if self.inventory.bedrock_agents > 0:
+                        self.inventory.ai_ml_services_detected.append('bedrock')
+                        self.inventory.has_ai_ml_workloads = True
+                        
+                        # Check if guardrails configured
+                        if self.inventory.bedrock_guardrails == 0:
+                            self.findings.append(Finding(
+                                id="bedrock-no-guardrails",
+                                title="Bedrock Agents Without Guardrails",
+                                description=f"Found {self.inventory.bedrock_agents} Bedrock agents but no guardrails configured",
+                                severity='HIGH',
+                                pillar='Security',
+                                source_service="Bedrock",
+                                affected_resources=[f"{self.inventory.bedrock_agents} agents"],
+                                recommendation="Configure Bedrock Guardrails for content filtering and safety",
+                                remediation_steps=[
+                                    "Navigate to Amazon Bedrock console",
+                                    "Create guardrails with appropriate content filters",
+                                    "Associate guardrails with all agents"
+                                ],
+                                effort="Medium",
+                                compliance_frameworks=["Responsible AI"]
+                            ))
+                except:
+                    pass
+                
+                # List knowledge bases
+                try:
+                    kbs = bedrock_agent.list_knowledge_bases()
+                    self.inventory.bedrock_knowledge_bases = len(kbs.get('knowledgeBaseSummaries', []))
+                except:
+                    pass
+            except:
+                pass
+                
+        except Exception as e:
+            self.scan_errors['Bedrock'] = str(e)
+    
+    def _scan_ai_services(self, region: str):
+        """Scan other AWS AI services (Rekognition, Comprehend, Lex, Kendra)"""
+        
+        # Rekognition
+        try:
+            rek = self.session.client('rekognition', region_name=region)
+            projects = rek.describe_projects()
+            self.inventory.rekognition_projects = len(projects.get('ProjectDescriptions', []))
+            if self.inventory.rekognition_projects > 0:
+                self.inventory.ai_ml_services_detected.append('rekognition')
+                self.inventory.has_ai_ml_workloads = True
+                
+                # Responsible AI consideration
+                self.findings.append(Finding(
+                    id="rek-rai-review",
+                    title="Rekognition Usage - Review Responsible AI Practices",
+                    description=f"Found {self.inventory.rekognition_projects} Rekognition projects. Facial analysis requires careful responsible AI consideration.",
+                    severity='INFO',
+                    pillar='Security',
+                    source_service="Rekognition",
+                    affected_resources=[f"{self.inventory.rekognition_projects} projects"],
+                    recommendation="Ensure usage complies with responsible AI guidelines and consent requirements",
+                    effort="Medium"
+                ))
+        except:
+            pass
+        
+        # Comprehend
+        try:
+            comp = self.session.client('comprehend', region_name=region)
+            endpoints = comp.list_endpoints()
+            self.inventory.comprehend_endpoints = len(endpoints.get('EndpointPropertiesList', []))
+            if self.inventory.comprehend_endpoints > 0:
+                self.inventory.ai_ml_services_detected.append('comprehend')
+                self.inventory.has_ai_ml_workloads = True
+        except:
+            pass
+        
+        # Lex
+        try:
+            lex = self.session.client('lexv2-models', region_name=region)
+            bots = lex.list_bots()
+            self.inventory.lex_bots = len(bots.get('botSummaries', []))
+            if self.inventory.lex_bots > 0:
+                self.inventory.ai_ml_services_detected.append('lex')
+                self.inventory.has_ai_ml_workloads = True
+        except:
+            pass
+        
+        # Kendra
+        try:
+            kendra = self.session.client('kendra', region_name=region)
+            indexes = kendra.list_indices()
+            self.inventory.kendra_indexes = len(indexes.get('IndexConfigurationSummaryItems', []))
+            if self.inventory.kendra_indexes > 0:
+                self.inventory.ai_ml_services_detected.append('kendra')
+                self.inventory.has_ai_ml_workloads = True
+        except:
             pass
 
 # =============================================================================
@@ -1710,7 +2068,7 @@ class AWSLandscapeScanner:
         """Run comprehensive parallel scan - PRODUCTION VERSION"""
         start_time = datetime.now()
         
-        # COMPREHENSIVE SCAN TASKS - 28 services
+        # COMPREHENSIVE SCAN TASKS - 31 services (including AI/ML)
         scan_tasks = [
             # Security scans (8)
             ("IAM", self._scan_iam),
@@ -1753,6 +2111,11 @@ class AWSLandscapeScanner:
             
             # Backup & DR (1)
             ("AWS Backup", lambda: self._scan_backup(regions[0])),
+            
+            # AI/ML Services (3) - NEW
+            ("SageMaker", lambda: self._scan_sagemaker(regions[0])),
+            ("Bedrock", lambda: self._scan_bedrock(regions[0])),
+            ("AI Services", lambda: self._scan_ai_services(regions[0])),
         ]
         
         # Execute scans
@@ -1776,6 +2139,11 @@ class AWSLandscapeScanner:
         pillar_scores = self._calculate_pillar_scores()
         overall_score = self._calculate_overall_score(pillar_scores)
         
+        # Calculate AI/ML health score (NEW)
+        aiml_health = self._calculate_aiml_health_score()
+        aiml_findings = [f for f in self.findings if f.source_service in 
+                        ['SageMaker', 'Bedrock', 'Rekognition', 'Comprehend', 'Lex', 'Kendra', 'Personalize']]
+        
         return LandscapeAssessment(
             assessment_id=f"scan-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
             timestamp=datetime.now(),
@@ -1788,7 +2156,9 @@ class AWSLandscapeScanner:
             findings=self.findings,
             services_scanned=self.scan_status,
             scan_errors=self.scan_errors,
-            scan_duration_seconds=(datetime.now() - start_time).total_seconds()
+            scan_duration_seconds=(datetime.now() - start_time).total_seconds(),
+            aiml_health_score=aiml_health,
+            aiml_findings=aiml_findings
         )
 
 
@@ -1836,6 +2206,37 @@ class AWSLandscapeScanner:
         if score >= 60: return "Medium"
         if score >= 40: return "High"
         return "Critical"
+    
+    def _calculate_aiml_health_score(self) -> int:
+        """Calculate AI/ML health score based on detected services and findings"""
+        if not self.inventory.has_ai_ml_workloads:
+            return 0  # No AI/ML workloads detected
+        
+        # Start with base score of 100
+        score = 100
+        
+        # Count AI/ML specific findings
+        aiml_services = ['SageMaker', 'Bedrock', 'Rekognition', 'Comprehend', 'Lex', 'Kendra', 'Personalize']
+        aiml_findings = [f for f in self.findings if f.source_service in aiml_services]
+        
+        for finding in aiml_findings:
+            if finding.severity == 'CRITICAL':
+                score -= 20
+            elif finding.severity == 'HIGH':
+                score -= 10
+            elif finding.severity == 'MEDIUM':
+                score -= 5
+            elif finding.severity == 'LOW':
+                score -= 2
+        
+        # Bonus points for good practices
+        if self.inventory.bedrock_guardrails > 0 and self.inventory.bedrock_agents > 0:
+            score += 5  # Has guardrails for agents
+        
+        if self.inventory.sagemaker_pipelines > 0:
+            score += 5  # Has MLOps pipelines
+        
+        return max(0, min(100, score))
 
 # ============================================================================
 # RENDER FUNCTION
@@ -1878,7 +2279,7 @@ def render_landscape_scanner_tab():
     # Run scan button
     btn_text = "🎭 Run Demo Assessment" if is_demo else "🚀 Run Live Assessment"
     
-    if st.button(btn_text, type="primary", width="stretch"):
+    if st.button(btn_text, type="primary", use_container_width=True):
         progress = st.progress(0)
         status = st.empty()
         
@@ -1929,7 +2330,14 @@ def render_assessment_summary(assessment: LandscapeAssessment):
     st.markdown("---")
     st.markdown("### 📊 Assessment Summary")
     
-    col1, col2, col3, col4, col5 = st.columns(5)
+    # Check if AI/ML workloads detected
+    has_aiml = assessment.inventory.has_ai_ml_workloads if hasattr(assessment.inventory, 'has_ai_ml_workloads') else False
+    
+    if has_aiml:
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
+    else:
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col6 = None
     
     score_color = "#388E3C" if assessment.overall_score >= 80 else "#FBC02D" if assessment.overall_score >= 60 else "#D32F2F"
     
@@ -1955,6 +2363,41 @@ def render_assessment_summary(assessment: LandscapeAssessment):
     
     with col5:
         st.metric("Potential Savings", f"${assessment.savings_opportunities:,.0f}/mo")
+    
+    # AI/ML Health Indicator (NEW)
+    if has_aiml and col6:
+        with col6:
+            aiml_score = assessment.aiml_health_score if hasattr(assessment, 'aiml_health_score') else 0
+            aiml_color = "#388E3C" if aiml_score >= 80 else "#FBC02D" if aiml_score >= 60 else "#D32F2F"
+            services_count = len(assessment.inventory.ai_ml_services_detected) if hasattr(assessment.inventory, 'ai_ml_services_detected') else 0
+            st.markdown(f"""
+            <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 10px; border: 2px solid {aiml_color};">
+                <div style="font-size: 2rem; font-weight: bold; color: {aiml_color};">{aiml_score}</div>
+                <div style="color: #ccc; font-size: 0.8rem;">🧠 AI/ML Health</div>
+                <div style="color: #888; font-size: 0.7rem;">{services_count} services</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # AI/ML Detection Banner (NEW)
+    if has_aiml:
+        services_list = assessment.inventory.ai_ml_services_detected if hasattr(assessment.inventory, 'ai_ml_services_detected') else []
+        aiml_findings_count = len(assessment.aiml_findings) if hasattr(assessment, 'aiml_findings') else 0
+        
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
+                    border-radius: 10px; padding: 15px; margin: 15px 0;
+                    border-left: 4px solid #9b59b6;">
+            <h4 style="margin: 0; color: white;">🧠 AI/ML Workloads Detected</h4>
+            <p style="margin: 5px 0; color: #ccc;">
+                <strong>Services:</strong> {', '.join(services_list[:6])}
+                {f' +{len(services_list) - 6} more' if len(services_list) > 6 else ''}
+            </p>
+            <p style="margin: 0; font-size: 0.9em; color: #888;">
+                {aiml_findings_count} AI/ML-specific findings | 
+                Visit the <strong>🧠 AI Lens</strong> tab for detailed ML, GenAI, and Responsible AI assessment
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
 def render_pillar_scores(assessment: LandscapeAssessment):
     """Render pillar scores"""

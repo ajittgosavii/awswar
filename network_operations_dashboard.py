@@ -58,7 +58,7 @@ class PerformanceOptimizer:
         col1, col2, col3 = st.columns([1, 1, 4])
         
         with col1:
-            if st.button("🔄 Refresh", key=f"refresh_{st.session_state.net_ops_session_id}", width="stretch"):
+            if st.button("🔄 Refresh", key=f"refresh_{st.session_state.net_ops_session_id}", use_container_width=True):
                 if cache_keys:
                     for key in cache_keys:
                         if key in st.session_state:
@@ -565,7 +565,7 @@ class NetworkOperationsDashboard:
             })
         
         df = pd.DataFrame(connection_data)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
         
         st.markdown("---")
         
@@ -580,7 +580,7 @@ class NetworkOperationsDashboard:
             }
             fig = px.pie(pd.DataFrame(type_data), values='Count', names='Type',
                         color_discrete_sequence=['#3b82f6', '#10b981'])
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             st.markdown("#### 🌍 Connections by Region")
@@ -592,7 +592,7 @@ class NetworkOperationsDashboard:
             fig = px.bar(pd.DataFrame(list(region_count.items()), columns=['Region', 'Connections']),
                         x='Region', y='Connections', color='Connections',
                         color_continuous_scale='Blues')
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
     
     # ========================================================================
     # TAB 2: VPN MONITORING
@@ -711,7 +711,7 @@ class NetworkOperationsDashboard:
                 yaxis_title="Latency (ms)",
                 hovermode='x unified'
             )
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
             
             # Throughput chart
             fig = go.Figure()
@@ -729,21 +729,21 @@ class NetworkOperationsDashboard:
                 yaxis_title="Throughput (Mbps)",
                 hovermode='x unified'
             )
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
             
             # Actions
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("🔄 Reset Tunnel", key=f"reset_tunnel_{st.session_state.net_ops_session_id}", width="stretch"):
+                if st.button("🔄 Reset Tunnel", key=f"reset_tunnel_{st.session_state.net_ops_session_id}", use_container_width=True):
                     st.info("Initiating tunnel reset...")
             
             with col2:
-                if st.button("📊 View Detailed Metrics", key=f"view_detailed_metrics_{st.session_state.net_ops_session_id}", width="stretch"):
+                if st.button("📊 View Detailed Metrics", key=f"view_detailed_metrics_{st.session_state.net_ops_session_id}", use_container_width=True):
                     st.info("Opening CloudWatch dashboard...")
             
             with col3:
-                if st.button("🔔 Configure Alerts", key=f"configure_alerts_{st.session_state.net_ops_session_id}", width="stretch"):
+                if st.button("🔔 Configure Alerts", key=f"configure_alerts_{st.session_state.net_ops_session_id}", use_container_width=True):
                     st.info("Opening CloudWatch Alarms...")
         
         else:
@@ -852,7 +852,7 @@ class NetworkOperationsDashboard:
                     yaxis_title="Utilization (%)",
                     hovermode='x unified'
                 )
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
                 
                 # Connection state
                 col1, col2 = st.columns(2)
@@ -873,15 +873,15 @@ class NetworkOperationsDashboard:
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    if st.button("📊 CloudWatch Dashboard", key=f"cloudwatch_dashboard_{st.session_state.net_ops_session_id}", width="stretch"):
+                    if st.button("📊 CloudWatch Dashboard", key=f"cloudwatch_dashboard_{st.session_state.net_ops_session_id}", use_container_width=True):
                         st.info("Opening DX CloudWatch dashboard...")
                 
                 with col2:
-                    if st.button("🔔 Configure Alarms", key=f"configure_alarms_{st.session_state.net_ops_session_id}", width="stretch"):
+                    if st.button("🔔 Configure Alarms", key=f"configure_alarms_{st.session_state.net_ops_session_id}", use_container_width=True):
                         st.info("Opening CloudWatch Alarms...")
                 
                 with col3:
-                    if st.button("📄 Download Report", key=f"download_report_{st.session_state.net_ops_session_id}", width="stretch"):
+                    if st.button("📄 Download Report", key=f"download_report_{st.session_state.net_ops_session_id}", use_container_width=True):
                         st.info("Generating DX performance report...")
         
         else:
@@ -976,7 +976,7 @@ class NetworkOperationsDashboard:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
         
         # Packet loss chart
         fig = go.Figure()
@@ -997,7 +997,7 @@ class NetworkOperationsDashboard:
             hovermode='x unified'
         )
         
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
         
         # Latency distribution
         st.markdown("#### 📊 Latency Distribution")
@@ -1006,7 +1006,7 @@ class NetworkOperationsDashboard:
                           title="Latency Distribution",
                           labels={'latency_ms': 'Latency (ms)'},
                           color_discrete_sequence=['#3b82f6'])
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
         
         # Path comparison
         st.markdown("#### 🛣️ Path Comparison")
@@ -1034,7 +1034,7 @@ class NetworkOperationsDashboard:
                         color='Type', text='Path', size_max=20,
                         title="Latency vs Packet Loss - All Connections")
         fig.update_traces(textposition='top center')
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
     
     # ========================================================================
     # TAB 5: ALERTS & ISSUES
@@ -1180,7 +1180,7 @@ class NetworkOperationsDashboard:
             })
         
         df = pd.DataFrame(connection_summary)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
     
     # ========================================================================
     # TAB 7: AUDIT TRAIL
@@ -1224,7 +1224,7 @@ class NetworkOperationsDashboard:
         df = pd.DataFrame(audit_data)
         df['Timestamp'] = df['Timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
         
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
         
         if st.button("📥 Export Audit Log", key=f"export_audit_log_{st.session_state.net_ops_session_id}"):
             csv = df.to_csv(index=False)

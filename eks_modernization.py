@@ -248,7 +248,7 @@ class EKSClusterAnalyzer:
             if datapoints:
                 return datapoints[0]['Average']
             return 0.0
-        except requests.RequestException:
+        except:
             return 0.0
     
     def _calculate_cluster_cost(self, cluster_info: Dict, node_groups: List, fargate_profiles: List) -> float:
@@ -1978,7 +1978,7 @@ def render_karpenter_toolkit():
                                savings['breakdown']['rightsizing_savings']]
                 })
                 fig = px.bar(df, x='Category', y='Savings', title='Savings Breakdown')
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
                 
                 # 3-year projection
                 months = list(range(1, 37))
@@ -1988,7 +1988,7 @@ def render_karpenter_toolkit():
                 fig2.add_trace(go.Scatter(x=months, y=curr, name='Without', line=dict(color='red')))
                 fig2.add_trace(go.Scatter(x=months, y=karp, name='With Karpenter', line=dict(color='green'), fill='tonexty'))
                 fig2.update_layout(title='3-Year Cost Projection', xaxis_title='Months', yaxis_title='Total Cost ($)')
-                st.plotly_chart(fig2, width="stretch")
+                st.plotly_chart(fig2, use_container_width=True)
                 
                 st.success(f"""
                 ### 🎯 Summary

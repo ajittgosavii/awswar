@@ -724,18 +724,18 @@ class IntegratedDesignWAFHub:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("🔄 Re-Assess WAF", width="stretch"):
+            if st.button("🔄 Re-Assess WAF", use_container_width=True):
                 st.session_state.waf_assessor.assess_design(design)
                 st.success("✅ Assessment updated!")
                 st.rerun()
         
         with col2:
-            if st.button("📄 Export Design", width="stretch"):
+            if st.button("📄 Export Design", use_container_width=True):
                 # Export logic here
                 st.info("Export feature coming soon!")
         
         with col3:
-            if st.button("🚀 Deploy", width="stretch"):
+            if st.button("🚀 Deploy", use_container_width=True):
                 if design.overall_score and design.overall_score >= 80:
                     st.success("✅ Ready to deploy!")
                 else:
@@ -802,7 +802,7 @@ class IntegratedDesignWAFHub:
             })
         
         df = pd.DataFrame(df_data)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
     
     @staticmethod
     def _render_analytics():
@@ -827,7 +827,7 @@ class IntegratedDesignWAFHub:
             yaxis_title="Number of Designs",
             showlegend=False
         )
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
         
         # Pillar comparison
         st.markdown("### Pillar Performance Across Portfolio")
@@ -850,7 +850,7 @@ class IntegratedDesignWAFHub:
         df_pillars = pd.DataFrame(pillar_data)
         fig = px.bar(df_pillars, x='Pillar', y='Average Score', 
                      color='Average Score', color_continuous_scale='RdYlGn')
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
     
     @staticmethod
     def _render_settings():

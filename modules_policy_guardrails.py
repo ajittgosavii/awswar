@@ -104,7 +104,7 @@ class PolicyGuardrailsModule:
         cols = st.columns(2)
         for i, question in enumerate(sample_questions):
             with cols[i % 2]:
-                if st.button(f"💡 {question}", key=f"sample_policy_q_{i}", width="stretch"):
+                if st.button(f"💡 {question}", key=f"sample_policy_q_{i}", use_container_width=True):
                     st.session_state.policy_query = question
         
         st.markdown("---")
@@ -121,7 +121,7 @@ class PolicyGuardrailsModule:
         col1, col2 = st.columns([1, 4])
         
         with col1:
-            if st.button("🤖 Ask Claude", type="primary", key="policy_ask_claude", width="stretch"):
+            if st.button("🤖 Ask Claude", type="primary", key="policy_ask_claude", use_container_width=True):
                 if query:
                     with st.spinner("🤖 Claude is analyzing your request..."):
                         import time
@@ -134,7 +134,7 @@ class PolicyGuardrailsModule:
                         st.markdown(response)
         
         with col2:
-            if st.button("🔍 Analyze All Policies", key="policy_analyze_all", width="stretch"):
+            if st.button("🔍 Analyze All Policies", key="policy_analyze_all", use_container_width=True):
                 st.info("Analyzing all policies for security and compliance...")
     
     @staticmethod
@@ -520,13 +520,13 @@ Would you like me to generate specific policies for your use case?
                     st.info(pred['Prevention'])
                 
                 with col2:
-                    if st.button("⚡ Prevent Now", type="primary", key=f"prevent_{pred['Account']}", width="stretch"):
+                    if st.button("⚡ Prevent Now", type="primary", key=f"prevent_{pred['Account']}", use_container_width=True):
                         st.success(f"✅ Preventive policy deployed to {pred['Account']}")
                     
-                    if st.button("📊 Details", key=f"pred_details_{pred['Account']}", width="stretch"):
+                    if st.button("📊 Details", key=f"pred_details_{pred['Account']}", use_container_width=True):
                         st.info("Showing detailed prediction analysis...")
                     
-                    if st.button("⏸️ Snooze", key=f"pred_snooze_{pred['Account']}", width="stretch"):
+                    if st.button("⏸️ Snooze", key=f"pred_snooze_{pred['Account']}", use_container_width=True):
                         st.warning("Prediction snoozed for 7 days")
         
         # AI insights
@@ -595,15 +595,15 @@ Would you like me to generate specific policies for your use case?
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        if st.button("📋 View Policy", key=f"view_template_{template['name']}", width="stretch"):
+                        if st.button("📋 View Policy", key=f"view_template_{template['name']}", use_container_width=True):
                             st.code(PolicyGuardrailsModule._get_policy_template(template['name']), language='json')
                     
                     with col2:
-                        if st.button("🧪 Simulate Impact", key=f"simulate_{template['name']}", width="stretch"):
+                        if st.button("🧪 Simulate Impact", key=f"simulate_{template['name']}", use_container_width=True):
                             st.info(f"Simulating impact of '{template['name']}' across organization...")
                     
                     with col3:
-                        if st.button("🚀 Deploy", type="primary", key=f"deploy_{template['name']}", width="stretch"):
+                        if st.button("🚀 Deploy", type="primary", key=f"deploy_{template['name']}", use_container_width=True):
                             st.success(f"✅ Policy '{template['name']}' deployed")
         
         st.markdown("---")
@@ -643,17 +643,17 @@ Would you like me to generate specific policies for your use case?
                     
                     with col1:
                         # Get policy content
-                        if st.button("📄 View Document", key=f"view_doc_{policy['id']}", width="stretch"):
+                        if st.button("📄 View Document", key=f"view_doc_{policy['id']}", use_container_width=True):
                             content = org_mgr.get_policy_content(policy['id'])
                             if content:
                                 st.json(content)
                     
                     with col2:
-                        if st.button("🤖 AI Analysis", key=f"ai_analyze_{policy['id']}", width="stretch"):
+                        if st.button("🤖 AI Analysis", key=f"ai_analyze_{policy['id']}", use_container_width=True):
                             st.info("Claude is analyzing this policy for security and compliance...")
                     
                     with col3:
-                        if st.button("🧪 Simulate", key=f"sim_policy_{policy['id']}", width="stretch"):
+                        if st.button("🧪 Simulate", key=f"sim_policy_{policy['id']}", use_container_width=True):
                             st.warning("Simulating policy impact...")
                     
                     # Attach/Detach
@@ -666,7 +666,7 @@ Would you like me to generate specific policies for your use case?
                             target_attach = st.text_input(f"Account/OU ID", 
                                                          key=f"attach_input_{policy['id']}",
                                                          placeholder="123456789012 or ou-xxxx-xxxxxxxx")
-                            if st.button("✅ Attach", key=f"attach_btn_{policy['id']}", width="stretch"):
+                            if st.button("✅ Attach", key=f"attach_btn_{policy['id']}", use_container_width=True):
                                 if target_attach:
                                     result = org_mgr.attach_policy(policy['id'], target_attach)
                                     if result.get('success'):
@@ -677,7 +677,7 @@ Would you like me to generate specific policies for your use case?
                             target_detach = st.text_input(f"Account/OU ID", 
                                                          key=f"detach_input_{policy['id']}",
                                                          placeholder="123456789012 or ou-xxxx-xxxxxxxx")
-                            if st.button("❌ Detach", key=f"detach_btn_{policy['id']}", width="stretch"):
+                            if st.button("❌ Detach", key=f"detach_btn_{policy['id']}", use_container_width=True):
                                 if target_detach:
                                     result = org_mgr.detach_policy(policy['id'], target_detach)
                                     if result.get('success'):
@@ -889,7 +889,7 @@ Would you like me to generate specific policies for your use case?
         ]
         
         tags_df = pd.DataFrame(required_tags)
-        st.dataframe(tags_df, width="stretch", hide_index=True)
+        st.dataframe(tags_df, use_container_width=True, hide_index=True)
         
         # AI Insights
         st.markdown("---")
@@ -947,7 +947,7 @@ Would you like me to generate specific policies for your use case?
         st.markdown("---")
         st.markdown("### 🤖 AI Tag Suggestions")
         
-        if st.button("🔍 Analyze Resources for Missing Tags", key="analyze_missing_tags", width="stretch"):
+        if st.button("🔍 Analyze Resources for Missing Tags", key="analyze_missing_tags", use_container_width=True):
             st.info("Scanning organization for tagging gaps...")
             
             missing_tags = pd.DataFrame([
@@ -956,7 +956,7 @@ Would you like me to generate specific policies for your use case?
                 {"Resource": "bucket-data (S3)", "Missing Tags": "CostCenter", "Suggested Values": "Data Analytics"}
             ])
             
-            st.dataframe(missing_tags, width="stretch", hide_index=True)
+            st.dataframe(missing_tags, use_container_width=True, hide_index=True)
             
             if st.button("⚡ Auto-Tag All Resources", key="auto_tag_all", type="primary"):
                 st.success("✅ Automated tagging initiated for 247 resources")
@@ -1028,7 +1028,7 @@ Would you like me to generate specific policies for your use case?
                     st.write(f"Auto-Fix: {auto_fix_badge}")
                 with col4:
                     if gr['Findings'] > 0:
-                        if st.button("⚡ Fix Now", key=f"fix_{gr['Name']}", type="primary", width="stretch"):
+                        if st.button("⚡ Fix Now", key=f"fix_{gr['Name']}", type="primary", use_container_width=True):
                             st.success(f"Fixing {gr['Findings']} findings...")
         
         with guardrail_tabs[2]:
@@ -1076,11 +1076,11 @@ Would you like me to generate specific policies for your use case?
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        if st.button("✅ Apply Recommendation", key=f"apply_{learning['Learning']}", type="primary", width="stretch"):
+                        if st.button("✅ Apply Recommendation", key=f"apply_{learning['Learning']}", type="primary", use_container_width=True):
                             st.success("Guardrail deployed based on AI learning!")
                     
                     with col2:
-                        if st.button("📊 More Details", key=f"details_{learning['Learning']}", width="stretch"):
+                        if st.button("📊 More Details", key=f"details_{learning['Learning']}", use_container_width=True):
                             st.info("Showing detailed analysis...")
     
     @staticmethod
@@ -1130,7 +1130,7 @@ Would you like me to generate specific policies for your use case?
             ]
             
             compliance_df = pd.DataFrame(compliance_data)
-            st.dataframe(compliance_df, width="stretch", hide_index=True)
+            st.dataframe(compliance_df, use_container_width=True, hide_index=True)
             
             # AI prediction
             st.markdown("---")
@@ -1165,11 +1165,11 @@ Would you like me to generate specific policies for your use case?
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        if st.button("⚡ Auto-Remediate", key=f"auto_rem_{acc['Account']}", type="primary", width="stretch"):
+                        if st.button("⚡ Auto-Remediate", key=f"auto_rem_{acc['Account']}", type="primary", use_container_width=True):
                             st.success(f"Auto-remediation initiated for {acc['Account']}")
                     
                     with col2:
-                        if st.button("📊 View Details", key=f"details_{acc['Account']}", width="stretch"):
+                        if st.button("📊 View Details", key=f"details_{acc['Account']}", use_container_width=True):
                             st.info(f"Loading violation details for {acc['Account']}...")
     
     @staticmethod
@@ -1226,20 +1226,20 @@ Would you like me to generate specific policies for your use case?
         ]
         
         pending_df = pd.DataFrame(pending)
-        st.dataframe(pending_df, width="stretch", hide_index=True)
+        st.dataframe(pending_df, use_container_width=True, hide_index=True)
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("⚡ Execute All (High Confidence)", type="primary", key="exec_all_high", width="stretch"):
+            if st.button("⚡ Execute All (High Confidence)", type="primary", key="exec_all_high", use_container_width=True):
                 st.success("✅ Executing 2 high-confidence remediations...")
         
         with col2:
-            if st.button("📋 Generate Report", key="gen_rem_report", width="stretch"):
+            if st.button("📋 Generate Report", key="gen_rem_report", use_container_width=True):
                 st.info("Generating remediation report...")
         
         with col3:
-            if st.button("⚙️ Configure Rules", key="config_rem_rules", width="stretch"):
+            if st.button("⚙️ Configure Rules", key="config_rem_rules", use_container_width=True):
                 st.info("Opening remediation rule configuration...")
         
         # Remediation history
@@ -1274,7 +1274,7 @@ Would you like me to generate specific policies for your use case?
         ]
         
         history_df = pd.DataFrame(history)
-        st.dataframe(history_df, width="stretch", hide_index=True)
+        st.dataframe(history_df, use_container_width=True, hide_index=True)
         
         # AI recommendations
         st.markdown("---")

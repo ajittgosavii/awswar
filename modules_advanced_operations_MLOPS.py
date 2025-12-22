@@ -9,15 +9,12 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from core_account_manager import get_account_manager, get_account_names
-from auth_azure_sso import require_permission
 import json
 
 class AdvancedOperationsModule:
     """Advanced Operations with comprehensive ML Ops"""
     
     @staticmethod
-    @require_permission('view_resources')
-
     def render():
         """Main render method"""
         st.title("⚡ Advanced Operations - AI/ML Ops Platform")

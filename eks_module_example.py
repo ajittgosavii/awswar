@@ -77,7 +77,7 @@ class AIRecommendationEngine:
             try:
                 from anthropic import Anthropic
                 self.client = Anthropic(api_key=self.api_key)
-            except ImportError:
+            except:
                 st.error("Failed to initialize Anthropic client")
 """
 

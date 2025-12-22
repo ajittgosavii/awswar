@@ -106,7 +106,7 @@ class OperationsModule:
         cols = st.columns(2)
         for i, question in enumerate(sample_questions):
             with cols[i % 2]:
-                if st.button(f"💡 {question}", key=f"sample_ops_q_{i}", width="stretch"):
+                if st.button(f"💡 {question}", key=f"sample_ops_q_{i}", use_container_width=True):
                     st.session_state.ops_query = question
         
         st.markdown("---")
@@ -123,10 +123,10 @@ class OperationsModule:
         col1, col2, col3 = st.columns([1, 1, 4])
         
         with col1:
-            ask_button = st.button("🤖 Ask Claude", type="primary", width="stretch")
+            ask_button = st.button("🤖 Ask Claude", type="primary", use_container_width=True)
         
         with col2:
-            if st.button("🗑️ Clear Chat", width="stretch"):
+            if st.button("🗑️ Clear Chat", use_container_width=True):
                 st.session_state.ops_chat_history = []
                 st.session_state.ops_query = ''
                 st.rerun()
@@ -182,7 +182,7 @@ class OperationsModule:
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("📋 Export Chat", width="stretch"):
+                if st.button("📋 Export Chat", use_container_width=True):
                     chat_export = json.dumps(st.session_state.ops_chat_history, default=str, indent=2)
                     st.download_button(
                         label="⬇️ Download JSON",
@@ -192,11 +192,11 @@ class OperationsModule:
                     )
             
             with col2:
-                if st.button("📧 Email Summary", width="stretch"):
+                if st.button("📧 Email Summary", use_container_width=True):
                     st.success("✅ Chat summary emailed to your team!")
             
             with col3:
-                if st.button("🔖 Save as Runbook", width="stretch"):
+                if st.button("🔖 Save as Runbook", use_container_width=True):
                     st.info("Saving conversation as automated runbook...")
     
     @staticmethod
@@ -541,16 +541,16 @@ What would you like me to help with?
         with col2:
             st.markdown("**Quick Actions:**")
             
-            if st.button("📊 Check Metrics", width="stretch"):
+            if st.button("📊 Check Metrics", use_container_width=True):
                 st.info("Fetching CloudWatch metrics...")
             
-            if st.button("📜 View Logs", width="stretch"):
+            if st.button("📜 View Logs", use_container_width=True):
                 st.info("Fetching CloudWatch logs...")
             
-            if st.button("🔍 Analyze Traffic", width="stretch"):
+            if st.button("🔍 Analyze Traffic", use_container_width=True):
                 st.info("Analyzing VPC Flow Logs...")
         
-        if st.button("🤖 Analyze with Claude", type="primary", width="stretch"):
+        if st.button("🤖 Analyze with Claude", type="primary", use_container_width=True):
             if issue_description:
                 with st.spinner("🤖 Claude is analyzing the issue..."):
                     import time
@@ -639,7 +639,7 @@ I can execute these fixes automatically. What would you like me to do?
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        if st.button("⚡ Apply Immediate Fix", type="primary", width="stretch"):
+                        if st.button("⚡ Apply Immediate Fix", type="primary", use_container_width=True):
                             with st.spinner("Applying fixes..."):
                                 time.sleep(2)
                                 st.success("""
@@ -658,11 +658,11 @@ Monitoring for 5 minutes to confirm stability...
 """)
                     
                     with col2:
-                        if st.button("📋 Create Runbook", width="stretch"):
+                        if st.button("📋 Create Runbook", use_container_width=True):
                             st.info("Automated runbook created and saved to documentation")
                     
                     with col3:
-                        if st.button("📧 Alert Team", width="stretch"):
+                        if st.button("📧 Alert Team", use_container_width=True):
                             st.success("Team notified with incident report")
             else:
                 st.warning("Please describe the issue first!")
@@ -696,7 +696,7 @@ Monitoring for 5 minutes to confirm stability...
         ]
         
         df = pd.DataFrame(recent_issues)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
     
     @staticmethod
     def _render_instance_management(session, region):
@@ -744,7 +744,7 @@ Monitoring for 5 minutes to confirm stability...
         ]
         
         df = pd.DataFrame(instances_data)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
         
         # AI recommendations panel
         st.markdown("---")
@@ -849,7 +849,7 @@ Monitoring for 5 minutes to confirm stability...
             st.checkbox("✅ A/B Testing", value=False)
             st.checkbox("✅ Multi-Model Endpoint", value=False)
         
-        if st.button("🚀 Deploy Model", type="primary", width="stretch"):
+        if st.button("🚀 Deploy Model", type="primary", use_container_width=True):
             with st.spinner("Deploying ML model..."):
                 import time
                 time.sleep(3)
@@ -906,7 +906,7 @@ Monitoring for 5 minutes to confirm stability...
         ]
         
         df = pd.DataFrame(deployments)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
     
     @staticmethod
     def _render_predictive_maintenance(session, region):
@@ -1004,13 +1004,13 @@ Monitoring for 5 minutes to confirm stability...
                     st.markdown(f"- **ROI:** {int((float(pred['Outage Cost'].replace('$','').replace(',','')) / max(float(pred['Prevention Cost'].replace('$','').replace('/month','')), 1)) * 100)}%")
                 
                 with col2:
-                    if st.button(f"🔧 Auto-Fix", key=f"fix_{pred['Resource']}", width="stretch"):
+                    if st.button(f"🔧 Auto-Fix", key=f"fix_{pred['Resource']}", use_container_width=True):
                         st.success(f"✅ Preventive action scheduled for {pred['Resource']}")
                     
-                    if st.button(f"📊 Details", key=f"details_{pred['Resource']}", width="stretch"):
+                    if st.button(f"📊 Details", key=f"details_{pred['Resource']}", use_container_width=True):
                         st.info("Showing detailed analysis...")
                     
-                    if st.button(f"⏸️ Snooze", key=f"snooze_{pred['Resource']}", width="stretch"):
+                    if st.button(f"⏸️ Snooze", key=f"snooze_{pred['Resource']}", use_container_width=True):
                         st.warning("Snoozed for 24 hours")
     
     @staticmethod
@@ -1081,15 +1081,15 @@ steps:
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        if st.button("💾 Save Runbook", width="stretch"):
+                        if st.button("💾 Save Runbook", use_container_width=True):
                             st.success("Runbook saved to automation library")
                     
                     with col2:
-                        if st.button("▶️ Test Run", width="stretch"):
+                        if st.button("▶️ Test Run", use_container_width=True):
                             st.info("Executing test run in dry-run mode...")
                     
                     with col3:
-                        if st.button("🚀 Deploy", width="stretch"):
+                        if st.button("🚀 Deploy", use_container_width=True):
                             st.success("Runbook deployed and scheduled!")
         
         # Existing runbooks
@@ -1124,4 +1124,4 @@ steps:
         ]
         
         df = pd.DataFrame(runbooks)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)

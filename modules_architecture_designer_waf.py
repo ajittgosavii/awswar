@@ -32,7 +32,7 @@ try:
         WAFAutoDetector
     )
     WAF_ENGINE_AVAILABLE = True
-except ImportError:
+except:
     WAF_ENGINE_AVAILABLE = False
 
 # Anthropic for NLP and chat
@@ -47,7 +47,7 @@ try:
         anthropic_client = anthropic.Anthropic(api_key=api_key)
     else:
         anthropic_client = None
-except requests.RequestException:
+except:
     ANTHROPIC_AVAILABLE = False
     anthropic_client = None
 
@@ -797,7 +797,7 @@ I need a production-ready 3-tier web application with:
             arch_name = st.text_input("Architecture Name", "My Architecture")
         
         with col2:
-            if st.button("🚀 Generate Architecture", type="primary", width="stretch"):
+            if st.button("🚀 Generate Architecture", type="primary", use_container_width=True):
                 if description:
                     with st.spinner("Parsing your description..."):
                         components = NLPArchitectureParser.parse(description)
@@ -931,7 +931,7 @@ I need a production-ready 3-tier web application with:
             scan_network = st.checkbox("Scan Network (VPC, ALB)", value=True)
         
         # Scan button
-        if st.button("🔍 Scan AWS Environment", type="primary", width="stretch"):
+        if st.button("🔍 Scan AWS Environment", type="primary", use_container_width=True):
             
             with st.status("Scanning AWS environment...", expanded=True) as status:
                 

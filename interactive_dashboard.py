@@ -483,26 +483,26 @@ class InteractiveDashboard:
         with col1:
             st.plotly_chart(
                 self.create_severity_distribution_pie(scan_result.get('findings', [])),
-                width="stretch"
+                use_container_width=True
             )
         
         with col2:
             st.plotly_chart(
                 self.create_waf_pillar_radar(scan_result.get('pillar_distribution', {})),
-                width="stretch"
+                use_container_width=True
             )
         
         # Trend Chart (if historical data available)
         if historical_data is not None and len(historical_data) > 1:
             st.plotly_chart(
                 self.create_trend_chart(historical_data),
-                width="stretch"
+                use_container_width=True
             )
         
         # Charts Row 2
         st.plotly_chart(
             self.create_service_breakdown_bar(scan_result.get('findings', [])),
-            width="stretch"
+            use_container_width=True
         )
         
         # Compliance and Cost
@@ -512,14 +512,14 @@ class InteractiveDashboard:
             with col1:
                 st.plotly_chart(
                     self.create_compliance_heatmap(scan_result['compliance_report']),
-                    width="stretch"
+                    use_container_width=True
                 )
             
             with col2:
                 if scan_result.get('cost_impact'):
                     st.plotly_chart(
                         self.create_cost_impact_waterfall(scan_result['cost_impact']),
-                        width="stretch"
+                        use_container_width=True
                     )
     
     def _calculate_delta(self, df: pd.DataFrame, column: str) -> Optional[float]:

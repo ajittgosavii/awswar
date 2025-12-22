@@ -115,7 +115,7 @@ class PerformanceOptimizer:
         col1, col2, col3 = st.columns([1, 1, 4])
         
         with col1:
-            if st.button("🔄 Refresh Data", width="stretch"):
+            if st.button("🔄 Refresh Data", use_container_width=True):
                 # Clear specified caches
                 if cache_keys:
                     for key in cache_keys:
@@ -155,7 +155,7 @@ def get_anthropic_client():
         try:
             if 'anthropic' in st.secrets and 'api_key' in st.secrets['anthropic']:
                 api_key = st.secrets['anthropic']['api_key']
-        except KeyError:
+        except:
             pass
     
     if not api_key and hasattr(st, 'secrets') and 'ANTHROPIC_API_KEY' in st.secrets:
@@ -338,7 +338,7 @@ Respond ONLY with valid JSON."""
         # Extract JSON
         try:
             return json.loads(response_text)
-        except json.JSONDecodeError:
+        except:
             import re
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             if json_match:
@@ -972,7 +972,7 @@ class FinOpsEnterpriseModule:
                         color='Cost',
                         color_continuous_scale='Blues'
                     )
-                    st.plotly_chart(fig, width="stretch")
+                    st.plotly_chart(fig, use_container_width=True)
                 
                 with col2:
                     fig_pie = px.pie(
@@ -981,7 +981,7 @@ class FinOpsEnterpriseModule:
                         names='Service',
                         title='Top 5 Services'
                     )
-                    st.plotly_chart(fig_pie, width="stretch")
+                    st.plotly_chart(fig_pie, use_container_width=True)
         
         # Quick AI analysis if available (only if we have service data)
         if ai_available and cost_data.get('services') and len(cost_data['services']) > 0:
@@ -1168,14 +1168,14 @@ class FinOpsEnterpriseModule:
                 with col3:
                     st.markdown("**⚡ Actions:**")
                     
-                    if st.button("🔔 Alert Team", key=f"alert_{anomaly['date']}_{anomaly['service']}", width="stretch"):
+                    if st.button("🔔 Alert Team", key=f"alert_{anomaly['date']}_{anomaly['service']}", use_container_width=True):
                         st.success("Team notified!")
                     
-                    if st.button("📋 Create Ticket", key=f"ticket_{anomaly['date']}_{anomaly['service']}", width="stretch"):
+                    if st.button("📋 Create Ticket", key=f"ticket_{anomaly['date']}_{anomaly['service']}", use_container_width=True):
                         st.success("Ticket created!")
                     
                     if anomaly['status'] in ['Open', 'Investigating']:
-                        if st.button("✅ Mark Resolved", key=f"resolve_{anomaly['date']}_{anomaly['service']}", width="stretch"):
+                        if st.button("✅ Mark Resolved", key=f"resolve_{anomaly['date']}_{anomaly['service']}", use_container_width=True):
                             st.success("Marked as resolved!")
         
         # ML Detection visualization
@@ -1237,7 +1237,7 @@ class FinOpsEnterpriseModule:
                 hovermode='x unified'
             )
             
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             st.markdown("**📊 ML Statistics:**")
@@ -1440,10 +1440,10 @@ class FinOpsEnterpriseModule:
                         text='Emissions (kg)'
                     )
                     fig_accounts.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-                    st.plotly_chart(fig_accounts, width="stretch")
+                    st.plotly_chart(fig_accounts, use_container_width=True)
                 
                 with col2:
-                    st.dataframe(account_df, width="stretch", hide_index=True)
+                    st.dataframe(account_df, use_container_width=True, hide_index=True)
             
             st.markdown("---")
         
@@ -1479,10 +1479,10 @@ class FinOpsEnterpriseModule:
                         text='CO2 (kg)'
                     )
                     fig.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-                    st.plotly_chart(fig, width="stretch")
+                    st.plotly_chart(fig, use_container_width=True)
                 
                 with col2:
-                    st.dataframe(service_emissions, width="stretch", hide_index=True)
+                    st.dataframe(service_emissions, use_container_width=True, hide_index=True)
             else:
                 # Real data format (simple service: emissions_kg dict)
                 service_data = [
@@ -1511,10 +1511,10 @@ class FinOpsEnterpriseModule:
                             text='Emissions (kg)'
                         )
                         fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-                        st.plotly_chart(fig, width="stretch")
+                        st.plotly_chart(fig, use_container_width=True)
                     
                     with col2:
-                        st.dataframe(service_df, width="stretch", hide_index=True)
+                        st.dataframe(service_df, use_container_width=True, hide_index=True)
                 else:
                     st.info("No service-level emissions data available")
         else:
@@ -1557,7 +1557,7 @@ class FinOpsEnterpriseModule:
                         text='Carbon Intensity'
                     )
                     fig.update_traces(texttemplate='%{text}', textposition='outside')
-                    st.plotly_chart(fig, width="stretch")
+                    st.plotly_chart(fig, use_container_width=True)
                 
                 with col2:
                     st.markdown("**🟢 Low Carbon Regions:**")
@@ -1592,10 +1592,10 @@ class FinOpsEnterpriseModule:
                             text='Emissions (kg)'
                         )
                         fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-                        st.plotly_chart(fig, width="stretch")
+                        st.plotly_chart(fig, use_container_width=True)
                     
                     with col2:
-                        st.dataframe(region_df, width="stretch", hide_index=True)
+                        st.dataframe(region_df, use_container_width=True, hide_index=True)
                 else:
                     st.info("No regional emissions data available")
         
@@ -1672,15 +1672,15 @@ class FinOpsEnterpriseModule:
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("💰 What are my top 3 cost drivers?", key="finops_query_btn_1", width="stretch"):
+            if st.button("💰 What are my top 3 cost drivers?", key="finops_query_btn_1", use_container_width=True):
                 st.session_state.finops_ai_query = "What are my top 3 cost drivers?"
-            if st.button("📈 How can I reduce my EC2 costs?", key="finops_query_btn_2", width="stretch"):
+            if st.button("📈 How can I reduce my EC2 costs?", key="finops_query_btn_2", use_container_width=True):
                 st.session_state.finops_ai_query = "How can I reduce my EC2 costs?"
         
         with col2:
-            if st.button("🎯 Where should I focus optimization?", key="finops_query_btn_3", width="stretch"):
+            if st.button("🎯 Where should I focus optimization?", key="finops_query_btn_3", use_container_width=True):
                 st.session_state.finops_ai_query = "Where should I focus my optimization efforts?"
-            if st.button("🌱 How can I reduce my carbon footprint?", key="finops_query_btn_4", width="stretch"):
+            if st.button("🌱 How can I reduce my carbon footprint?", key="finops_query_btn_4", use_container_width=True):
                 st.session_state.finops_ai_query = "How can I reduce my carbon footprint?"
         
         # Query input - FIXED: Unique key
@@ -1795,12 +1795,12 @@ class FinOpsEnterpriseModule:
                 color_continuous_scale='Reds'
             )
             fig.update_traces(textposition='outside')
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             st.dataframe(
                 account_df[['Account', 'Cost_Formatted', 'Percentage']],
-                width="stretch",
+                use_container_width=True,
                 hide_index=True
             )
     
@@ -1864,7 +1864,7 @@ class FinOpsEnterpriseModule:
             hovermode='x unified'
         )
         
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
         
         col1, col2, col3 = st.columns(3)
         
@@ -1997,7 +1997,7 @@ class FinOpsEnterpriseModule:
                     st.metric("Savings %", rec['savings_percentage'])
                     st.markdown(f"**Priority:** {rec['priority']}")
                     
-                    if st.button("📋 Create Action Item", key=f"finops_opt_action_{rec['resource']}_unique", width="stretch"):
+                    if st.button("📋 Create Action Item", key=f"finops_opt_action_{rec['resource']}_unique", use_container_width=True):
                         st.success("Action item created!")
     
     @staticmethod
@@ -2142,7 +2142,7 @@ class FinOpsEnterpriseModule:
                 
                 if budget_list:
                     budget_df = pd.DataFrame(budget_list)
-                    st.dataframe(budget_df, width="stretch", hide_index=True)
+                    st.dataframe(budget_df, use_container_width=True, hide_index=True)
                     
                     # Visualization
                     st.markdown("#### 📊 Budget Utilization")
@@ -2195,7 +2195,7 @@ class FinOpsEnterpriseModule:
                             height=400
                         )
                         
-                        st.plotly_chart(fig, width="stretch")
+                        st.plotly_chart(fig, use_container_width=True)
                 
             except Exception as e:
                 st.warning(f"⚠️ Could not fetch budget data: {str(e)}")
@@ -2217,7 +2217,7 @@ class FinOpsEnterpriseModule:
         ]
         
         df = pd.DataFrame(budgets)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
     
     @staticmethod
     def _render_tag_based_costs():
@@ -2315,10 +2315,10 @@ class FinOpsEnterpriseModule:
         
         with col1:
             fig = px.bar(df, x='Value', y='Cost', text='Percentage', title='Cost by Department', color='Cost')
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            st.dataframe(df, width="stretch", hide_index=True)
+            st.dataframe(df, use_container_width=True, hide_index=True)
         
         st.markdown("---")
         st.markdown("#### 🎯 Tag Compliance")

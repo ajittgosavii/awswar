@@ -507,7 +507,7 @@ def render_dr_planning():
     
     import pandas as pd
     df = pd.DataFrame(comparison_data)
-    st.dataframe(df, width="stretch", hide_index=True)
+    st.dataframe(df, use_container_width=True, hide_index=True)
     
     # Detailed pattern selection
     st.markdown("---")

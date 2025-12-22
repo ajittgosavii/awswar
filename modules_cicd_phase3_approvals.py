@@ -177,7 +177,7 @@ def render_approval_dashboard(codepipeline, region: str):
             }
         ])
         
-        st.dataframe(pending_data, width="stretch", hide_index=True)
+        st.dataframe(pending_data, use_container_width=True, hide_index=True)
         
         if st.button("🔄 Refresh Pending Approvals"):
             st.rerun()
@@ -210,7 +210,7 @@ def render_approval_dashboard(codepipeline, region: str):
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
     
     # Approval Time Distribution
     st.subheader("⏱️ Approval Time Distribution (Last 30 Days)")
@@ -224,7 +224,7 @@ def render_approval_dashboard(codepipeline, region: str):
                  title='How quickly are approvals being processed?',
                  color='Count', color_continuous_scale='Greens')
     fig.update_layout(height=300, showlegend=False)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
     
     # Team Performance
     col1, col2 = st.columns(2)
@@ -238,7 +238,7 @@ def render_approval_dashboard(codepipeline, region: str):
             'Total Approvals': [89, 45, 23, 67, 12]
         })
         
-        st.dataframe(team_data, width="stretch", hide_index=True)
+        st.dataframe(team_data, use_container_width=True, hide_index=True)
     
     with col2:
         st.subheader("🎯 SLA Compliance by Team")
@@ -254,7 +254,7 @@ def render_approval_dashboard(codepipeline, region: str):
         fig.add_hline(y=90, line_dash="dash", line_color="red", 
                      annotation_text="90% Target")
         fig.update_layout(height=300, showlegend=False)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
 
 
 def render_approval_workflows(codepipeline, iam, region: str):
@@ -425,7 +425,7 @@ def render_approval_workflows(codepipeline, iam, region: str):
         col1, col2, col3 = st.columns([1, 1, 2])
         
         with col1:
-            if st.button("✅ Create Approval Workflow", type="primary", width="stretch"):
+            if st.button("✅ Create Approval Workflow", type="primary", use_container_width=True):
                 with st.spinner("Creating approval workflow..."):
                     try:
                         st.success(f"✅ Approval workflow created for {selected_pipeline}!")
@@ -446,7 +446,7 @@ def render_approval_workflows(codepipeline, iam, region: str):
                         st.error(f"Error creating approval workflow: {str(e)}")
         
         with col2:
-            if st.button("🔄 Reset Form", width="stretch"):
+            if st.button("🔄 Reset Form", use_container_width=True):
                 st.rerun()
     
     st.markdown("---")
@@ -494,7 +494,7 @@ def render_approval_workflows(codepipeline, iam, region: str):
         }
     ])
     
-    st.dataframe(existing_approvals, width="stretch", hide_index=True)
+    st.dataframe(existing_approvals, use_container_width=True, hide_index=True)
     
     # Quick actions
     col1, col2, col3, col4 = st.columns(4)
@@ -866,7 +866,7 @@ def render_notification_settings(sns, ses, region: str):
         }
     ])
     
-    st.dataframe(rules_data, width="stretch", hide_index=True)
+    st.dataframe(rules_data, use_container_width=True, hide_index=True)
 
 
 def render_pending_approvals(codepipeline, region: str):
@@ -1005,13 +1005,13 @@ def render_pending_approvals(codepipeline, region: str):
             col1, col2, col3, col4, col5 = st.columns(5)
             
             with col1:
-                if st.button("✅ Approve", key=f"approve_{approval['id']}", type="primary", width="stretch"):
+                if st.button("✅ Approve", key=f"approve_{approval['id']}", type="primary", use_container_width=True):
                     with st.spinner("Processing approval..."):
                         st.success(f"✅ Approved: {approval['pipeline']}")
                         st.balloons()
             
             with col2:
-                if st.button("❌ Reject", key=f"reject_{approval['id']}", width="stretch"):
+                if st.button("❌ Reject", key=f"reject_{approval['id']}", use_container_width=True):
                     rejection_reason = st.text_area(
                         "Rejection Reason (required)",
                         key=f"reason_{approval['id']}",
@@ -1021,15 +1021,15 @@ def render_pending_approvals(codepipeline, region: str):
                         st.error(f"❌ Rejected: {approval['pipeline']}")
             
             with col3:
-                if st.button("💬 Add Comment", key=f"comment_{approval['id']}", width="stretch"):
+                if st.button("💬 Add Comment", key=f"comment_{approval['id']}", use_container_width=True):
                     st.text_area("Your Comment", key=f"comment_text_{approval['id']}")
             
             with col4:
-                if st.button("📊 View Pipeline", key=f"view_{approval['id']}", width="stretch"):
+                if st.button("📊 View Pipeline", key=f"view_{approval['id']}", use_container_width=True):
                     st.info(f"Opening pipeline: {approval['pipeline']}")
             
             with col5:
-                if st.button("📋 View Diff", key=f"diff_{approval['id']}", width="stretch"):
+                if st.button("📋 View Diff", key=f"diff_{approval['id']}", use_container_width=True):
                     st.info("Opening change diff...")
             
             st.markdown("---")
@@ -1039,20 +1039,20 @@ def render_pending_approvals(codepipeline, region: str):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("✅ Approve All Low Priority", width="stretch"):
+        if st.button("✅ Approve All Low Priority", use_container_width=True):
             st.success("Approved all low priority requests")
     
     with col2:
-        if st.button("🔔 Send Reminder to Approvers", width="stretch"):
+        if st.button("🔔 Send Reminder to Approvers", use_container_width=True):
             st.info("Reminder notifications sent")
     
     with col3:
-        if st.button("📧 Export Pending List", width="stretch"):
+        if st.button("📧 Export Pending List", use_container_width=True):
             st.download_button(
                 "Download CSV",
                 data="pipeline,stage,requested_by,requested_at\n",
                 file_name="pending_approvals.csv",
-                width="stretch"
+                use_container_width=True
             )
 
 
@@ -1172,28 +1172,28 @@ def render_approval_history(codepipeline, region: str):
         }
     ])
     
-    st.dataframe(history_data, width="stretch", hide_index=True)
+    st.dataframe(history_data, use_container_width=True, hide_index=True)
     
     # Export options
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("📥 Export to CSV", width="stretch"):
+        if st.button("📥 Export to CSV", use_container_width=True):
             csv = history_data.to_csv(index=False)
             st.download_button(
                 "Download CSV",
                 data=csv,
                 file_name=f"approval_history_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
-                width="stretch"
+                use_container_width=True
             )
     
     with col2:
-        if st.button("📊 Generate Report", width="stretch"):
+        if st.button("📊 Generate Report", use_container_width=True):
             st.info("Generating comprehensive approval report...")
     
     with col3:
-        if st.button("📧 Email Report", width="stretch"):
+        if st.button("📧 Email Report", use_container_width=True):
             st.success("Report emailed to selected recipients")
     
     st.markdown("---")
@@ -1230,7 +1230,7 @@ def render_approval_history(codepipeline, region: str):
                     {"Event": "Decision Made", "Time": selected_row['Timestamp'].split()[1], "User": selected_row['Approver']},
                     {"Event": "Pipeline Continued", "Time": selected_row['Timestamp'].split()[1], "User": "system"}
                 ])
-                st.dataframe(audit_trail, width="stretch", hide_index=True)
+                st.dataframe(audit_trail, use_container_width=True, hide_index=True)
             
             # Additional details
             st.markdown("**Deployment Details**")
@@ -1392,13 +1392,13 @@ def render_auto_approval_rules(codepipeline, region: str):
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("✅ Create Auto-Approval Rule", type="primary", width="stretch"):
+            if st.button("✅ Create Auto-Approval Rule", type="primary", use_container_width=True):
                 with st.spinner("Creating auto-approval rule..."):
                     st.success(f"✅ Auto-approval rule '{rule_name}' created successfully!")
                     st.info("💡 The rule is now active and will apply to matching pipelines")
         
         with col2:
-            if st.button("🧪 Test Rule", width="stretch"):
+            if st.button("🧪 Test Rule", use_container_width=True):
                 st.info("Testing rule against recent pipeline executions...")
                 st.success("✅ Rule would have auto-approved 5 of last 10 executions")
     
@@ -1442,7 +1442,7 @@ def render_auto_approval_rules(codepipeline, region: str):
         }
     ])
     
-    st.dataframe(rules_data, width="stretch", hide_index=True)
+    st.dataframe(rules_data, use_container_width=True, hide_index=True)
     
     # Rule management
     col1, col2, col3, col4 = st.columns(4)
@@ -1487,7 +1487,7 @@ def render_auto_approval_rules(codepipeline, region: str):
         fig = px.pie(approval_types, values='Count', names='Type', 
                      title='Approval Distribution (Last 30 Days)',
                      color_discrete_sequence=['#2ECC71', '#3498DB', '#E74C3C'])
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
     
     with col2:
         # Time saved by auto-approvals
@@ -1537,7 +1537,7 @@ def render_auto_approval_rules(codepipeline, region: str):
         hovermode='x unified'
     )
     
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
     
     # Recommendations
     st.subheader("💡 Recommendations")
