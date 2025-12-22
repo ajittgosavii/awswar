@@ -359,7 +359,7 @@ class ArchitectureParser:
             # Try YAML first
             try:
                 template = yaml.safe_load(content)
-            except Exception:
+            except:
                 # Try JSON
                 template = json.loads(content)
             
@@ -370,7 +370,7 @@ class ArchitectureParser:
                         service = CLOUDFORMATION_PATTERNS[resource_type]
                         services.append(service)
                         service_counts[service] = service_counts.get(service, 0) + 1
-        except json.JSONDecodeError:
+        except:
             # Fallback to pattern matching
             for pattern, service in CLOUDFORMATION_PATTERNS.items():
                 if pattern in content:
@@ -578,7 +578,7 @@ class ArchitectureAnalyzer:
                     content = file_content.decode('utf-8')
                     source_type = "text"
                     services, service_counts = ArchitectureParser.parse_text(content)
-                except Exception:
+                except:
                     content = str(file_content)
                     source_type = "binary"
                     services, service_counts = ArchitectureParser.parse_text(content)
@@ -1055,7 +1055,7 @@ def _render_waf_scores_tab(result: AnalysisResult):
             height=400
         )
         
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
         
         # Score breakdown
         st.markdown("#### Score Breakdown")

@@ -643,7 +643,7 @@ class ArchitectureDesignerAI:
                     f"{pattern_data['icon']} {pattern_data['name']}",
                     key=f"pattern_{pattern_key}",
                     type="primary" if selected else "secondary",
-                    width="stretch"
+                    use_container_width=True
                 ):
                     st.session_state.arch_design['pattern'] = pattern_key
                     st.session_state.arch_design['complexity'] = None
@@ -673,7 +673,7 @@ class ArchitectureDesignerAI:
                         f"{colors[complexity_key]} {complexity_data['name']}",
                         key=f"complexity_{complexity_key}",
                         type="primary" if selected else "secondary",
-                        width="stretch"
+                        use_container_width=True
                     ):
                         st.session_state.arch_design['complexity'] = complexity_key
                         st.session_state.arch_design['services'] = complexity_data['services'].copy()
@@ -777,7 +777,7 @@ class ArchitectureDesignerAI:
             cols = st.columns(4)
             for i, (service_key, service_name) in enumerate(sorted(available_services, key=lambda x: x[1])):
                 with cols[i % 4]:
-                    if st.button(f"➕ {service_name}", key=f"add_{service_key}", width="stretch"):
+                    if st.button(f"➕ {service_name}", key=f"add_{service_key}", use_container_width=True):
                         st.session_state.arch_design['services'].append(service_key)
                         st.rerun()
         else:
@@ -798,7 +798,7 @@ class ArchitectureDesignerAI:
         cols = st.columns(5)
         for i, (group_name, services) in enumerate(quick_adds.items()):
             with cols[i % 5]:
-                if st.button(f"➕ {group_name}", key=f"quick_{group_name}", width="stretch"):
+                if st.button(f"➕ {group_name}", key=f"quick_{group_name}", use_container_width=True):
                     for service in services:
                         if service not in st.session_state.arch_design['services']:
                             st.session_state.arch_design['services'].append(service)
@@ -876,7 +876,7 @@ class ArchitectureDesignerAI:
                 margin=dict(l=50, r=50, t=30, b=30)
             )
             
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
         
         # Get AI suggestions
         suggestions = get_ai_suggestions(pattern, complexity, requirements, current_services)
@@ -896,7 +896,7 @@ class ArchitectureDesignerAI:
                 with col2:
                     st.caption(rec['reason'])
                 with col3:
-                    if st.button("➕ Add", key=f"ai_add_{rec['service']}", width="stretch"):
+                    if st.button("➕ Add", key=f"ai_add_{rec['service']}", use_container_width=True):
                         st.session_state.arch_design['services'].append(rec['service'])
                         st.rerun()
         
@@ -914,7 +914,7 @@ class ArchitectureDesignerAI:
                     st.caption(rec['recommendation'])
                 with col3:
                     if rec['service'] not in current_services:
-                        if st.button("➕ Add", key=f"waf_add_{rec['service']}", width="stretch"):
+                        if st.button("➕ Add", key=f"waf_add_{rec['service']}", use_container_width=True):
                             st.session_state.arch_design['services'].append(rec['service'])
                             st.rerun()
         
@@ -976,7 +976,7 @@ class ArchitectureDesignerAI:
                 data=svg_content,
                 file_name=f"architecture_{pattern}.svg",
                 mime="image/svg+xml",
-                width="stretch"
+                use_container_width=True
             )
         
         with col2:
@@ -987,7 +987,7 @@ class ArchitectureDesignerAI:
                 data=cf_template,
                 file_name=f"architecture_{pattern}.yaml",
                 mime="text/yaml",
-                width="stretch"
+                use_container_width=True
             )
         
         with col3:
@@ -998,7 +998,7 @@ class ArchitectureDesignerAI:
                 data=tf_template,
                 file_name=f"architecture_{pattern}.tf",
                 mime="text/plain",
-                width="stretch"
+                use_container_width=True
             )
         
         with col4:
@@ -1015,7 +1015,7 @@ class ArchitectureDesignerAI:
                 data=arch_json,
                 file_name=f"architecture_{pattern}.json",
                 mime="application/json",
-                width="stretch"
+                use_container_width=True
             )
         
         # Service list

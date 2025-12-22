@@ -154,7 +154,7 @@ class AccountDiscovery:
             try:
                 org_info = org_client.describe_organization()
                 master_account_id = org_info['Organization']['MasterAccountId']
-            except KeyError:
+            except:
                 master_account_id = None
             
             # List all accounts with pagination
@@ -551,7 +551,7 @@ def render_auto_discovery_ui():
     with col1:
         discover_button = st.button(
             "🔍 Discover Accounts",
-            width="stretch",
+            use_container_width=True,
             disabled=not management_creds,
             type="primary"
         )
@@ -690,15 +690,15 @@ def render_discovered_accounts_table(accounts: List[Dict], management_creds: Dic
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        if st.button("✅ Select All Active", width="stretch"):
+        if st.button("✅ Select All Active", use_container_width=True):
             st.info("Check boxes above to select accounts")
     
     with col2:
-        if st.button("🏭 Production Only", width="stretch"):
+        if st.button("🏭 Production Only", use_container_width=True):
             st.info("Use Environment filter above")
     
     with col3:
-        if st.button("🔄 Clear Selection", width="stretch"):
+        if st.button("🔄 Clear Selection", use_container_width=True):
             st.rerun()
     
     # Region discovery
@@ -735,7 +735,7 @@ def render_discovered_accounts_table(accounts: List[Dict], management_creds: Dic
         st.markdown("---")
         st.markdown(f"**Ready to scan {len(selected_accounts)} accounts**")
         
-        if st.button("▶️ Start Multi-Account Scan", type="primary", width="stretch"):
+        if st.button("▶️ Start Multi-Account Scan", type="primary", use_container_width=True):
             # Auto-detect regions if needed
             if auto_detect_regions:
                 with st.spinner("🔍 Detecting active regions for each account..."):
@@ -799,7 +799,7 @@ def render_manual_entry_ui():
                 default=['us-east-1']
             )
         
-        submitted = st.form_submit_button("➕ Add Account", width="stretch")
+        submitted = st.form_submit_button("➕ Add Account", use_container_width=True)
         
         if submitted:
             if not all([account_name, account_id, role_arn, regions]):

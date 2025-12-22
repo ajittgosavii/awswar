@@ -151,7 +151,7 @@ class GlobalSidebar:
             last_refresh = SessionManager.get('last_refresh', datetime.now())
             st.caption(f"Last refresh: {last_refresh.strftime('%H:%M:%S')}")
             
-            if st.button("🔄 Refresh Now", width="stretch"):
+            if st.button("🔄 Refresh Now", use_container_width=True):
                 SessionManager.trigger_refresh()
                 st.cache_data.clear()
                 st.rerun()

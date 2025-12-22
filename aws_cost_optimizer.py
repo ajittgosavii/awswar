@@ -21,9 +21,10 @@ class AWSCostOptimizer:
         self.compute_optimizer_client = None
         try:
             self.compute_optimizer_client = session.client('compute-optimizer', region_name='us-east-1')
-        except ClientError:
+        except:
             pass  # Compute Optimizer might not be enabled
     
+    @st.cache_data(ttl=900)
     def get_rightsizing_recommendations(self) -> List[Dict]:
         """Get EC2 rightsizing recommendations from Cost Explorer"""
         recommendations = []
@@ -206,6 +207,7 @@ class AWSCostOptimizer:
         
         return recommendations
     
+    @st.cache_data(ttl=900)
     def get_all_recommendations(self) -> List[Dict]:
         """Get all cost optimization recommendations"""
         all_recommendations = []
@@ -232,12 +234,10 @@ class AWSCostOptimizer:
 
 
 @st.cache_data(ttl=900)  # 15 min cache - recommendations rarely change
-def get_cost_optimization_recommendations(_session: boto3.Session) -> List[Dict]:
+def get_cost_optimization_recommendations(session: boto3.Session) -> List[Dict]:
     """
     Main function to get cost optimization recommendations from AWS
     This replaces dummy data in Live mode
-    
-    Note: _session has underscore prefix to tell Streamlit not to hash it
     """
-    optimizer = AWSCostOptimizer(_session)
+    optimizer = AWSCostOptimizer(session)
     return optimizer.get_all_recommendations()

@@ -284,7 +284,7 @@ def render_login():
                             try:
                                 existing_user = db_manager.get_user(user_id)
                                 is_new_user = not (existing_user and isinstance(existing_user, dict))
-                            except Exception:
+                            except:
                                 is_new_user = True
                             
                             if is_new_user:
@@ -309,7 +309,7 @@ def render_login():
                                     final_user_info = db_manager.get_user(user_id)
                                     if not final_user_info:
                                         final_user_info = user_info
-                                except Exception:
+                                except:
                                     final_user_info = user_info
                             
                             # Set session state

@@ -167,7 +167,7 @@ class ComplianceModule:
             heat_data[framework] = [95, 80, 75, 50, 40]
         
         df = pd.DataFrame(heat_data)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
         
         # Priority gaps
         st.markdown("---")

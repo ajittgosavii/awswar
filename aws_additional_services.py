@@ -132,7 +132,7 @@ class DynamoDBService:
                             'creation_date': table.get('CreationDateTime'),
                             'billing_mode': table.get('BillingModeSummary', {}).get('BillingMode', 'PROVISIONED')
                         })
-                    except requests.RequestException:
+                    except:
                         pass
             
             return {

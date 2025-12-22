@@ -281,7 +281,7 @@ def get_aws_session(credentials: Optional[AWSCredentials] = None):
                 sts = session.client('sts')
                 sts.get_caller_identity()
                 return session
-            except ClientError:
+            except:
                 pass
             
             return None

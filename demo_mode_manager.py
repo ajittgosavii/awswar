@@ -664,7 +664,7 @@ def render_mode_toggle():
         if st.button(
             "🎭 Demo",
             type="primary" if demo_mgr.is_demo_mode else "secondary",
-            width="stretch",
+            use_container_width=True,
             help="Use simulated data for demonstrations"
         ):
             demo_mgr.is_demo_mode = True
@@ -674,7 +674,7 @@ def render_mode_toggle():
         if st.button(
             "🔴 Live",
             type="primary" if not demo_mgr.is_demo_mode else "secondary",
-            width="stretch",
+            use_container_width=True,
             help="Connect to real AWS accounts"
         ):
             demo_mgr.is_demo_mode = False

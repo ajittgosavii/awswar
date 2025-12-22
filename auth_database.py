@@ -121,7 +121,7 @@ class DatabaseManager:
                     'type': 'sqlite',
                     'path': db_secrets.get('db_path', 'cloudidp_users.db')
                 }
-        except requests.RequestException:
+        except:
             return {'type': 'sqlite', 'path': 'cloudidp_users.db'}
     
     def get_session(self) -> Optional[Session]:

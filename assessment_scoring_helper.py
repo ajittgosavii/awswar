@@ -54,7 +54,7 @@ def calculate_assessment_scores(assessment: Dict, questions: List) -> None:
     # Import Pillar enum
     try:
         from waf_review_module import Pillar
-    except ImportError:
+    except:
         # Fallback if import fails
         class Pillar:
             class Enum:

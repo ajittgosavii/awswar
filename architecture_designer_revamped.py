@@ -1764,22 +1764,22 @@ class ArchitectureDesignerRevamped:
         
         config = st.session_state.arch_config
         
-        # Tabs for workflow - matching EKS Modernization style
+        # Tabs for workflow
         tab1, tab2, tab3, tab4 = st.tabs([
-            "📝 Requirements & Config",
-            "🏗️ Architecture & Diagram",
-            "🔒 Security",
-            "📦 Export"
+            "📝 Requirements",
+            "🏭 Industry Template",
+            "🏗️ Architecture",
+            "📥 Export"
         ])
         
         with tab1:
             ArchitectureDesignerRevamped._render_requirements_input(config)
         
         with tab2:
-            ArchitectureDesignerRevamped._render_architecture_diagram(config)
+            ArchitectureDesignerRevamped._render_industry_templates(config)
         
         with tab3:
-            ArchitectureDesignerRevamped._render_security_tab(config)
+            ArchitectureDesignerRevamped._render_architecture_diagram(config)
         
         with tab4:
             ArchitectureDesignerRevamped._render_export(config)
@@ -2073,106 +2073,9 @@ class ArchitectureDesignerRevamped:
         return {k: min(v, 100) for k, v in scores.items()}
     
     @staticmethod
-    def _render_security_tab(config: Dict):
-        """Render security recommendations and best practices"""
-        st.markdown("### 🔒 Security Configuration")
-        
-        services = config.get('recommended_services', [])
-        compliance = config.get('compliance', [])
-        
-        if not services:
-            st.info("Configure your architecture in the Requirements tab to see security recommendations.")
-            return
-        
-        # Security Services Selection
-        st.markdown("#### 🛡️ Security Services")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**Identity & Access**")
-            use_cognito = st.checkbox("Amazon Cognito (User Authentication)", value='cognito' in services, key="sec_cognito")
-            use_iam_identity = st.checkbox("IAM Identity Center (SSO)", value=True, key="sec_iam_identity")
-            use_irsa = st.checkbox("IAM Roles for Service Accounts", value=True, key="sec_irsa")
-            
-            st.markdown("**Data Protection**")
-            use_kms = st.checkbox("AWS KMS (Encryption Keys)", value='kms' in services or True, key="sec_kms")
-            use_secrets = st.checkbox("Secrets Manager", value='secrets_manager' in services, key="sec_secrets")
-            use_macie = st.checkbox("Amazon Macie (Data Discovery)", value='macie' in services, key="sec_macie")
-        
-        with col2:
-            st.markdown("**Network Security**")
-            use_waf = st.checkbox("AWS WAF (Web Firewall)", value='waf' in services or 'alb' in services, key="sec_waf")
-            use_shield = st.checkbox("AWS Shield (DDoS Protection)", value='shield' in services, key="sec_shield")
-            use_network_firewall = st.checkbox("Network Firewall", value=False, key="sec_network_fw")
-            
-            st.markdown("**Detection & Monitoring**")
-            use_guardduty = st.checkbox("GuardDuty (Threat Detection)", value='guardduty' in services or True, key="sec_guardduty")
-            use_security_hub = st.checkbox("Security Hub (Central View)", value='security_hub' in services or True, key="sec_hub")
-            use_inspector = st.checkbox("Amazon Inspector (Vulnerability)", value='inspector' in services, key="sec_inspector")
-        
-        st.markdown("---")
-        
-        # Compliance Requirements
-        st.markdown("#### 📋 Compliance Framework")
-        
-        compliance_col1, compliance_col2, compliance_col3 = st.columns(3)
-        
-        with compliance_col1:
-            pci = st.checkbox("PCI DSS", value='pci_dss' in compliance, key="comp_pci")
-            hipaa = st.checkbox("HIPAA", value='hipaa' in compliance, key="comp_hipaa")
-        
-        with compliance_col2:
-            soc2 = st.checkbox("SOC 2", value='soc2' in compliance, key="comp_soc2")
-            gdpr = st.checkbox("GDPR", value='gdpr' in compliance, key="comp_gdpr")
-        
-        with compliance_col3:
-            fedramp = st.checkbox("FedRAMP", value='fedramp' in compliance, key="comp_fedramp")
-            iso27001 = st.checkbox("ISO 27001", value='iso27001' in compliance, key="comp_iso")
-        
-        st.markdown("---")
-        
-        # Security Best Practices
-        st.markdown("#### ✅ Security Best Practices")
-        
-        practices = [
-            ("🔐 Enable encryption at rest for all data stores", True),
-            ("🔒 Enable encryption in transit (TLS 1.2+)", True),
-            ("👤 Implement least privilege access", True),
-            ("📝 Enable CloudTrail for API logging", True),
-            ("🔍 Enable VPC Flow Logs", True),
-            ("⏰ Enable automated security patching", True),
-            ("🚫 Block public access to S3 buckets", True),
-            ("🔑 Rotate credentials automatically", True),
-        ]
-        
-        for practice, default in practices:
-            st.checkbox(practice, value=default, key=f"practice_{practice[:10]}")
-        
-        st.markdown("---")
-        
-        # Security Score
-        st.markdown("#### 📊 Security Posture Score")
-        
-        security_score = 75  # Base score
-        if use_kms: security_score += 5
-        if use_guardduty: security_score += 5
-        if use_security_hub: security_score += 5
-        if use_waf: security_score += 5
-        if use_secrets: security_score += 3
-        if use_inspector: security_score += 2
-        security_score = min(security_score, 100)
-        
-        score_color = "🟢" if security_score >= 80 else "🟡" if security_score >= 60 else "🔴"
-        st.metric("Overall Security Score", f"{score_color} {security_score}/100")
-        
-        if security_score < 80:
-            st.warning("Consider enabling additional security services to improve your score.")
-    
-    @staticmethod
     def _render_export(config: Dict):
         """Render export options"""
-        st.markdown("### 📦 Export Architecture")
+        st.markdown("### 📥 Export Architecture")
         
         services = config.get('recommended_services', [])
         if not services:
@@ -2189,7 +2092,7 @@ class ArchitectureDesignerRevamped:
                 data=cf_template,
                 file_name="architecture.yaml",
                 mime="text/yaml",
-                width="stretch"
+                use_container_width=True
             )
         
         with col2:
@@ -2200,7 +2103,7 @@ class ArchitectureDesignerRevamped:
                 data=tf_template,
                 file_name="architecture.tf",
                 mime="text/plain",
-                width="stretch"
+                use_container_width=True
             )
         
         with col3:
@@ -2216,7 +2119,7 @@ class ArchitectureDesignerRevamped:
                 data=json_export,
                 file_name="architecture.json",
                 mime="application/json",
-                width="stretch"
+                use_container_width=True
             )
     
     @staticmethod
@@ -3546,7 +3449,7 @@ module "rds" {
                 data=diagram_html,
                 file_name="optimized_architecture.html",
                 mime="text/html",
-                width="stretch"
+                use_container_width=True
             )
         
         with col2:
@@ -3845,7 +3748,7 @@ module "rds" {
                 </div>
                 """, unsafe_allow_html=True)
                 
-                if st.button(f"Select", key=f"dr_{key}", width="stretch"):
+                if st.button(f"Select", key=f"dr_{key}", use_container_width=True):
                     config['dr_strategy'] = key
                     st.rerun()
         
@@ -3986,9 +3889,9 @@ module "rds" {
         
         col1, col2 = st.columns(2)
         with col1:
-            st.download_button("📥 Download Diagram", diagram_html, "multi_region.html", "text/html", width="stretch")
+            st.download_button("📥 Download Diagram", diagram_html, "multi_region.html", "text/html", use_container_width=True)
         with col2:
-            st.download_button("📋 Export Config", json.dumps(config, indent=2, default=str), "dr_config.json", "application/json", width="stretch")
+            st.download_button("📋 Export Config", json.dumps(config, indent=2, default=str), "dr_config.json", "application/json", use_container_width=True)
     
     @staticmethod
     def _generate_mr_diagram(config: Dict) -> str:

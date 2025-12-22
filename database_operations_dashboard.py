@@ -58,7 +58,7 @@ class PerformanceOptimizer:
         col1, col2, col3 = st.columns([1, 1, 4])
         
         with col1:
-            if st.button("🔄 Refresh", key=f"refresh_{st.session_state.db_ops_session_id}", width="stretch"):
+            if st.button("🔄 Refresh", key=f"refresh_{st.session_state.db_ops_session_id}", use_container_width=True):
                 if cache_keys:
                     for key in cache_keys:
                         if key in st.session_state:
@@ -88,7 +88,7 @@ def get_anthropic_client():
         try:
             if 'anthropic' in st.secrets and 'api_key' in st.secrets['anthropic']:
                 api_key = st.secrets['anthropic']['api_key']
-        except KeyError:
+        except:
             pass
     
     if not api_key and hasattr(st, 'secrets') and 'ANTHROPIC_API_KEY' in st.secrets:
@@ -673,7 +673,7 @@ class DatabaseOperationsDashboard:
             })
         
         df = pd.DataFrame(status_data)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
         
         st.markdown("---")
         
@@ -693,7 +693,7 @@ class DatabaseOperationsDashboard:
                 names='Category',
                 color_discrete_sequence=['#10b981', '#f59e0b', '#ef4444']
             )
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             st.markdown("#### 🎯 Database Types")
@@ -709,7 +709,7 @@ class DatabaseOperationsDashboard:
                 color='Count',
                 color_continuous_scale='Blues'
             )
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
     
     # ========================================================================
     # TAB 2: RDS MONITORING
@@ -854,25 +854,25 @@ class DatabaseOperationsDashboard:
                     yaxis_title="IOPS",
                     hovermode='x unified'
                 )
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
                 
                 # Actions
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    if st.button("📊 View CloudWatch", key=f"view_cloudwatch_{st.session_state.db_ops_session_id}", width="stretch"):
+                    if st.button("📊 View CloudWatch", key=f"view_cloudwatch_{st.session_state.db_ops_session_id}", use_container_width=True):
                         st.info("Opening CloudWatch dashboard...")
                 
                 with col2:
-                    if st.button("📸 Create Snapshot", key=f"create_snapshot_{st.session_state.db_ops_session_id}", width="stretch"):
+                    if st.button("📸 Create Snapshot", key=f"create_snapshot_{st.session_state.db_ops_session_id}", use_container_width=True):
                         st.success("Snapshot initiated...")
                 
                 with col3:
-                    if st.button("🔄 Modify Instance", key=f"modify_instance_{st.session_state.db_ops_session_id}", width="stretch"):
+                    if st.button("🔄 Modify Instance", key=f"modify_instance_{st.session_state.db_ops_session_id}", use_container_width=True):
                         st.info("Opening modification wizard...")
                 
                 with col4:
-                    if st.button("⚡ Enable Auto-Fix", key=f"enable_auto_fix_{st.session_state.db_ops_session_id}", width="stretch"):
+                    if st.button("⚡ Enable Auto-Fix", key=f"enable_auto_fix_{st.session_state.db_ops_session_id}", use_container_width=True):
                         st.success("Auto-remediation enabled!")
         
         else:
@@ -1033,7 +1033,7 @@ class DatabaseOperationsDashboard:
                     })
                 
                 df = pd.DataFrame(db_sync_data)
-                st.dataframe(df, width="stretch", hide_index=True)
+                st.dataframe(df, use_container_width=True, hide_index=True)
                 
                 # Warning if lag detected
                 for db_info in cluster['databases']:
@@ -1051,19 +1051,19 @@ class DatabaseOperationsDashboard:
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    if st.button("🔄 Test Failover", key=f"test_failover_{st.session_state.db_ops_session_id}", width="stretch"):
+                    if st.button("🔄 Test Failover", key=f"test_failover_{st.session_state.db_ops_session_id}", use_container_width=True):
                         st.warning("⚠️ Failover test will cause brief interruption!")
                 
                 with col2:
-                    if st.button("🔍 Check Sync Health", key=f"check_sync_health_{st.session_state.db_ops_session_id}", width="stretch"):
+                    if st.button("🔍 Check Sync Health", key=f"check_sync_health_{st.session_state.db_ops_session_id}", use_container_width=True):
                         st.success("All nodes synchronized!")
                 
                 with col3:
-                    if st.button("⚙️ Configure AG", key=f"configure_ag_{st.session_state.db_ops_session_id}", width="stretch"):
+                    if st.button("⚙️ Configure AG", key=f"configure_ag_{st.session_state.db_ops_session_id}", use_container_width=True):
                         st.info("Opening AG configuration...")
                 
                 with col4:
-                    if st.button("📊 View Metrics", key=f"view_metrics_{st.session_state.db_ops_session_id}", width="stretch"):
+                    if st.button("📊 View Metrics", key=f"view_metrics_{st.session_state.db_ops_session_id}", use_container_width=True):
                         st.info("Opening performance metrics...")
         
         else:
@@ -1131,7 +1131,7 @@ class DatabaseOperationsDashboard:
             hovermode='x unified'
         )
         
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
         
         st.markdown("---")
         
@@ -1146,7 +1146,7 @@ class DatabaseOperationsDashboard:
         ]
         
         df = pd.DataFrame(query_data)
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
     
     # ========================================================================
     # TAB 5: AI PREDICTIONS

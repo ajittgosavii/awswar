@@ -159,7 +159,7 @@ class CarbonFootprintCalculator:
                             'size_gb': size_gb,
                             'emissions_kg': emissions_kg
                         })
-                except Exception:
+                except:
                     # Skip buckets we can't access
                     pass
             
@@ -428,7 +428,7 @@ class CarbonFootprintCalculator:
                             'size_gb': size_gb,
                             'emissions_kg': emissions_kg
                         })
-                except Exception:
+                except:
                     # Skip buckets we can't access
                     pass
             
@@ -537,7 +537,7 @@ class CarbonFootprintCalculator:
 
 
 @st.cache_data(ttl=600)  # 10 min cache for Live mode
-def get_carbon_data_from_aws(_session: boto3.Session, regions: List[str] = None) -> Dict:
+def get_carbon_data_from_aws(session: boto3.Session, regions: List[str] = None) -> Dict:
     """
     Main function to get carbon footprint data from AWS
     Supports AWS Organizations - calculates across all linked accounts
@@ -548,7 +548,7 @@ def get_carbon_data_from_aws(_session: boto3.Session, regions: List[str] = None)
     account_names = {}
     
     try:
-        org_client = _session.client('organizations', region_name='us-east-1')
+        org_client = session.client('organizations', region_name='us-east-1')
         accounts_response = org_client.list_accounts()
         
         for account in accounts_response['Accounts']:
@@ -563,17 +563,17 @@ def get_carbon_data_from_aws(_session: boto3.Session, regions: List[str] = None)
     except Exception as org_error:
         # Not using Organizations, or no permission - just use current account
         print(f"Not using Organizations or no access: {org_error}")
-        current_account = _session.client('sts').get_caller_identity()['Account']
+        current_account = session.client('sts').get_caller_identity()['Account']
         accounts_to_process = [current_account]
         account_names[current_account] = current_account
     
     # Get active regions if not specified
     if regions is None:
-        ec2 = _session.client('ec2', region_name='us-east-1')
+        ec2 = session.client('ec2', region_name='us-east-1')
         try:
             regions_response = ec2.describe_regions()
             regions = [r['RegionName'] for r in regions_response['Regions']][:5]  # Limit to 5 for performance
-        except ClientError:
+        except:
             regions = ['us-east-1']
     
     # Calculate emissions for all accounts
@@ -588,7 +588,7 @@ def get_carbon_data_from_aws(_session: boto3.Session, regions: List[str] = None)
         # For now, calculate using current session
         # (In production, you might AssumeRole into each account)
         
-        calculator = CarbonFootprintCalculator(_session)
+        calculator = CarbonFootprintCalculator(session)
         account_result = calculator.calculate_total_emissions(regions, days=30)
         
         if account_result['success']:

@@ -120,9 +120,9 @@ def scan_aws_service(session, service, region, result, status_text, account_name
                                 'description': f"Bucket '{bucket_name}' does not have versioning enabled",
                                 'pillar': 'Reliability'
                             })
-                    except ClientError:
+                    except:
                         pass
-                except ClientError:
+                except:
                     pass
             
             result['resources']['S3'] = {'count': bucket_count}
@@ -253,7 +253,7 @@ def scan_aws_service(session, service, region, result, status_text, account_name
                                 'description': f"Access key is {age_days} days old (recommend rotation every 90 days)",
                                 'pillar': 'Security'
                             })
-                except ClientError:
+                except:
                     pass
             
             result['resources']['IAM'] = {'count': user_count}
@@ -318,7 +318,7 @@ def scan_aws_service(session, service, region, result, status_text, account_name
                             'description': f"Table '{table_name}' does not have point-in-time recovery enabled",
                             'pillar': 'Reliability'
                         })
-                except requests.RequestException:
+                except:
                     pass
             
             result['resources']['DynamoDB'] = {'count': table_count}

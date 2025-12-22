@@ -117,7 +117,7 @@ def render_home_page():
     
     with col1:
         st.subheader("🚀 Get Started")
-        if st.button("Create New Assessment", type="primary", width="stretch"):
+        if st.button("Create New Assessment", type="primary", use_container_width=True):
             st.session_state.current_page = "📋 Assessments"
             st.rerun()
     
@@ -413,7 +413,7 @@ def render_settings_page():
     st.text_input("Default Region", value="us-east-1")
     
     st.subheader("API Keys")
-    st.text_input("Anthropic API Key", type="password", value="")
+    st.text_input("Anthropic API Key", type="password", value="sk-ant-***")
 
 
 # =============================================================================
