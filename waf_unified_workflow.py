@@ -1189,7 +1189,7 @@ def render_unified_waf_workflow():
             - Complete 6-pillar coverage
             """)
         
-        if st.button("🚀 Start Unified Assessment", type="primary", width="stretch"):
+        if st.button("🚀 Start Unified Assessment", type="primary", use_container_width=True):
             # Initialize
             session = st.session_state.get('aws_session') if not use_demo else None
             workflow = UnifiedWAFWorkflow(session=session, use_demo=use_demo)
@@ -1242,6 +1242,30 @@ def render_unified_waf_workflow():
                 st.metric("Medium", assessment.medium_findings)
             with col4:
                 st.metric("Low", assessment.low_findings)
+            
+            # AI/ML Detection Banner (NEW)
+            if hasattr(assessment, 'scan_result') and assessment.scan_result:
+                inventory = assessment.scan_result.inventory
+                if hasattr(inventory, 'has_ai_ml_workloads') and inventory.has_ai_ml_workloads:
+                    services_list = inventory.ai_ml_services_detected if hasattr(inventory, 'ai_ml_services_detected') else []
+                    aiml_score = assessment.scan_result.aiml_health_score if hasattr(assessment.scan_result, 'aiml_health_score') else 0
+                    
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
+                                border-radius: 10px; padding: 15px; margin: 15px 0;
+                                border-left: 4px solid #9b59b6;">
+                        <h4 style="margin: 0; color: white;">🧠 AI/ML Workloads Detected</h4>
+                        <p style="margin: 5px 0; color: #ccc;">
+                            <strong>Services:</strong> {', '.join(services_list[:5])}
+                            {f' +{len(services_list) - 5} more' if len(services_list) > 5 else ''} | 
+                            <strong>AI/ML Health:</strong> {aiml_score}/100
+                        </p>
+                        <p style="margin: 0; font-size: 0.9em; color: #888;">
+                            Key AI/ML questions will be included in the assessment. 
+                            Visit the <strong>🧠 AI Lens</strong> tab for comprehensive ML, GenAI, and Responsible AI review.
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
             
             if st.button("Continue to Auto-Detection →", type="primary"):
                 assessment = workflow.run_auto_detection(assessment)
@@ -1459,7 +1483,7 @@ def render_unified_waf_workflow():
         
         with col1:
             if PDF_AVAILABLE:
-                if st.button("📄 Generate PDF Report", width="stretch"):
+                if st.button("📄 Generate PDF Report", use_container_width=True):
                     try:
                         generator = UnifiedReportGenerator()
                         pdf_bytes = generator.generate_report(assessment)
@@ -1469,7 +1493,7 @@ def render_unified_waf_workflow():
                             data=pdf_bytes,
                             file_name=f"waf_unified_{assessment.account_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
                             mime="application/pdf",
-                            width="stretch"
+                            use_container_width=True
                         )
                     except Exception as e:
                         st.error(f"Error generating PDF: {str(e)}")
@@ -1503,7 +1527,7 @@ def render_unified_waf_workflow():
                 data=json.dumps(export_data, indent=2),
                 file_name=f"waf_unified_{assessment.account_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.json",
                 mime="application/json",
-                width="stretch"
+                use_container_width=True
             )
         
         # Reset button

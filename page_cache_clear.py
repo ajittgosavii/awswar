@@ -19,7 +19,7 @@ This will:
 
 st.markdown("---")
 
-if st.button("🔥 CLEAR EVERYTHING", type="primary", width="stretch"):
+if st.button("🔥 CLEAR EVERYTHING", type="primary", use_container_width=True):
     
     # Clear Streamlit caches
     st.cache_data.clear()

@@ -830,7 +830,7 @@ class SSOAuthManager:
                 st.session_state[cache_key] = users
                 st.session_state[cache_time_key] = datetime.now()
                 return users
-            except KeyError:
+            except:
                 pass
         
         users = self.local_store.get_all_users()
@@ -947,7 +947,7 @@ def render_initial_setup_page():
             
             st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
             
-            submitted = st.form_submit_button("Create Administrator Account", type="primary", width="stretch")
+            submitted = st.form_submit_button("Create Administrator Account", type="primary", use_container_width=True)
             
             if submitted:
                 # Validation
@@ -991,7 +991,7 @@ def render_initial_setup_page():
             ```toml
             [admin]
             email = "admin@company.com"
-            password = "<YOUR_SECURE_PASSWORD>"
+            password = "YourSecurePassword123"
             name = "Administrator"
             ```
             
@@ -1180,7 +1180,7 @@ def render_login_page():
             
             submitted = st.form_submit_button(
                 "Sign In", 
-                width="stretch", 
+                use_container_width=True, 
                 type="primary"
             )
             
@@ -1270,11 +1270,11 @@ def render_user_menu():
     
     # Quick actions
     if user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
-        if st.sidebar.button("⚙️ Admin Panel", width="stretch"):
+        if st.sidebar.button("⚙️ Admin Panel", use_container_width=True):
             st.session_state.show_admin_panel = True
             st.rerun()
     
-    if st.sidebar.button("🚪 Sign Out", width="stretch"):
+    if st.sidebar.button("🚪 Sign Out", use_container_width=True):
         SessionManager.logout()
         st.rerun()
 
@@ -1331,7 +1331,7 @@ def _render_user_management():
     col1, col2 = st.columns([2, 1])
     
     with col2:
-        if st.button("➕ Add New User", type="primary", width="stretch"):
+        if st.button("➕ Add New User", type="primary", use_container_width=True):
             st.session_state.show_add_user_form = True
     
     # Add user form
@@ -1586,7 +1586,7 @@ def _render_system_settings():
         
         ```toml
         [firebase]
-        api_key = "<YOUR_FIREBASE_API_KEY>"
+        api_key = "your-api-key"
         
         [firebase.service_account]
         type = "service_account"

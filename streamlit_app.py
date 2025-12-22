@@ -2,13 +2,7 @@
 AI-Based AWS Well-Architected Framework Advisor
 AWS-focused architecture design and assessment platform
 
-Version: 5.0.2 - Bug Fixes for Streamlit Cloud
-
 RECENT UPDATES:
-- Fixed NameError: ClientError not defined
-- Fixed KeyError in auth module loading
-- Fixed cache hashing for boto3 sessions
-- Performance optimizations with lazy loading and caching
 - Added Unified WAF Assessment (combines Scanner + Assessment workflow)
 - Integrated AI-Enhanced WAF Scanner (replaces basic scanner)
 - Quick Scan moved from WAF Assessment to WAF Scanner (as scan mode)
@@ -19,175 +13,65 @@ RECENT UPDATES:
 - Azure AD SSO Authentication with Firebase Realtime Database
 - Role-Based Access Control (RBAC)
 - Admin Panel for user management
-- Centralized logging and error handling
 """
 
 import streamlit as st
 import sys
 from datetime import datetime
+from waf_unified_workflow import render_unified_waf_workflow
 
-# Import exceptions that are used throughout the app
+# Import integrated WAF scanner (keeps all functionality + adds AI)
+from waf_scanner_integrated import render_integrated_waf_scanner
+
+# Import AI Lens module (ML, GenAI, Responsible AI lenses)
 try:
-    from botocore.exceptions import ClientError, NoCredentialsError, BotoCoreError
-except ImportError:
-    # Define fallback exception classes if botocore not installed
-    class ClientError(Exception):
-        pass
-    class NoCredentialsError(Exception):
-        pass
-    class BotoCoreError(Exception):
-        pass
+    from ai_lens_module import AILensModule, render_ai_lens_tab
+    AI_LENS_AVAILABLE = True
+except ImportError as e:
+    AI_LENS_AVAILABLE = False
+    print(f"AI Lens module not available: {e}")
 
-# ============================================================================
-# PERFORMANCE OPTIMIZATIONS - Lazy loading and caching
-# ============================================================================
-
-# Use Streamlit's native caching for expensive operations
-@st.cache_resource(ttl=300)
-def get_logger_cached(name: str):
-    """Cached logger initialization"""
-    from logging_config import get_logger
-    return get_logger(name)
-
-logger = get_logger_cached(__name__)
-
-# Lazy import functions - only load modules when actually needed
-import threading
-_module_cache = {}
-_import_lock = threading.Lock()
-
-def _lazy_import(module_name: str, func_name: str = None):
-    """Lazily import a module or function from a module - thread safe"""
-    # Fast path - module already loaded
-    if module_name in _module_cache:
-        module = _module_cache[module_name]
-        if module is None:
-            return lambda *args, **kwargs: None
-        if func_name:
-            return getattr(module, func_name, lambda *args, **kwargs: None)
-        return module
-    
-    # Slow path - need to import
-    with _import_lock:
-        # Double-check after acquiring lock
-        if module_name in _module_cache:
-            module = _module_cache[module_name]
-        else:
-            try:
-                import importlib
-                import sys
-                # Clear any partial import
-                if module_name in sys.modules:
-                    module = sys.modules[module_name]
-                else:
-                    module = importlib.import_module(module_name)
-                _module_cache[module_name] = module
-            except Exception as e:
-                print(f"Warning: Failed to import {module_name}: {e}")
-                _module_cache[module_name] = None
-                module = None
-    
-    if module is None:
-        return lambda *args, **kwargs: None
-    
-    if func_name:
-        return getattr(module, func_name, lambda *args, **kwargs: None)
-    return module
-
-# Don't import heavy modules at startup - use lazy loading
-def render_unified_waf_workflow():
-    """Lazy wrapper for unified workflow"""
-    func = _lazy_import('waf_unified_workflow', 'render_unified_waf_workflow')
-    if func:
-        return func()
-
-def render_integrated_waf_scanner():
-    """Lazy wrapper for integrated scanner"""
-    func = _lazy_import('waf_scanner_integrated', 'render_integrated_waf_scanner')
-    if func:
-        return func()
-
-def get_demo_manager():
-    """Lazy wrapper for demo manager"""
-    func = _lazy_import('demo_mode_manager', 'get_demo_manager')
-    if func:
-        return func()
-    return None
-
-def render_mode_toggle():
-    """Lazy wrapper for mode toggle"""
-    func = _lazy_import('demo_mode_manager', 'render_mode_toggle')
-    if func:
-        return func()
-
-def render_mode_banner():
-    """Lazy wrapper for mode banner"""
-    func = _lazy_import('demo_mode_manager', 'render_mode_banner')
-    if func:
-        return func()
-
-def render_demo_account_info():
-    """Lazy wrapper for demo account info"""
-    func = _lazy_import('demo_mode_manager', 'render_demo_account_info')
-    if func:
-        return func()
+# Import demo mode manager
+from demo_mode_manager import (
+    get_demo_manager, 
+    render_mode_toggle, 
+    render_mode_banner,
+    render_demo_account_info
+)
 
 
-# Performance: Initialize session state for caching (only once)
-@st.cache_resource
-def _init_app_state():
-    """One-time initialization marker"""
-    return True
-
-if not st.session_state.get('app_cache_initialized'):
-    st.session_state.app_cache_initialized = _init_app_state()
+# Performance: Initialize session state for caching
+if 'app_cache_initialized' not in st.session_state:
+    st.session_state.app_cache_initialized = True
     st.session_state.cached_accounts = None
     st.session_state.cached_identity = None
     st.session_state.last_scan_results = None
 
 # ============================================================================
-# CACHED AWS SESSION - Using Streamlit's native caching
+# PERFORMANCE OPTIMIZATIONS - Added for faster tab loading
 # ============================================================================
 
-@st.cache_resource(ttl=300, show_spinner=False)
 def get_cached_session():
-    """Get cached AWS session (5 min TTL) - uses Streamlit native caching"""
+    """Get cached AWS session from session state"""
+    if 'aws_session_cache' not in st.session_state:
+        st.session_state.aws_session_cache = None
+        st.session_state.aws_session_time = None
+    
+    # Check if session is still valid (5 min cache)
+    import time
+    if st.session_state.aws_session_cache and st.session_state.aws_session_time:
+        if time.time() - st.session_state.aws_session_time < 300:
+            return st.session_state.aws_session_cache
+    
+    # Get fresh session
     try:
         from aws_connector import get_aws_session
-        from botocore.exceptions import ClientError, NoCredentialsError
         session = get_aws_session()
-        if session:
-            # Validate session works
-            sts = session.client('sts')
-            sts.get_caller_identity()
+        st.session_state.aws_session_cache = session
+        st.session_state.aws_session_time = time.time()
         return session
-    except (ClientError, NoCredentialsError, Exception):
+    except:
         return None
-
-@st.cache_data(ttl=300, show_spinner=False)
-def get_cached_identity():
-    """Get cached AWS identity (5 min TTL)"""
-    session = get_cached_session()
-    if not session:
-        return None
-    try:
-        sts = session.client('sts')
-        return sts.get_caller_identity()
-    except Exception:
-        return None
-
-@st.cache_data(ttl=600, show_spinner=False)
-def get_cached_regions():
-    """Get cached AWS regions (10 min TTL)"""
-    session = get_cached_session()
-    if not session:
-        return ['us-east-1', 'us-west-2', 'eu-west-1', 'eu-central-1', 'ap-southeast-1']
-    try:
-        ec2 = session.client('ec2', region_name='us-east-1')
-        response = ec2.describe_regions()
-        return sorted([r['RegionName'] for r in response['Regions']])
-    except Exception:
-        return ['us-east-1', 'us-west-2', 'eu-west-1', 'eu-central-1', 'ap-southeast-1']
 
 def init_performance_cache():
     """Initialize session state for performance"""
@@ -209,39 +93,19 @@ init_performance_cache()
 # ============================================================================
 
 # ==================================================================================
-# AUTHENTICATION - Azure AD SSO + Firebase (Lazy Loading)
+# AUTHENTICATION - Azure AD SSO + Firebase (Multicloud Approach)
 # ==================================================================================
-SSO_AVAILABLE = False
-_auth_modules_loaded = False
-render_login = None
-RoleManager = None
-get_database_manager = None
-
-def _load_auth_modules():
-    """Lazily load authentication modules"""
-    global SSO_AVAILABLE, _auth_modules_loaded, render_login, RoleManager, get_database_manager
-    if _auth_modules_loaded:
-        return SSO_AVAILABLE
-    
-    try:
-        from auth_azure_sso import render_login, RoleManager
-        from auth_database_firebase import get_database_manager
-        SSO_AVAILABLE = True
-    except (ImportError, KeyError, ModuleNotFoundError) as e:
-        SSO_AVAILABLE = False
-        logger.debug(f"Authentication modules not found: {e}")
-    except Exception as e:
-        SSO_AVAILABLE = False
-        logger.debug(f"Error loading authentication modules: {e}")
-    
-    _auth_modules_loaded = True
-    return SSO_AVAILABLE
-
-# Check auth availability (lazy)
-SSO_AVAILABLE = _load_auth_modules()
+try:
+    from auth_azure_sso import render_login, RoleManager
+    from auth_database_firebase import get_database_manager
+    SSO_AVAILABLE = True
+except ImportError as e:
+    SSO_AVAILABLE = False
+    print(f"Authentication modules not found: {e}")
+    print("Running without authentication")
 
 
-# Page configuration - This MUST be the first Streamlit command
+# Page configuration
 st.set_page_config(
     page_title="AI-Based Well-Architected Framework Advisor",
     page_icon="☁️",
@@ -289,112 +153,92 @@ MODULE_STATUS = {}
 MODULE_ERRORS = {}
 
 # ============================================================================
-# LAZY MODULE LOADING - Only load modules when their tab is accessed
+# IMPORT AWS MODULES
 # ============================================================================
 
-print("Initializing module loaders...")
+print("Loading AWS modules...")
 
-# Module references (will be populated lazily)
-_lazy_modules = {}
+# Core modules
+try:
+    from aws_connector import get_aws_session, test_aws_connection
+    MODULE_STATUS['AWS Connector'] = True
+except Exception as e:
+    MODULE_STATUS['AWS Connector'] = False
+    MODULE_ERRORS['AWS Connector'] = str(e)
 
-def _get_module(module_name: str, import_from: str, class_or_func: str):
-    """
-    Lazily load a module and return a specific class or function.
-    Only imports when first called.
-    """
-    import time
-    cache_key = f"{import_from}.{class_or_func}"
-    
-    if cache_key not in _lazy_modules:
-        start_time = time.time()
-        try:
-            import importlib
-            module = importlib.import_module(import_from)
-            _lazy_modules[cache_key] = getattr(module, class_or_func)
-            MODULE_STATUS[module_name] = True
-            elapsed = time.time() - start_time
-            logger.info(f"Loaded {module_name} in {elapsed:.2f}s")
-        except Exception as e:
-            _lazy_modules[cache_key] = None
-            MODULE_STATUS[module_name] = False
-            MODULE_ERRORS[module_name] = str(e)
-            logger.error(f"Failed to load {module_name}: {e}")
-    
-    return _lazy_modules[cache_key]
+try:
+    from landscape_scanner import AWSLandscapeScanner
+    MODULE_STATUS['Landscape Scanner'] = True
+except Exception as e:
+    MODULE_STATUS['Landscape Scanner'] = False
+    MODULE_ERRORS['Landscape Scanner'] = str(e)
 
-# Pre-set module status to True (will be validated on first access)
-MODULE_STATUS['AWS Connector'] = True
-MODULE_STATUS['Landscape Scanner'] = True
-MODULE_STATUS['WAF Review'] = True
-MODULE_STATUS['Architecture Designer'] = True
-MODULE_STATUS['Compliance'] = True
-MODULE_STATUS['FinOps'] = True
-MODULE_STATUS['AI Assistant'] = True
-MODULE_STATUS['EKS Modernization'] = True
-MODULE_STATUS['EKS Modernization Legacy'] = False  # Legacy removed
+try:
+    from waf_review_module import render_waf_review_tab
+    MODULE_STATUS['WAF Review'] = True
+except Exception as e:
+    MODULE_STATUS['WAF Review'] = False
+    MODULE_ERRORS['WAF Review'] = str(e)
 
-# Lazy accessor functions - these only import when called
-def get_aws_session():
-    """Lazy import of AWS session getter"""
-    func = _get_module('AWS Connector', 'aws_connector', 'get_aws_session')
-    return func() if func else None
-
-def test_aws_connection():
-    """Lazy import of AWS connection tester"""
-    func = _get_module('AWS Connector', 'aws_connector', 'test_aws_connection')
-    return func() if func else False
-
-def get_landscape_scanner():
-    """Lazy import of Landscape Scanner"""
-    return _get_module('Landscape Scanner', 'landscape_scanner', 'AWSLandscapeScanner')
-
-def render_waf_review_tab():
-    """Lazy import and render of WAF Review tab"""
-    func = _get_module('WAF Review', 'waf_review_module', 'render_waf_review_tab')
-    if func:
-        return func()
-    else:
-        st.error("WAF Review module not available")
-
-def get_architecture_designer():
-    """Lazy import of Architecture Designer - tries revamped, AI, then legacy"""
-    # Try revamped first
-    designer = _get_module('Architecture Designer', 'architecture_designer_revamped', 'render_architecture_designer_revamped')
-    if designer:
-        return designer, 'revamped'
-    
-    # Try AI version
-    designer = _get_module('Architecture Designer', 'architecture_designer_ai', 'render_architecture_designer_ai')
-    if designer:
-        return designer, 'ai'
-    
-    # Try legacy
-    designer = _get_module('Architecture Designer', 'modules_architecture_designer_waf', 'ArchitectureDesignerModule')
-    if designer:
-        return designer, 'legacy'
-    
-    return None, None
-
-def get_compliance_module():
-    """Lazy import of Compliance Module"""
-    return _get_module('Compliance', 'compliance_module', 'ComplianceModule')
-
-def get_finops_module():
-    """Lazy import of FinOps Module"""
-    return _get_module('FinOps', 'modules_finops', 'FinOpsEnterpriseModule')
-
-def get_ai_assistant_module():
-    """Lazy import of AI Assistant Module"""
-    return _get_module('AI Assistant', 'modules_ai_assistant', 'AIAssistantModule')
-
-def get_eks_module():
-    """Lazy import of EKS Architecture Wizard Module - returns function"""
-    return _get_module('EKS Modernization', 'eks_architecture_wizard_module', 'render_eks_architecture_wizard')
-
-# Compatibility variables (set to None, will be populated on first access)
+# Try new AI-powered Architecture Designer first, fallback to old module
 ARCHITECTURE_DESIGNER_AI = False
 ARCHITECTURE_DESIGNER_REVAMPED = False
 ArchitectureDesignerModule = None
+
+try:
+    # Try the new revamped use-case based designer first
+    from architecture_designer_revamped import ArchitectureDesignerRevamped, render_architecture_designer_revamped
+    MODULE_STATUS['Architecture Designer'] = True
+    ARCHITECTURE_DESIGNER_REVAMPED = True
+except Exception as e_revamped:
+    try:
+        from architecture_designer_ai import ArchitectureDesignerAI, render_architecture_designer_ai
+        MODULE_STATUS['Architecture Designer'] = True
+        ARCHITECTURE_DESIGNER_AI = True
+    except Exception as e:
+        try:
+            from modules_architecture_designer_waf import ArchitectureDesignerModule
+            MODULE_STATUS['Architecture Designer'] = True
+            ARCHITECTURE_DESIGNER_AI = False
+        except Exception as e2:
+            MODULE_STATUS['Architecture Designer'] = False
+            MODULE_ERRORS['Architecture Designer'] = f"Revamped: {str(e_revamped)}, AI: {str(e)}, Legacy: {str(e2)}"
+            ARCHITECTURE_DESIGNER_AI = False
+
+# EKS Modernization Module - Legacy module removed for performance
+# AI-Enhanced EKS Architecture Wizard is now the only EKS module
+MODULE_STATUS['EKS Modernization Legacy'] = False  # Legacy removed
+
+try:
+    from compliance_module import ComplianceModule
+    MODULE_STATUS['Compliance'] = True
+except Exception as e:
+    MODULE_STATUS['Compliance'] = False
+    MODULE_ERRORS['Compliance'] = str(e)
+
+# FinOps / Cost Optimization Module
+try:
+    from modules_finops import FinOpsEnterpriseModule
+    MODULE_STATUS['FinOps'] = True
+except Exception as e:
+    MODULE_STATUS['FinOps'] = False
+    MODULE_ERRORS['FinOps'] = str(e)
+
+# AI Assistant Module
+try:
+    from modules_ai_assistant import AIAssistantModule
+    MODULE_STATUS['AI Assistant'] = True
+except Exception as e:
+    MODULE_STATUS['AI Assistant'] = False
+    MODULE_ERRORS['AI Assistant'] = str(e)
+
+# EKS Architecture Wizard Module (AI-Enhanced v2.0) - Replaces EKS Modernization
+try:
+    from eks_architecture_wizard_module import EKSArchitectureWizardModule, render_eks_architecture_wizard
+    MODULE_STATUS['EKS Modernization'] = True  # Use same key for compatibility
+except Exception as e:
+    MODULE_STATUS['EKS Modernization'] = False
+    MODULE_ERRORS['EKS Modernization'] = str(e)
 
 # ============================================================================
 # HEADER
@@ -612,11 +456,11 @@ def render_sidebar():
                 col_a, col_b = st.columns(2)
                 with col_a:
                     if user_role == 'admin':
-                        if st.button("⚙️ Admin", width="stretch", key="sidebar_admin_btn"):
+                        if st.button("⚙️ Admin", use_container_width=True, key="sidebar_admin_btn"):
                             st.session_state.show_admin_panel = True
                             st.rerun()
                 with col_b:
-                    if st.button("Logout", width="stretch", key="sidebar_logout_btn"):
+                    if st.button("Logout", use_container_width=True, key="sidebar_logout_btn"):
                         # Clear session state
                         st.session_state.authenticated = False
                         st.session_state.user_info = None
@@ -634,7 +478,7 @@ def render_sidebar():
             demo_selected = st.button(
                 "🎭 Demo",
                 type="primary" if demo_mgr.is_demo_mode else "secondary",
-                width="stretch",
+                use_container_width=True,
                 help="Use simulated data for demonstrations"
             )
             if demo_selected and not demo_mgr.is_demo_mode:
@@ -645,7 +489,7 @@ def render_sidebar():
             live_selected = st.button(
                 "🔴 Live",
                 type="primary" if not demo_mgr.is_demo_mode else "secondary",
-                width="stretch",
+                use_container_width=True,
                 help="Connect to real AWS accounts"
             )
             if live_selected and demo_mgr.is_demo_mode:
@@ -703,12 +547,12 @@ def render_sidebar():
                             identity = sts.get_caller_identity()
                             account_id = identity['Account']
                             st.info(f"**Account:** {account_id}")
-                        except (ClientError, Exception):
+                        except:
                             pass
                     else:
                         st.warning("⚠️ Not Connected")
                         st.info("👉 Go to AWS Connector tab")
-                except (ClientError, Exception):
+                except:
                     st.warning("⚠️ Not Connected")
             else:
                 st.markdown("#### Multi-Account")
@@ -869,7 +713,7 @@ def render_single_account_connector():
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("💾 Save & Connect", type="primary", width="stretch"):
+            if st.button("💾 Save & Connect", type="primary", use_container_width=True):
                 if aws_access_key and aws_secret_key:
                     st.session_state.aws_access_key = aws_access_key
                     st.session_state.aws_secret_key = aws_secret_key
@@ -880,7 +724,7 @@ def render_single_account_connector():
                     st.error("❌ Provide both Access Key and Secret Key")
         
         with col2:
-            if st.button("🔍 Test Connection", width="stretch"):
+            if st.button("🔍 Test Connection", use_container_width=True):
                 if aws_access_key and aws_secret_key:
                     with st.spinner("Testing connection..."):
                         try:
@@ -905,7 +749,7 @@ def render_single_account_connector():
                     st.warning("Enter credentials first")
         
         with col3:
-            if st.button("🗑️ Clear", width="stretch"):
+            if st.button("🗑️ Clear", use_container_width=True):
                 if 'aws_access_key' in st.session_state:
                     del st.session_state.aws_access_key
                 if 'aws_secret_key' in st.session_state:
@@ -983,7 +827,7 @@ def render_single_account_connector():
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("🔐 Assume Role & Connect", type="primary", width="stretch", key="assume_connect"):
+            if st.button("🔐 Assume Role & Connect", type="primary", use_container_width=True, key="assume_connect"):
                 if not (base_access_key and base_secret_key and role_arn):
                     st.error("❌ Provide base credentials and role ARN")
                 else:
@@ -1024,7 +868,7 @@ def render_single_account_connector():
                             st.error(f"❌ Error: {str(e)}")
         
         with col2:
-            if st.button("🔍 Test AssumeRole", width="stretch", key="assume_test"):
+            if st.button("🔍 Test AssumeRole", use_container_width=True, key="assume_test"):
                 if not (base_access_key and base_secret_key and role_arn):
                     st.warning("Fill in all required fields first")
                 else:
@@ -1130,7 +974,7 @@ def render_single_account_connector():
         st.markdown("**Format 1: Direct Credentials**")
         st.code("""
 # .streamlit/secrets.toml
-ANTHROPIC_API_KEY = "<YOUR_ANTHROPIC_API_KEY>"
+ANTHROPIC_API_KEY = "sk-ant-..."
 
 [aws]
 access_key_id = "AKIA..."
@@ -1141,7 +985,7 @@ default_region = "us-east-1"
         st.markdown("**Format 2: With AssumeRole**")
         st.code("""
 # .streamlit/secrets.toml
-ANTHROPIC_API_KEY = "<YOUR_ANTHROPIC_API_KEY>"
+ANTHROPIC_API_KEY = "sk-ant-..."
 
 [aws]
 # Base credentials
@@ -1223,7 +1067,7 @@ def render_multi_account_connector():
         with col3:
             acc_region = st.selectbox("Region", ["us-east-1", "us-east-2", "us-west-1", "us-west-2"], key="multi_region")
             st.write("")
-            if st.button("➕ Add Account", type="primary", width="stretch"):
+            if st.button("➕ Add Account", type="primary", use_container_width=True):
                 if acc_name and acc_access_key and acc_secret_key:
                     account = {
                         'name': acc_name,
@@ -1526,7 +1370,7 @@ def render_multi_account_connector():
             if st.session_state.selected_org_accounts:
                 st.info(f"📋 {len(st.session_state.selected_org_accounts)} account(s) selected")
                 
-                if st.button("✅ Import Selected Accounts", type="primary", width="stretch"):
+                if st.button("✅ Import Selected Accounts", type="primary", use_container_width=True):
                     # Import selected accounts
                     imported_count = 0
                     for account in st.session_state.discovered_accounts:
@@ -1654,7 +1498,7 @@ def render_demo_waf_scanner():
     st.markdown("---")
     
     # Scan button
-    if st.button("🚀 Run Demo Scan", type="primary", width="stretch"):
+    if st.button("🚀 Run Demo Scan", type="primary", use_container_width=True):
         run_demo_scan(demo_mgr, scan_mode, selected_account, demo_region, pillars)
     
     # Show sample results if available
@@ -1778,15 +1622,15 @@ def display_demo_scan_results(results):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("📄 Generate PDF Report", width="stretch"):
+        if st.button("📄 Generate PDF Report", use_container_width=True):
             st.info("📄 PDF report generation available in full version")
     
     with col2:
-        if st.button("📊 Export to Excel", width="stretch"):
+        if st.button("📊 Export to Excel", use_container_width=True):
             st.info("📊 Excel export available in full version")
     
     with col3:
-        if st.button("📋 Copy Summary", width="stretch"):
+        if st.button("📋 Copy Summary", use_container_width=True):
             st.info("📋 Summary copied to clipboard!")
 
 
@@ -1852,7 +1696,7 @@ def render_demo_pillar_scores(findings):
         title="WAF Pillar Scores"
     )
     
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
     
     # Score breakdown
     st.markdown("### 📈 Score Breakdown")
@@ -1914,7 +1758,7 @@ def render_demo_resources_tab(resources):
                  color_continuous_scale='Oranges',
                  title='Resource Distribution by Service')
     
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def render_demo_compliance_tab(compliance):
@@ -1980,7 +1824,7 @@ def render_demo_costs_tab(costs):
                  title='Cost Distribution by Service',
                  color_discrete_sequence=px.colors.sequential.Oranges)
     
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
     
     # Optimization opportunities
     st.markdown("### 💡 Optimization Opportunities")
@@ -1993,8 +1837,44 @@ def render_demo_costs_tab(costs):
         """)
         st.markdown("---")
 
-# NOTE: render_single_account_scanner and render_multi_account_scanner
-# have been removed. Use render_integrated_waf_scanner() instead.
+def render_single_account_scanner():
+    """Single account WAF scanner - DEPRECATED
+    
+    This function is deprecated. Use render_enhanced_waf_scanner() from waf_scanner_ai_enhanced.py instead.
+    The new scanner provides:
+    - AI-powered analysis
+    - Professional PDF reports  
+    - Multiple scan modes
+    - Complete WAF framework mapping
+    """
+    
+    st.warning("""
+    ⚠️ **Deprecated Scanner**
+    
+    This scanner has been replaced with the AI-Enhanced WAF Scanner.
+    Please use the **🔍 WAF Scanner** tab instead, which offers:
+    - AI-powered insights
+    - Professional PDF reports
+    - Multiple scan modes (Quick/Standard/Comprehensive)
+    - Complete WAF pillar mapping
+    """)
+    
+    return  # Exit early - old code removed (available in backup file)
+
+def render_multi_account_scanner():
+    """Multi-account WAF scanner - DEPRECATED
+    
+    This function is deprecated. Use render_enhanced_waf_scanner() from waf_scanner_ai_enhanced.py instead.
+    """
+    
+    st.warning("""
+    ⚠️ **Deprecated Scanner**
+    
+    This scanner has been replaced with the AI-Enhanced WAF Scanner.
+    Please use the **🔍 WAF Scanner** tab instead.
+    """)
+    
+    return  # Exit early - old code removed (available in backup file)
 
 def run_single_account_waf_scan(session, region, depth, pillars, account_id):
     """Execute single account WAF scan"""
@@ -2396,7 +2276,7 @@ def scan_real_aws_account(account, depth, pillars, status_text):
                     # Check encryption
                     try:
                         s3.get_bucket_encryption(Bucket=bucket['Name'])
-                    except ClientError:
+                    except:
                         total_issues += 1  # No encryption
                     
                     # Check public access
@@ -2405,9 +2285,9 @@ def scan_real_aws_account(account, depth, pillars, status_text):
                         for grant in acl['Grants']:
                             if grant.get('Grantee', {}).get('URI') == 'http://acs.amazonaws.com/groups/global/AllUsers':
                                 total_issues += 1  # Public bucket
-                    except ClientError:
+                    except:
                         pass
-                except ClientError:
+                except:
                     pass
         except Exception as e:
             result['resources']['S3'] = f"Error: {str(e)[:50]}"
@@ -2474,7 +2354,7 @@ def scan_real_aws_account(account, depth, pillars, status_text):
                         mfa_devices = iam.list_mfa_devices(UserName=user['UserName'])
                         if len(mfa_devices['MFADevices']) == 0:
                             total_issues += 1  # No MFA
-                    except ClientError:
+                    except:
                         pass
             except Exception as e:
                 result['resources']['IAM_Users'] = f"Error: {str(e)[:50]}"
@@ -2573,7 +2453,7 @@ def scan_real_aws_account(account, depth, pillars, status_text):
                     desc = dynamodb.describe_continuous_backups(TableName=table_name)
                     if desc['ContinuousBackupsDescription']['PointInTimeRecoveryDescription']['PointInTimeRecoveryStatus'] != 'ENABLED':
                         total_issues += 1
-                except KeyError:
+                except:
                     pass
         except Exception as e:
             result['resources']['DynamoDB'] = f"Error: {str(e)[:50]}"
@@ -3175,7 +3055,7 @@ def render_admin_panel_firebase():
         # Refresh button
         col1, col2 = st.columns([3, 1])
         with col2:
-            if st.button("🔄 Refresh", width="stretch"):
+            if st.button("🔄 Refresh", use_container_width=True):
                 st.rerun()
         
         # Get all users
@@ -3228,7 +3108,7 @@ def render_admin_panel_firebase():
                             label_visibility="collapsed"
                         )
                     with col2:
-                        if st.button("💾 Update Role", key=f"update_btn_{user_id}", width="stretch"):
+                        if st.button("💾 Update Role", key=f"update_btn_{user_id}", use_container_width=True):
                             if db.update_user_role(user_id, new_role):
                                 st.success(f"✅ Updated to {new_role}")
                                 st.rerun()
@@ -3301,7 +3181,7 @@ def render_admin_panel_firebase():
             if db and db.db_ref:
                 st.success("✅ Firebase Realtime Database: Connected")
                 st.caption("User data is stored in Firebase Realtime Database")
-        except Exception:
+        except:
             st.error("❌ Database connection issue")
 
 # ============================================================================
@@ -3321,6 +3201,7 @@ def render_main_content():
         "💰 Cost Optimization",
         "🚀 EKS Modernization",
         "🔒 Compliance",
+        "🧠 AI Lens",  # NEW: ML, GenAI, Responsible AI lenses
         "🤖 AI Assistant"
     ]
     
@@ -3355,91 +3236,112 @@ def render_main_content():
     
     # Tab 4: WAF Assessment (shifted from index 2 to 3)
     with tabs[3]:
-        try:
-            render_waf_review_tab()  # This is now a lazy loader
-        except Exception as e:
-            st.error(f"Error loading WAF Review: {str(e)}")
+        if MODULE_STATUS.get('WAF Review'):
+            try:
+                render_waf_review_tab()
+            except Exception as e:
+                st.error(f"Error loading WAF Review: {str(e)}")
+        else:
+            st.error("WAF Review module not available")
     
     # Tab 5: Architecture Designer (shifted from index 3 to 4)
     with tabs[4]:
-        try:
-            designer, designer_type = get_architecture_designer()
-            if designer:
-                if designer_type == 'legacy':
-                    designer.render()
+        if MODULE_STATUS.get('Architecture Designer'):
+            try:
+                # Use revamped use-case based designer first
+                if ARCHITECTURE_DESIGNER_REVAMPED:
+                    render_architecture_designer_revamped()
+                elif ARCHITECTURE_DESIGNER_AI:
+                    render_architecture_designer_ai()
+                elif ArchitectureDesignerModule is not None:
+                    ArchitectureDesignerModule.render()
                 else:
-                    designer()
-            else:
-                st.error("Architecture Designer module not available")
-                if 'Architecture Designer' in MODULE_ERRORS:
-                    st.info(f"Error: {MODULE_ERRORS['Architecture Designer']}")
-        except Exception as e:
-            st.error(f"Error loading Architecture Designer: {str(e)}")
-            import traceback
-            with st.expander("Error Details"):
-                st.code(traceback.format_exc())
+                    st.error("Architecture Designer module not properly loaded")
+            except Exception as e:
+                st.error(f"Error loading Architecture Designer: {str(e)}")
+                import traceback
+                with st.expander("Error Details"):
+                    st.code(traceback.format_exc())
+        else:
+            st.error("Architecture Designer module not available")
     
     # Tab 6: Cost Optimization (shifted from index 4 to 5)
     with tabs[5]:
-        try:
-            finops = get_finops_module()
-            if finops:
-                finops.render()
-            else:
-                st.warning("FinOps module not available")
-                st.info("Cost optimization features require the FinOps module.")
-        except Exception as e:
-            st.error(f"Error loading FinOps: {str(e)}")
-            import traceback
-            with st.expander("Error Details"):
-                st.code(traceback.format_exc())
+        if MODULE_STATUS.get('FinOps'):
+            try:
+                FinOpsEnterpriseModule.render()
+            except Exception as e:
+                st.error(f"Error loading FinOps: {str(e)}")
+                import traceback
+                with st.expander("Error Details"):
+                    st.code(traceback.format_exc())
+        else:
+            st.warning("FinOps module not available")
+            st.info("Cost optimization features require the FinOps module.")
     
     # Tab 7: EKS Modernization (shifted from index 5 to 6)
     with tabs[6]:
-        try:
-            render_eks = get_eks_module()
-            if render_eks and callable(render_eks):
-                render_eks()
-            else:
-                st.warning("EKS Modernization module not available")
-                st.info("The EKS Modernization module provides AI-powered Kubernetes architecture design.")
-                if 'EKS Modernization' in MODULE_ERRORS:
-                    with st.expander("Error Details"):
-                        st.code(MODULE_ERRORS['EKS Modernization'])
-        except Exception as e:
-            st.error(f"Error loading EKS Modernization: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
+        if MODULE_STATUS.get('EKS Modernization'):
+            try:
+                EKSArchitectureWizardModule.render()
+            except Exception as e:
+                st.error(f"Error loading EKS Modernization: {str(e)}")
+                import traceback
+                with st.expander("Error Details"):
+                    st.code(traceback.format_exc())
+        else:
+            st.warning("EKS Modernization module not available")
+            st.info("The EKS Modernization module provides AI-powered Kubernetes architecture design with Terraform/CloudFormation generation.")
     
     # Tab 8: Compliance (shifted from index 6 to 7)
     with tabs[7]:
-        try:
-            compliance = get_compliance_module()
-            if compliance:
-                compliance.render()
-            else:
-                st.warning("Compliance module not available")
-        except Exception as e:
-            st.error(f"Error loading Compliance: {str(e)}")
+        if MODULE_STATUS.get('Compliance'):
+            try:
+                ComplianceModule.render()
+            except Exception as e:
+                st.error(f"Error loading Compliance: {str(e)}")
+        else:
+            st.warning("Compliance module not available")
     
-    # Tab 9: AI Assistant (shifted from index 7 to 8)
+    # Tab 9: AI Lens (NEW - ML, GenAI, Responsible AI)
     with tabs[8]:
         try:
-            ai_assistant = get_ai_assistant_module()
-            if ai_assistant:
-                ai_assistant.render()
+            if AI_LENS_AVAILABLE:
+                render_ai_lens_tab()
             else:
-                st.warning("AI Assistant module not available")
-                st.info("AI-powered assistance requires the AI Assistant module and Anthropic API key.")
+                st.warning("AI Lens module not available")
+                st.info("""
+                **AWS Well-Architected AI Lens** provides specialized assessments for:
+                - 🧠 **Machine Learning Lens** - ML lifecycle best practices (training, deployment, monitoring)
+                - ✨ **Generative AI Lens** - LLM/Foundation model applications (prompts, RAG, safety)
+                - ⚖️ **Responsible AI Lens** - Ethical AI practices (fairness, explainability, oversight)
+                
+                The AI Lens module provides 150+ questions across all three lenses and can export
+                Custom Lens JSON for use in AWS Well-Architected Tool.
+                """)
         except Exception as e:
-            st.error(f"Error loading AI Assistant: {str(e)}")
+            st.error(f"Error loading AI Lens: {str(e)}")
             import traceback
             with st.expander("Error Details"):
                 st.code(traceback.format_exc())
     
-    # Tab 10: Admin Panel (shifted from index 8 to 9) - only for admins
-    if show_admin_tab and len(tabs) > 9:
-        with tabs[9]:
+    # Tab 10: AI Assistant (shifted from index 8 to 9)
+    with tabs[9]:
+        if MODULE_STATUS.get('AI Assistant'):
+            try:
+                AIAssistantModule.render()
+            except Exception as e:
+                st.error(f"Error loading AI Assistant: {str(e)}")
+                import traceback
+                with st.expander("Error Details"):
+                    st.code(traceback.format_exc())
+        else:
+            st.warning("AI Assistant module not available")
+            st.info("AI-powered assistance requires the AI Assistant module and Anthropic API key.")
+    
+    # Tab 11: Admin Panel (shifted from index 9 to 10) - only for admins
+    if show_admin_tab and len(tabs) > 10:
+        with tabs[10]:
             render_admin_panel_firebase()
 
 # ============================================================================

@@ -10,49 +10,10 @@ This module KEEPS all existing functionality and ADDS AI features:
 + AI-powered analysis
 + WAF pillar mapping
 + PDF report generation
-
-Version: 5.0.1 - Performance Optimized
 """
 
 # Module-level imports for caching decorators
 import streamlit as st
-
-# ============================================================================
-# CACHING FOR PERFORMANCE
-# ============================================================================
-
-@st.cache_resource(ttl=300, show_spinner=False)
-def _get_cached_aws_session():
-    """Get cached AWS session (5 min TTL)"""
-    try:
-        from aws_connector import get_aws_session
-        return get_aws_session()
-    except Exception:
-        return None
-
-@st.cache_data(ttl=300, show_spinner=False)
-def _get_cached_account_id():
-    """Get cached account ID (5 min TTL)"""
-    session = _get_cached_aws_session()
-    if not session:
-        return None
-    try:
-        sts = session.client('sts')
-        identity = sts.get_caller_identity()
-        return identity['Account']
-    except Exception:
-        return None
-
-@st.cache_data(ttl=600, show_spinner=False) 
-def _get_cached_regions():
-    """Get cached regions list (10 min TTL)"""
-    return [
-        "us-east-1", "us-east-2", "us-west-1", "us-west-2",
-        "eu-west-1", "eu-west-2", "eu-central-1",
-        "ap-southeast-1", "ap-southeast-2", "ap-northeast-1",
-        "sa-east-1", "ca-central-1"
-    ]
-
 
 def render_integrated_waf_scanner():
     """
@@ -104,19 +65,26 @@ def render_single_account_scanner_enhanced():
     Keeps original functionality + adds AI analysis
     """
     import streamlit as st
+    from aws_connector import get_aws_session
     
     st.markdown("### 📡 Single Account WAF Scan")
     st.info("🤖 **AI-Enhanced**: Scan results will include AI-powered insights, WAF pillar scores, and PDF reports")
     
-    # Check AWS connection using cached session
-    session = _get_cached_aws_session()
-    account_id = _get_cached_account_id()
-    
-    if not session or not account_id:
-        st.warning("⚠️ AWS not connected. Go to AWS Connector tab first.")
+    # Check AWS connection
+    try:
+        session = get_aws_session()
+        if not session:
+            st.warning("⚠️ AWS not connected. Go to AWS Connector tab first.")
+            return
+        
+        sts = session.client('sts')
+        identity = sts.get_caller_identity()
+        account_id = identity['Account']
+        
+        st.success(f"✅ Connected to Account: **{account_id}**")
+    except Exception as e:
+        st.error(f"❌ Could not connect to AWS: {str(e)}")
         return
-    
-    st.success(f"✅ Connected to Account: **{account_id}**")
     
     st.markdown("---")
     
@@ -129,7 +97,8 @@ def render_single_account_scanner_enhanced():
     with col1:
         scan_region = st.selectbox(
             "Region to Scan",
-            _get_cached_regions(),
+            ["us-east-1", "us-east-2", "us-west-1", "us-west-2", 
+             "eu-west-1", "eu-central-1", "ap-southeast-1", "ap-northeast-1"],
             help="AWS region to scan"
         )
     
@@ -192,7 +161,7 @@ def render_single_account_scanner_enhanced():
     col1, col2, col3 = st.columns([2, 1, 1])
     
     with col1:
-        if st.button("🚀 Start WAF Scan", type="primary", width="stretch"):
+        if st.button("🚀 Start WAF Scan", type="primary", use_container_width=True):
             # Extract scan mode
             if "Quick" in scan_depth:
                 mode = "quick"
@@ -215,14 +184,14 @@ def render_single_account_scanner_enhanced():
             )
     
     with col2:
-        if st.button("📊 View Last Scan", width="stretch"):
+        if st.button("📊 View Last Scan", use_container_width=True):
             if 'last_single_scan' in st.session_state:
                 display_enhanced_scan_results(st.session_state.last_single_scan)
             else:
                 st.info("No previous scan found")
     
     with col3:
-        if st.button("📥 Export Results", width="stretch"):
+        if st.button("📥 Export Results", use_container_width=True):
             if 'last_single_scan' in st.session_state:
                 export_scan_results(st.session_state.last_single_scan)
             else:
@@ -421,7 +390,7 @@ def render_security_hub_scanner():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        if st.button("🔍 Fetch from Security Hub", type="primary", width="stretch"):
+        if st.button("🔍 Fetch from Security Hub", type="primary", use_container_width=True):
             fetch_and_analyze_security_hub(
                 hub_region=hub_region,
                 use_hub_creds=use_hub_creds,
@@ -434,7 +403,7 @@ def render_security_hub_scanner():
             )
     
     with col2:
-        if st.button("📊 View Results", width="stretch"):
+        if st.button("📊 View Results", use_container_width=True):
             if 'security_hub_results' in st.session_state:
                 display_multi_account_results(st.session_state.security_hub_results)
             else:
@@ -610,7 +579,7 @@ def render_direct_multi_account_scanner():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        if st.button("🚀 Start Multi-Account Scan", type="primary", width="stretch"):
+        if st.button("🚀 Start Multi-Account Scan", type="primary", use_container_width=True):
             run_enhanced_multi_account_scan(
                 selected_accounts=selected_accounts,
                 scan_depth=scan_depth,
@@ -625,7 +594,7 @@ def render_direct_multi_account_scanner():
             )
     
     with col2:
-        if st.button("📊 View Results", width="stretch"):
+        if st.button("📊 View Results", use_container_width=True):
             if 'multi_scan_results' in st.session_state:
                 display_multi_account_results(st.session_state.multi_scan_results)
             else:
@@ -761,30 +730,10 @@ def fetch_and_analyze_security_hub(hub_region, use_hub_creds, severity_filter, m
         status_text.text("🔍 Querying AWS Security Hub...")
         progress_bar.progress(20)
         
-        # Import Security Hub client (avoids circular import)
-        from aws_security_hub import SecurityHubClient, SecurityHubCredentials, convert_findings_to_legacy_format
+        # Import Security Hub fetcher
+        from streamlit_app import fetch_from_security_hub
         
-        # Get credentials from session state
-        if use_hub_creds and 'multi_hub_access_key' in st.session_state:
-            creds = SecurityHubCredentials(
-                access_key=st.session_state.multi_hub_access_key,
-                secret_key=st.session_state.multi_hub_secret_key,
-                region=hub_region
-            )
-            client = SecurityHubClient(credentials=creds)
-        elif 'org_credentials' in st.session_state:
-            creds = SecurityHubCredentials(
-                access_key=st.session_state.org_credentials['access_key'],
-                secret_key=st.session_state.org_credentials['secret_key'],
-                region=hub_region
-            )
-            client = SecurityHubClient(credentials=creds)
-        else:
-            st.error("No credentials configured. Please set up hub account credentials.")
-            return
-        
-        account_findings = client.get_all_findings(severity_filter=list(severity_filter) if severity_filter else None)
-        results = convert_findings_to_legacy_format(account_findings)
+        results = fetch_from_security_hub(hub_region, use_hub_creds)
         
         if not results:
             st.error("No findings retrieved from Security Hub")
@@ -1128,6 +1077,7 @@ def get_services_by_scan_depth(depth):
         return standard_services
 
 
+@st.cache_data(ttl=300, show_spinner=False)  # 5 min cache for Live mode
 def scan_rds_service(session, region, result, status_text, account_name):
     """Scan RDS databases"""
     try:
@@ -1264,7 +1214,7 @@ def scan_iam_service(session, result, status_text, account_name):
                             'description': f"Access key is {age_days} days old (recommend rotation every 90 days)",
                             'pillar': 'Security'
                         })
-            except ClientError:
+            except:
                 pass
         
         result['resources']['IAM'] = {'count': user_count}
@@ -1340,7 +1290,7 @@ def scan_dynamodb_service(session, region, result, status_text, account_name):
                         'description': f"Table '{table_name}' does not have point-in-time recovery enabled",
                         'pillar': 'Reliability'
                     })
-            except requests.RequestException:
+            except:
                 pass
         
         result['resources']['DynamoDB'] = {'count': table_count}
@@ -1409,7 +1359,7 @@ def scan_cloudtrail_service(session, region, result, status_text, account_name):
                             'description': f"Trail '{trail_name}' exists but is not actively logging events",
                             'pillar': 'Security'
                         })
-                except requests.RequestException:
+                except:
                     pass
         
         result['resources']['CloudTrail'] = {'count': trail_count}
@@ -1447,9 +1397,9 @@ def scan_kms_service(session, region, result, status_text, account_name):
                                 'description': f"KMS key {key_data.get('KeyId')[:20]}... does not have automatic rotation enabled",
                                 'pillar': 'Security'
                             })
-                    except requests.RequestException:
+                    except:
                         pass
-            except requests.RequestException:
+            except:
                 pass
         
         result['resources']['KMS'] = {'count': key_count}
@@ -1622,7 +1572,7 @@ def scan_config_service(session, region, result, status_text, account_name):
             
             result['resources']['Config'] = {'recorders': recorder_count}
             status_text.markdown(f"🔍 **{account_name}** - AWS Config: {recorder_count} recorders")
-        except ClientError:
+        except:
             result['resources']['Config'] = {'status': 'Not enabled'}
     except Exception as e:
         result['resources']['Config'] = {'error': str(e)[:100]}
@@ -1695,7 +1645,7 @@ def scan_securityhub_service(session, region, result, status_text, account_name)
             
             result['resources']['Security Hub'] = {'enabled': True, 'failed_findings': failed_count}
             status_text.markdown(f"🔍 **{account_name}** - Security Hub: {failed_count} failed findings")
-        except requests.RequestException:
+        except:
             result['findings'].append({
                 'title': 'Security Hub not enabled',
                 'severity': 'HIGH',
@@ -2095,7 +2045,7 @@ def display_enhanced_scan_results(scan_results):
             data=scan_results['pdf_report'],
             file_name=f"waf_scan_{scan_results.get('account_id', 'report')}.pdf",
             mime="application/pdf",
-            width="stretch"
+            use_container_width=True
         )
     
     # Detailed Findings
@@ -2185,7 +2135,7 @@ def display_multi_account_results(results):
                 data=results['consolidated_pdf'],
                 file_name=f"multi_account_waf_scan_{len(results)}_accounts.pdf",
                 mime="application/pdf",
-                width="stretch"
+                use_container_width=True
             )
         
         with col2:
@@ -2209,7 +2159,7 @@ def display_multi_account_results(results):
                     data=pdf_bytes,
                     file_name=f"waf_scan_{account_id}.pdf",
                     mime="application/pdf",
-                    width="stretch",
+                    use_container_width=True,
                     key=f"pdf_download_{account_id}"
                 )
     
@@ -2227,7 +2177,7 @@ def display_multi_account_results(results):
                 data=json_data,
                 file_name=f"multi_account_scan_{len(results)}_accounts.json",
                 mime="application/json",
-                width="stretch"
+                use_container_width=True
             )
         
         with export_col2:
@@ -2262,7 +2212,7 @@ def display_multi_account_results(results):
                 data=output.getvalue(),
                 file_name=f"multi_account_scan_{len(results)}_accounts.csv",
                 mime="text/csv",
-                width="stretch"
+                use_container_width=True
             )
     
     st.markdown("---")
@@ -2313,7 +2263,7 @@ def export_scan_results(scan_results):
             data=json_data,
             file_name=f"waf_scan_{scan_results.get('account_id', 'results')}.json",
             mime="application/json",
-            width="stretch"
+            use_container_width=True
         )
     
     with col2:
@@ -2340,5 +2290,5 @@ def export_scan_results(scan_results):
                 data=output.getvalue(),
                 file_name=f"waf_scan_{scan_results.get('account_id', 'results')}.csv",
                 mime="text/csv",
-                width="stretch"
+                use_container_width=True
             )

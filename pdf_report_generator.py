@@ -480,7 +480,7 @@ def _add_action_items_section(elements, assessment, styles):
                     pillar = item.get('pillar', 'Unknown')
                     item_text = f"{idx}. <b>[{pillar}] {title}</b>"
                     elements.append(Paragraph(item_text, styles['BulletPoint']))
-                except requests.RequestException:
+                except:
                     continue
             elements.append(Spacer(1, 0.1*inch))
         
@@ -492,7 +492,7 @@ def _add_action_items_section(elements, assessment, styles):
                     pillar = item.get('pillar', 'Unknown')
                     item_text = f"{idx}. <b>[{pillar}] {title}</b>"
                     elements.append(Paragraph(item_text, styles['BulletPoint']))
-                except requests.RequestException:
+                except:
                     continue
     else:
         progress = assessment.get('progress', 0)
@@ -501,7 +501,103 @@ def _add_action_items_section(elements, assessment, styles):
         else:
             elements.append(Paragraph(f"Complete the assessment ({progress:.0f}% done) to generate action items.", styles['BodyText']))
     
+    # Add AI/ML Lens section if AI/ML workloads detected
+    _add_aiml_lens_section(elements, assessment, styles)
+    
     elements.append(PageBreak())
+
+
+def _add_aiml_lens_section(elements, assessment, styles):
+    """Add AI/ML Lens section if AI/ML workloads are detected"""
+    
+    # Check for AI/ML data in assessment
+    inventory = assessment.get('inventory', {})
+    aiml_findings = assessment.get('aiml_findings', [])
+    aiml_health_score = assessment.get('aiml_health_score', 0)
+    
+    # Handle both dict and object formats
+    if hasattr(inventory, 'has_ai_ml_workloads'):
+        has_aiml = inventory.has_ai_ml_workloads
+        services = inventory.ai_ml_services_detected if hasattr(inventory, 'ai_ml_services_detected') else []
+        sagemaker_endpoints = inventory.sagemaker_endpoints if hasattr(inventory, 'sagemaker_endpoints') else 0
+        bedrock_agents = inventory.bedrock_agents if hasattr(inventory, 'bedrock_agents') else 0
+        bedrock_guardrails = inventory.bedrock_guardrails if hasattr(inventory, 'bedrock_guardrails') else 0
+    else:
+        has_aiml = inventory.get('has_ai_ml_workloads', False)
+        services = inventory.get('ai_ml_services_detected', [])
+        sagemaker_endpoints = inventory.get('sagemaker_endpoints', 0)
+        bedrock_agents = inventory.get('bedrock_agents', 0)
+        bedrock_guardrails = inventory.get('bedrock_guardrails', 0)
+    
+    if not has_aiml:
+        return  # No AI/ML workloads, skip section
+    
+    elements.append(Spacer(1, 0.2*inch))
+    elements.append(Paragraph("AI/ML Workload Assessment", styles['SectionHeading']))
+    elements.append(Spacer(1, 0.15*inch))
+    
+    # AI/ML Health Score
+    score_status = "Healthy" if aiml_health_score >= 80 else "Needs Attention" if aiml_health_score >= 60 else "At Risk"
+    elements.append(Paragraph(f"<b>AI/ML Health Score:</b> {aiml_health_score}/100 ({score_status})", styles['BodyText']))
+    elements.append(Spacer(1, 0.1*inch))
+    
+    # Detected Services
+    if services:
+        services_str = ", ".join([s.title() for s in services[:8]])
+        elements.append(Paragraph(f"<b>Detected AI/ML Services:</b> {services_str}", styles['BodyText']))
+        elements.append(Spacer(1, 0.1*inch))
+    
+    # AI/ML Resource Summary
+    elements.append(Paragraph("<b>AI/ML Resource Summary:</b>", styles['BodyText']))
+    resource_data = [
+        ["Resource Type", "Count", "Status"],
+        ["SageMaker Endpoints", str(sagemaker_endpoints), "Active" if sagemaker_endpoints > 0 else "None"],
+        ["Bedrock Agents", str(bedrock_agents), "Active" if bedrock_agents > 0 else "None"],
+        ["Bedrock Guardrails", str(bedrock_guardrails), "Configured" if bedrock_guardrails > 0 else "Not Configured"],
+    ]
+    
+    resource_table = Table(resource_data, colWidths=[2.5*inch, 1*inch, 1.5*inch])
+    resource_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a1a2e')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f5f5f5')),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+    ]))
+    elements.append(resource_table)
+    elements.append(Spacer(1, 0.15*inch))
+    
+    # AI/ML Findings
+    if aiml_findings:
+        elements.append(Paragraph("<b>AI/ML Specific Findings:</b>", styles['BodyText']))
+        elements.append(Spacer(1, 0.05*inch))
+        
+        for finding in aiml_findings[:5]:
+            # Handle both dict and object formats
+            if hasattr(finding, 'title'):
+                title = finding.title
+                severity = finding.severity
+                service = finding.source_service
+            else:
+                title = finding.get('title', 'Finding')
+                severity = finding.get('severity', 'INFO')
+                service = finding.get('source_service', 'Unknown')
+            
+            severity_icon = {'CRITICAL': '🔴', 'HIGH': '🟠', 'MEDIUM': '🟡', 'LOW': '🟢', 'INFO': 'ℹ️'}.get(severity, '⚪')
+            elements.append(Paragraph(f"{severity_icon} <b>[{service}]</b> {title}", styles['BulletPoint']))
+        elements.append(Spacer(1, 0.1*inch))
+    
+    # AI Lens Recommendation
+    elements.append(Paragraph("<b>Recommendation:</b>", styles['BodyText']))
+    elements.append(Paragraph(
+        "Complete the comprehensive AI Lens assessment in the application to evaluate your ML, Generative AI, "
+        "and Responsible AI practices against AWS Well-Architected best practices.",
+        styles['BodyText']
+    ))
 
 
 def _add_portfolio_action_items(elements, assessment, styles, accounts):
@@ -530,7 +626,7 @@ def _add_portfolio_action_items(elements, assessment, styles, accounts):
                 pillar = item.get('pillar', 'Unknown')
                 item_text = f"{idx}. <b>[{risk}] {title}</b> - {pillar}"
                 elements.append(Paragraph(item_text, styles['BulletPoint']))
-            except requests.RequestException:
+            except:
                 continue
     
     elements.append(PageBreak())
@@ -567,7 +663,7 @@ def _add_account_deep_dives(elements, assessment, styles, accounts):
                     try:
                         title = item.get('title', 'Action Item')
                         elements.append(Paragraph(f"{idx}. {title}", styles['BulletPoint']))
-                    except requests.RequestException:
+                    except:
                         continue
         
         elements.append(PageBreak())

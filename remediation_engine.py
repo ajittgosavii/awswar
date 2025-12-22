@@ -532,7 +532,7 @@ data "aws_caller_identity" "current" {}
                 try:
                     self._rollback(result['backup_id'])
                     result['rollback'] = 'completed'
-                except KeyError:
+                except:
                     result['rollback'] = 'failed'
         
         return result
