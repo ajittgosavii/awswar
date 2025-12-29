@@ -9,7 +9,7 @@ Complete end-to-end WAF review workflow:
 5. Re-scan to verify fixes
 6. Updated scores with before/after comparison
 
-Version: 1.0.0
+Version: 1.1.0 - Updated with 195+ comprehensive questions
 Author: Enterprise WAF Scanner Team
 """
 
@@ -23,6 +23,13 @@ from enum import Enum
 import hashlib
 import time
 from io import BytesIO
+
+# Import complete 195-question database
+try:
+    from waf_questions_complete import WAF_QUESTIONS_COMPLETE
+    USE_COMPLETE_QUESTIONS = True
+except ImportError:
+    USE_COMPLETE_QUESTIONS = False
 
 # ============================================================================
 # CONSTANTS & ENUMS
@@ -176,16 +183,21 @@ class WAFReviewSession:
     score_improvement: float = 0.0
 
 # ============================================================================
-# WAF QUESTIONNAIRE DEFINITIONS
+# WAF QUESTIONNAIRE DEFINITIONS - 195+ Questions
 # ============================================================================
 
-WAF_QUESTIONS = {
-    WAFPillar.SECURITY: [
-        {
-            "id": "SEC-01",
-            "question": "How do you securely operate your workload?",
-            "description": "Operating workloads securely includes establishing security practices, detecting security events, and protecting against unauthorized access.",
-            "scan_detectable": True,
+# Use complete 195-question database if available, otherwise use fallback
+if USE_COMPLETE_QUESTIONS:
+    WAF_QUESTIONS = WAF_QUESTIONS_COMPLETE
+else:
+    # Fallback: Basic 43-question set (if waf_questions_complete.py not found)
+    WAF_QUESTIONS = {
+        WAFPillar.SECURITY: [
+            {
+                "id": "SEC-01",
+                "question": "How do you securely operate your workload?",
+                "description": "Operating workloads securely includes establishing security practices, detecting security events, and protecting against unauthorized access.",
+                "scan_detectable": True,
             "detection_services": ["IAM", "CloudTrail", "GuardDuty", "Security Hub"],
             "best_practices": [
                 "Separate workloads using accounts",
@@ -1352,18 +1364,24 @@ class WAFReviewWorkflow:
         if not self.session.responses:
             self._auto_detect_answers()
         
-        # Show progress
+        # Show progress - count correctly
         total_questions = sum(len(q) for q in WAF_QUESTIONS.values())
+        # Auto-detected = questions with auto-filled answers
+        auto_detected = len([r for r in self.session.responses if r.auto_detected and r.response])
+        # Answered = questions with any response (auto or manual)
         answered = len([r for r in self.session.responses if r.response])
-        auto_detected = len([r for r in self.session.responses if r.auto_detected])
+        # Pending = questions without answers
+        pending = total_questions - answered
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total Questions", total_questions)
         with col2:
             st.metric("Auto-Detected", auto_detected)
         with col3:
             st.metric("Answered", f"{answered}/{total_questions}")
+        with col4:
+            st.metric("Pending", pending)
         
         st.progress(answered / total_questions if total_questions > 0 else 0)
         
@@ -1414,12 +1432,9 @@ class WAFReviewWorkflow:
                         elif len(critical_high) > 0:
                             response = "partial"
                             confidence = 0.8
-                        elif len(relevant_findings) > 0:
-                            response = "partial"
-                            confidence = 0.7
                         else:
-                            response = "yes"
-                            confidence = 0.6
+                            response = "partial"  # Medium/Low findings = partial
+                            confidence = 0.7
                         
                         self.session.responses.append(QuestionResponse(
                             question_id=q['id'],
@@ -1431,28 +1446,29 @@ class WAFReviewWorkflow:
                             evidence=[f"{f.title} ({f.severity})" for f in relevant_findings[:3]]
                         ))
                     else:
-                        # No findings = likely good
+                        # No findings for this question - could NOT detect, needs manual review
                         self.session.responses.append(QuestionResponse(
                             question_id=q['id'],
                             pillar=pillar.value,
                             question_text=q['question'],
-                            response="yes",
-                            auto_detected=True,
-                            confidence=0.5,
-                            evidence=["No issues detected in scan"]
+                            response="",  # Empty - needs manual answer
+                            auto_detected=False,
+                            confidence=0.0,
+                            evidence=["No scan data available for this question"]
                         ))
                 else:
-                    # Manual question
+                    # Manual question - cannot be auto-detected
                     self.session.responses.append(QuestionResponse(
                         question_id=q['id'],
                         pillar=pillar.value,
                         question_text=q['question'],
-                        response="",
+                        response="",  # Empty - needs manual answer
                         auto_detected=False
                     ))
         
-        self.session.auto_detected_count = len([r for r in self.session.responses if r.auto_detected])
-        self.session.manual_required_count = len([r for r in self.session.responses if not r.auto_detected])
+        # Count only questions with actual auto-detected answers (non-empty)
+        self.session.auto_detected_count = len([r for r in self.session.responses if r.auto_detected and r.response])
+        self.session.manual_required_count = len([r for r in self.session.responses if not r.response])
     
     def _render_pillar_questions(self, pillar: WAFPillar):
         """Render questions for a specific pillar"""
@@ -1463,11 +1479,14 @@ class WAFReviewWorkflow:
         for q in questions:
             response = next((r for r in pillar_responses if r.question_id == q['id']), None)
             
-            with st.expander(f"**{q['id']}**: {q['question']}", expanded=not response or not response.response):
+            # Determine if question has an answer
+            has_answer = response and response.response in ["yes", "partial", "no", "not_applicable"]
+            
+            with st.expander(f"**{q['id']}**: {q['question']}", expanded=not has_answer):
                 st.markdown(f"*{q.get('description', '')}*")
                 
                 # Show auto-detection status
-                if response and response.auto_detected:
+                if response and response.auto_detected and response.response:
                     confidence_color = "green" if response.confidence > 0.7 else "orange" if response.confidence > 0.5 else "red"
                     st.markdown(f"""
                     <div style="background: #e8f5e9; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
@@ -1476,21 +1495,34 @@ class WAFReviewWorkflow:
                         <br><small>Evidence: {', '.join(response.evidence[:3])}</small>
                     </div>
                     """, unsafe_allow_html=True)
+                elif response and not response.response:
+                    st.markdown("""
+                    <div style="background: #fff3e0; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                        ⚠️ <b>Manual answer required</b> - Could not auto-detect from scan
+                    </div>
+                    """, unsafe_allow_html=True)
                 
-                # Response options
+                # Response options - include "Not answered" option
+                options = ["", "yes", "partial", "no", "not_applicable"]
+                labels = {"": "⬜ Select...", "yes": "✅ Yes", "partial": "⚠️ Partial", "no": "❌ No", "not_applicable": "➖ N/A"}
+                
                 current_response = response.response if response else ""
+                current_index = options.index(current_response) if current_response in options else 0
+                
                 new_response = st.radio(
                     "Your assessment:",
-                    ["yes", "partial", "no", "not_applicable"],
-                    index=["yes", "partial", "no", "not_applicable"].index(current_response) if current_response in ["yes", "partial", "no", "not_applicable"] else 0,
-                    format_func=lambda x: {"yes": "✅ Yes", "partial": "⚠️ Partial", "no": "❌ No", "not_applicable": "➖ N/A"}[x],
+                    options,
+                    index=current_index,
+                    format_func=lambda x: labels.get(x, x),
                     key=f"q_{q['id']}",
                     horizontal=True
                 )
                 
-                # Update response
-                if response:
+                # Update response only if changed and not empty
+                if response and new_response:
                     response.response = new_response
+                elif response and new_response == "":
+                    response.response = ""  # Clear if user selects "Select..."
                 
                 # Best practices
                 if q.get('best_practices'):
