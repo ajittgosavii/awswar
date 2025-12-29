@@ -970,7 +970,12 @@ class EnhancedWAFScanner:
         
         if self.session:
             scanner = AWSLandscapeScanner(self.session)
-            landscape = scanner.scan_all()
+            # Get region from session or use default
+            try:
+                region = self.session.region_name or 'us-east-1'
+            except:
+                region = 'us-east-1'
+            landscape = scanner.run_scan([region])
         else:
             # Use demo data
             landscape = generate_demo_assessment()
