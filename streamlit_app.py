@@ -207,7 +207,7 @@ except Exception as e_revamped:
 
 # EKS Modernization Module - Legacy module removed for performance
 # AI-Enhanced EKS Architecture Wizard is now the only EKS module
-MODULE_STATUS['EKS Modernization Legacy'] = False  # Legacy removed
+# Note: Legacy entry removed from MODULE_STATUS to avoid confusing sidebar display
 
 try:
     from compliance_module import ComplianceModule
