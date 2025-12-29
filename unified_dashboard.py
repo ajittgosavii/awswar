@@ -199,25 +199,107 @@ class DashboardDataAggregator:
         except (TypeError, ValueError):
             return 0
     
+    def _get_severity(self, finding) -> str:
+        """Get severity from a finding (dict or object)"""
+        if isinstance(finding, dict):
+            return finding.get('severity', '')
+        return getattr(finding, 'severity', '')
+    
+    def _get_pillar(self, finding) -> str:
+        """Get pillar from a finding (dict or object)"""
+        if isinstance(finding, dict):
+            return finding.get('pillar', '')
+        return getattr(finding, 'pillar', '')
+    
+    def _calculate_scores_from_findings(self, findings) -> Dict[WAFPillar, int]:
+        """Calculate WAF pillar scores based on findings severity"""
+        pillar_scores = {p: 100 for p in WAFPillar}  # Start at 100
+        
+        for finding in findings:
+            severity = self._get_severity(finding)
+            pillar_str = self._get_pillar(finding)
+            pillar = self._normalize_pillar_key(pillar_str)
+            
+            if pillar and pillar in pillar_scores:
+                # Deduct points based on severity
+                if severity == 'CRITICAL':
+                    pillar_scores[pillar] = max(0, pillar_scores[pillar] - 15)
+                elif severity == 'HIGH':
+                    pillar_scores[pillar] = max(0, pillar_scores[pillar] - 10)
+                elif severity == 'MEDIUM':
+                    pillar_scores[pillar] = max(0, pillar_scores[pillar] - 5)
+                elif severity == 'LOW':
+                    pillar_scores[pillar] = max(0, pillar_scores[pillar] - 2)
+        
+        return pillar_scores
+    
     def _collect_waf_review_data(self) -> ModuleStatus:
-        """Collect WAF Review module data"""
+        """Collect WAF Review module data - FIXED to read from waf_review_session"""
         
         findings = []
         waf_scores = {}
+        overall = 0
         
-        # Get from multi_scan_results
-        if 'multi_scan_results' in st.session_state:
+        # PRIMARY SOURCE: waf_review_session (from WAF Review Comprehensive module)
+        if 'waf_review_session' in st.session_state:
+            session = st.session_state.waf_review_session
+            
+            # Get findings from session
+            if hasattr(session, 'findings') and session.findings:
+                for f in session.findings:
+                    # Convert Finding objects to dict format
+                    if hasattr(f, 'severity'):
+                        findings.append({
+                            'severity': f.severity,
+                            'title': getattr(f, 'title', ''),
+                            'pillar': getattr(f, 'pillar', ''),
+                            'service': getattr(f, 'service', '')
+                        })
+                    elif isinstance(f, dict):
+                        findings.append(f)
+            
+            # Get pillar scores from session
+            if hasattr(session, 'pillar_scores') and session.pillar_scores:
+                for pillar_name, score_obj in session.pillar_scores.items():
+                    pillar = self._normalize_pillar_key(pillar_name)
+                    if pillar:
+                        # PillarScore has combined_score attribute
+                        if hasattr(score_obj, 'combined_score'):
+                            waf_scores[pillar] = int(score_obj.combined_score)
+                        elif hasattr(score_obj, 'score'):
+                            waf_scores[pillar] = int(score_obj.score)
+                        elif isinstance(score_obj, (int, float)):
+                            waf_scores[pillar] = int(score_obj)
+            
+            # Get overall score
+            if hasattr(session, 'overall_score') and session.overall_score:
+                overall = int(session.overall_score)
+        
+        # FALLBACK: multi_scan_results (legacy)
+        if not findings and 'multi_scan_results' in st.session_state:
             results = st.session_state.multi_scan_results
             for account_id, data in results.items():
                 if account_id != 'consolidated_pdf' and isinstance(data, dict):
                     findings.extend(data.get('findings', []))
         
-        # Get from last_findings
-        if 'last_findings' in st.session_state:
+        # FALLBACK: last_findings (legacy)
+        if not findings and 'last_findings' in st.session_state:
             findings = st.session_state.last_findings
         
-        # Get WAF scores if available - normalize to WAFPillar enum keys
-        if 'current_integrated_assessment' in st.session_state:
+        # FALLBACK: unified_assessment_results
+        if not waf_scores and 'unified_assessment_results' in st.session_state:
+            results = st.session_state.unified_assessment_results
+            if isinstance(results, dict):
+                if 'pillar_scores' in results:
+                    for p, s in results['pillar_scores'].items():
+                        pillar = self._normalize_pillar_key(p)
+                        if pillar:
+                            waf_scores[pillar] = self._extract_score(s)
+                if 'overall_score' in results:
+                    overall = int(results['overall_score'])
+        
+        # FALLBACK: current_integrated_assessment (legacy)
+        if not waf_scores and 'current_integrated_assessment' in st.session_state:
             assessment = st.session_state.current_integrated_assessment
             if hasattr(assessment, 'waf_scores'):
                 for p, s in assessment.waf_scores.items():
@@ -225,8 +307,19 @@ class DashboardDataAggregator:
                     if pillar:
                         waf_scores[pillar] = self._extract_score(s)
         
-        critical = len([f for f in findings if f.get('severity') == 'CRITICAL'])
-        high = len([f for f in findings if f.get('severity') == 'HIGH'])
+        # Count severities
+        critical = 0
+        high = 0
+        for f in findings:
+            sev = f.get('severity', '') if isinstance(f, dict) else getattr(f, 'severity', '')
+            if sev == 'CRITICAL':
+                critical += 1
+            elif sev == 'HIGH':
+                high += 1
+        
+        # FALLBACK: If no explicit scores but we have findings, calculate scores from findings
+        if not waf_scores and findings:
+            waf_scores = self._calculate_scores_from_findings(findings)
         
         # Determine health
         if critical > 0:
@@ -238,7 +331,9 @@ class DashboardDataAggregator:
         else:
             health = HealthStatus.UNKNOWN
         
-        overall = sum(waf_scores.values()) // len(waf_scores) if waf_scores else 0
+        # Calculate overall if not set but we have pillar scores
+        if not overall and waf_scores:
+            overall = sum(waf_scores.values()) // len(waf_scores)
         
         return ModuleStatus(
             module=ModuleType.WAF_REVIEW,
@@ -252,12 +347,13 @@ class DashboardDataAggregator:
         )
     
     def _collect_architecture_data(self) -> ModuleStatus:
-        """Collect Architecture Designer data"""
+        """Collect Architecture Designer data - ENHANCED to calculate scores from findings"""
         
         waf_scores = {}
         findings = []
         compliance_scores = {}
         
+        # Get explicit WAF scores if available
         if 'arch_waf_scores' in st.session_state:
             scores = st.session_state.arch_waf_scores
             for p, s in scores.items():
@@ -265,8 +361,13 @@ class DashboardDataAggregator:
                 if pillar:
                     waf_scores[pillar] = self._extract_score(s)
         
+        # Get findings
         if 'arch_findings' in st.session_state:
             findings = st.session_state.arch_findings
+        
+        # If no explicit scores but we have findings, calculate scores from findings
+        if not waf_scores and findings:
+            waf_scores = self._calculate_scores_from_findings(findings)
         
         if 'arch_compliance_scores' in st.session_state:
             scores = st.session_state.arch_compliance_scores
@@ -274,8 +375,8 @@ class DashboardDataAggregator:
                 f_name = f.value if hasattr(f, 'value') else str(f)
                 compliance_scores[f_name] = self._extract_score(s)
         
-        critical = len([f for f in findings if getattr(f, 'severity', '') == 'CRITICAL'])
-        high = len([f for f in findings if getattr(f, 'severity', '') == 'HIGH'])
+        critical = len([f for f in findings if self._get_severity(f) == 'CRITICAL'])
+        high = len([f for f in findings if self._get_severity(f) == 'HIGH'])
         
         health = HealthStatus.UNKNOWN
         if findings:
@@ -301,12 +402,13 @@ class DashboardDataAggregator:
         )
     
     def _collect_eks_data(self) -> ModuleStatus:
-        """Collect EKS Modernization data"""
+        """Collect EKS Modernization data - ENHANCED to calculate scores from findings"""
         
         waf_scores = {}
         findings = []
         compliance_scores = {}
         
+        # Get explicit WAF scores if available
         if 'eks_waf_scores' in st.session_state:
             scores = st.session_state.eks_waf_scores
             for p, s in scores.items():
@@ -314,8 +416,13 @@ class DashboardDataAggregator:
                 if pillar:
                     waf_scores[pillar] = self._extract_score(s)
         
+        # Get findings
         if 'eks_findings' in st.session_state:
             findings = st.session_state.eks_findings
+        
+        # If no explicit scores but we have findings, calculate scores from findings
+        if not waf_scores and findings:
+            waf_scores = self._calculate_scores_from_findings(findings)
         
         if 'eks_compliance_scores' in st.session_state:
             scores = st.session_state.eks_compliance_scores
@@ -323,8 +430,8 @@ class DashboardDataAggregator:
                 f_name = f.value if hasattr(f, 'value') else str(f)
                 compliance_scores[f_name] = self._extract_score(s)
         
-        critical = len([f for f in findings if getattr(f, 'severity', '') == 'CRITICAL'])
-        high = len([f for f in findings if getattr(f, 'severity', '') == 'HIGH'])
+        critical = len([f for f in findings if self._get_severity(f) == 'CRITICAL'])
+        high = len([f for f in findings if self._get_severity(f) == 'HIGH'])
         
         health = HealthStatus.UNKNOWN
         if findings:
