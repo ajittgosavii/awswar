@@ -1914,12 +1914,12 @@ Description: Remove overly permissive rules from security group {sg_id}
             
             with col2:
                 if item.status == "pending":
-                    if st.button("✅ Approve", key=f"approve_{item.finding_id}"):
+                    if st.button("✅ Approve", key=f"approve_{item.finding_id}_{item.account_id}"):
                         item.status = "approved"
                         item.approved_at = datetime.now().isoformat()
                         st.rerun()
                 elif item.status == "approved":
-                    if st.button("🚀 Deploy Now", key=f"deploy_{item.finding_id}", type="primary"):
+                    if st.button("🚀 Deploy Now", key=f"deploy_{item.finding_id}_{item.account_id}", type="primary"):
                         self._deploy_single_item(item)
                         st.rerun()
             
