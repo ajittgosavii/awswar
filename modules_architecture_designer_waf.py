@@ -89,8 +89,8 @@ class AWSEnvironmentImporter:
             
             # Run landscape scan
             with st.spinner(f"Scanning AWS environment in {region}..."):
-                scanner = AWSLandscapeScanner(session, region)
-                assessment = scanner.scan_landscape()
+                scanner = AWSLandscapeScanner(session)
+                assessment = scanner.run_scan([region])
             
             # Convert scan results to components
             components = AWSEnvironmentImporter._convert_scan_to_components(assessment, region)
