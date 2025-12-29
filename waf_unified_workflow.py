@@ -810,7 +810,7 @@ class UnifiedWAFWorkflow:
         assessment.scan_completed = True
         assessment.scan_timestamp = datetime.now()
         assessment.scan_duration_seconds = (datetime.now() - start_time).total_seconds()
-        assessment.resources = landscape.resources
+        assessment.resources = landscape.inventory  # Fixed: was landscape.resources
         assessment.findings = landscape.findings
         
         # Count findings by severity

@@ -2,10 +2,21 @@
 AI-Based AWS Well-Architected Framework Advisor
 AWS-focused architecture design and assessment platform
 
-RECENT UPDATES:
-- Added Unified WAF Assessment (combines Scanner + Assessment workflow)
-- Integrated AI-Enhanced WAF Scanner (replaces basic scanner)
-- Quick Scan moved from WAF Assessment to WAF Scanner (as scan mode)
+VERSION: 6.0.0 - Enterprise Integrated Edition
+
+LATEST UPDATES (v6.0.0):
+- NEW: Unified Security Dashboard - Single view across all modules
+- NEW: AI Remediation Engine - CloudFormation/Terraform auto-deployment
+- NEW: Integrated Architecture Designer - Full WAF + Compliance + AI Lens
+- NEW: Integrated EKS Modernization - Full WAF + Compliance + AI Lens
+- NEW: WAF Review Comprehensive - 6-step workflow with questionnaire
+- NEW: 8 Compliance Frameworks (SOC2, HIPAA, PCI-DSS, ISO 27001, CIS, GDPR, NIST, FedRAMP)
+- ENHANCED: Cross-tab data sharing via session state
+- ENHANCED: Executive summary PDF generation
+
+PREVIOUS UPDATES:
+- Unified WAF Assessment (combines Scanner + Assessment workflow)
+- Integrated AI-Enhanced WAF Scanner
 - AI-powered analysis with Claude API
 - Professional PDF report generation
 - Complete WAF framework mapping (all 6 pillars)
@@ -22,6 +33,64 @@ from waf_unified_workflow import render_unified_waf_workflow
 
 # Import integrated WAF scanner (keeps all functionality + adds AI)
 from waf_scanner_integrated import render_integrated_waf_scanner
+
+# ============================================================================
+# NEW v6.0.0 INTEGRATED MODULES
+# ============================================================================
+
+# Import Unified Dashboard
+try:
+    from unified_dashboard import render_unified_dashboard
+    UNIFIED_DASHBOARD_AVAILABLE = True
+except ImportError as e:
+    UNIFIED_DASHBOARD_AVAILABLE = False
+    print(f"Unified Dashboard not available: {e}")
+
+# Import AI Remediation Engine
+try:
+    from remediation_engine_integrated import render_remediation_engine
+    REMEDIATION_ENGINE_AVAILABLE = True
+except ImportError as e:
+    REMEDIATION_ENGINE_AVAILABLE = False
+    print(f"Remediation Engine not available: {e}")
+
+# Import Integrated Architecture Designer (WAF + Compliance + AI)
+try:
+    from architecture_designer_integrated import render_architecture_designer_integrated
+    ARCHITECTURE_INTEGRATED_AVAILABLE = True
+except ImportError as e:
+    ARCHITECTURE_INTEGRATED_AVAILABLE = False
+    print(f"Integrated Architecture Designer not available: {e}")
+
+# Import Integrated EKS Modernization (WAF + Compliance + AI)
+try:
+    from eks_modernization_integrated import render_eks_modernization_integrated
+    EKS_INTEGRATED_AVAILABLE = True
+except ImportError as e:
+    EKS_INTEGRATED_AVAILABLE = False
+    print(f"Integrated EKS Modernization not available: {e}")
+
+# Import WAF Review Comprehensive (6-step workflow)
+try:
+    from waf_review_comprehensive import render_comprehensive_waf_review
+    WAF_REVIEW_COMPREHENSIVE_AVAILABLE = True
+except ImportError as e:
+    WAF_REVIEW_COMPREHENSIVE_AVAILABLE = False
+    print(f"WAF Review Comprehensive not available: {e}")
+
+# Import AI Lens Integration Services
+try:
+    from integration_ai_compliance import (
+        UnifiedIntegrationService,
+        render_integrated_assessment,
+        get_integration_service
+    )
+    INTEGRATION_SERVICE_AVAILABLE = True
+except ImportError as e:
+    INTEGRATION_SERVICE_AVAILABLE = False
+    print(f"Integration Service not available: {e}")
+
+# ============================================================================
 
 # Import AI Lens module (ML, GenAI, Responsible AI lenses)
 try:
@@ -3193,15 +3262,17 @@ def render_main_content():
     
     # Determine which tabs to show based on user role
     base_tabs = [
-        "🔍 WAF Scanner",
+        "📊 Dashboard",           # NEW: Unified Security Dashboard
         "☁️ AWS Connector",
-        "🔗 Unified Assessment",  # NEW: Combined Scanner + Assessment workflow
+        "🔍 WAF Scanner",
+        "🔗 Unified Assessment",  # Combined Scanner + Assessment workflow
         "⚡ WAF Assessment",
         "🎨 Architecture Designer",
         "💰 Cost Optimization",
         "🚀 EKS Modernization",
         "🔒 Compliance",
-        "🧠 AI Lens",  # NEW: ML, GenAI, Responsible AI lenses
+        "🔧 Remediation",          # NEW: AI Remediation Engine
+        "🧠 AI Lens",              # ML, GenAI, Responsible AI lenses
         "🤖 AI Assistant"
     ]
     
@@ -3216,16 +3287,37 @@ def render_main_content():
     # Create tabs
     tabs = st.tabs(base_tabs)
     
-    # Tab 1: WAF Scanner
+    # Tab 0: Dashboard (NEW - Unified Security Dashboard)
     with tabs[0]:
-        render_waf_scanner_tab()
+        try:
+            if UNIFIED_DASHBOARD_AVAILABLE:
+                render_unified_dashboard()
+            else:
+                st.warning("Unified Dashboard module not available")
+                st.info("""
+                **Unified Security Dashboard** provides:
+                - Real-time WAF scores across all modules
+                - Compliance posture summary
+                - AI insights aggregation
+                - Trend tracking over time
+                - Executive summary PDF generation
+                """)
+        except Exception as e:
+            st.error(f"Error loading Dashboard: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
     
-    # Tab 2: AWS Connector
+    # Tab 1: AWS Connector
     with tabs[1]:
         render_aws_connector_tab()
     
-    # Tab 3: Unified Assessment (NEW - Combined Scanner + Assessment)
+    # Tab 2: WAF Scanner
     with tabs[2]:
+        render_waf_scanner_tab()
+    
+    # Tab 3: Unified Assessment (Combined Scanner + Assessment)
+    with tabs[3]:
         try:
             render_unified_waf_workflow()
         except Exception as e:
@@ -3234,21 +3326,29 @@ def render_main_content():
             with st.expander("Error Details"):
                 st.code(traceback.format_exc())
     
-    # Tab 4: WAF Assessment (shifted from index 2 to 3)
-    with tabs[3]:
-        if MODULE_STATUS.get('WAF Review'):
-            try:
-                render_waf_review_tab()
-            except Exception as e:
-                st.error(f"Error loading WAF Review: {str(e)}")
-        else:
-            st.error("WAF Review module not available")
-    
-    # Tab 5: Architecture Designer (shifted from index 3 to 4)
+    # Tab 4: WAF Assessment
     with tabs[4]:
-        if MODULE_STATUS.get('Architecture Designer'):
-            try:
-                # Use revamped use-case based designer first
+        try:
+            # Try comprehensive WAF Review first (6-step workflow)
+            if WAF_REVIEW_COMPREHENSIVE_AVAILABLE:
+                render_comprehensive_waf_review()
+            elif MODULE_STATUS.get('WAF Review'):
+                render_waf_review_tab()
+            else:
+                st.error("WAF Review module not available")
+        except Exception as e:
+            st.error(f"Error loading WAF Assessment: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
+    
+    # Tab 5: Architecture Designer
+    with tabs[5]:
+        try:
+            # Use integrated Architecture Designer first (WAF + Compliance + AI)
+            if ARCHITECTURE_INTEGRATED_AVAILABLE:
+                render_architecture_designer_integrated()
+            elif MODULE_STATUS.get('Architecture Designer'):
                 if ARCHITECTURE_DESIGNER_REVAMPED:
                     render_architecture_designer_revamped()
                 elif ARCHITECTURE_DESIGNER_AI:
@@ -3257,16 +3357,16 @@ def render_main_content():
                     ArchitectureDesignerModule.render()
                 else:
                     st.error("Architecture Designer module not properly loaded")
-            except Exception as e:
-                st.error(f"Error loading Architecture Designer: {str(e)}")
-                import traceback
-                with st.expander("Error Details"):
-                    st.code(traceback.format_exc())
-        else:
-            st.error("Architecture Designer module not available")
+            else:
+                st.error("Architecture Designer module not available")
+        except Exception as e:
+            st.error(f"Error loading Architecture Designer: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
     
-    # Tab 6: Cost Optimization (shifted from index 4 to 5)
-    with tabs[5]:
+    # Tab 6: Cost Optimization (FinOps)
+    with tabs[6]:
         if MODULE_STATUS.get('FinOps'):
             try:
                 FinOpsEnterpriseModule.render()
@@ -3279,22 +3379,25 @@ def render_main_content():
             st.warning("FinOps module not available")
             st.info("Cost optimization features require the FinOps module.")
     
-    # Tab 7: EKS Modernization (shifted from index 5 to 6)
-    with tabs[6]:
-        if MODULE_STATUS.get('EKS Modernization'):
-            try:
-                EKSArchitectureWizardModule.render()
-            except Exception as e:
-                st.error(f"Error loading EKS Modernization: {str(e)}")
-                import traceback
-                with st.expander("Error Details"):
-                    st.code(traceback.format_exc())
-        else:
-            st.warning("EKS Modernization module not available")
-            st.info("The EKS Modernization module provides AI-powered Kubernetes architecture design with Terraform/CloudFormation generation.")
-    
-    # Tab 8: Compliance (shifted from index 6 to 7)
+    # Tab 7: EKS Modernization
     with tabs[7]:
+        try:
+            # Use integrated EKS Modernization first (WAF + Compliance + AI)
+            if EKS_INTEGRATED_AVAILABLE:
+                render_eks_modernization_integrated()
+            elif MODULE_STATUS.get('EKS Modernization'):
+                EKSArchitectureWizardModule.render()
+            else:
+                st.warning("EKS Modernization module not available")
+                st.info("The EKS Modernization module provides AI-powered Kubernetes architecture design with Terraform/CloudFormation generation.")
+        except Exception as e:
+            st.error(f"Error loading EKS Modernization: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
+    
+    # Tab 8: Compliance
+    with tabs[8]:
         if MODULE_STATUS.get('Compliance'):
             try:
                 ComplianceModule.render()
@@ -3303,8 +3406,29 @@ def render_main_content():
         else:
             st.warning("Compliance module not available")
     
-    # Tab 9: AI Lens (NEW - ML, GenAI, Responsible AI)
-    with tabs[8]:
+    # Tab 9: Remediation (NEW - AI Remediation Engine)
+    with tabs[9]:
+        try:
+            if REMEDIATION_ENGINE_AVAILABLE:
+                render_remediation_engine()
+            else:
+                st.warning("AI Remediation Engine not available")
+                st.info("""
+                **AI Remediation Engine** provides:
+                - Automated CloudFormation/Terraform code generation
+                - One-click deployment via AWS APIs
+                - Approval workflows for high-risk changes
+                - Stack status tracking and rollback
+                - Before/after verification scanning
+                """)
+        except Exception as e:
+            st.error(f"Error loading Remediation: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
+    
+    # Tab 10: AI Lens (ML, GenAI, Responsible AI)
+    with tabs[10]:
         try:
             if AI_LENS_AVAILABLE:
                 render_ai_lens_tab()
@@ -3325,8 +3449,8 @@ def render_main_content():
             with st.expander("Error Details"):
                 st.code(traceback.format_exc())
     
-    # Tab 10: AI Assistant (shifted from index 8 to 9)
-    with tabs[9]:
+    # Tab 11: AI Assistant
+    with tabs[11]:
         if MODULE_STATUS.get('AI Assistant'):
             try:
                 AIAssistantModule.render()
@@ -3339,9 +3463,9 @@ def render_main_content():
             st.warning("AI Assistant module not available")
             st.info("AI-powered assistance requires the AI Assistant module and Anthropic API key.")
     
-    # Tab 11: Admin Panel (shifted from index 9 to 10) - only for admins
-    if show_admin_tab and len(tabs) > 10:
-        with tabs[10]:
+    # Tab 12: Admin Panel - only for admins
+    if show_admin_tab and len(tabs) > 12:
+        with tabs[12]:
             render_admin_panel_firebase()
 
 # ============================================================================
