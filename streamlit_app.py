@@ -204,9 +204,13 @@ st.set_page_config(
 if SSO_AVAILABLE:
     # Check if user is authenticated
     if not st.session_state.get('authenticated', False):
-        # Show login page and stop
+        # Show login page (this also tries to restore session from URL)
         render_login()
-        st.stop()
+        
+        # Re-check - session might have been restored by render_login
+        if not st.session_state.get('authenticated', False):
+            # Still not authenticated - stop here
+            st.stop()
     
     # User is authenticated - get user info
     current_user = st.session_state.get('user_info')

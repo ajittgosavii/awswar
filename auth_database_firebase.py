@@ -67,7 +67,8 @@ class FirebaseManager:
             
             # Get database reference
             self.db_ref = db.reference('/')
-            st.success("✅ Firebase Realtime Database connected successfully")
+            # Silent success - only log, don't show UI message every time
+            print("✅ Firebase Realtime Database connected successfully")
             
         except Exception as e:
             st.error(f"❌ Firebase connection failed: {str(e)}")

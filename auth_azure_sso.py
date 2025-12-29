@@ -55,10 +55,12 @@ def validate_firebase_session(session_id: str) -> Optional[Dict]:
         if db_manager and db_manager.db_ref:
             user_info = db_manager.validate_session(session_id)
             return user_info
+        else:
+            print("Firebase manager not available for session validation")
+            return None
     except Exception as e:
         print(f"Failed to validate Firebase session: {e}")
-    
-    return None
+        return None
 
 
 def delete_firebase_session(session_id: str) -> bool:
@@ -112,31 +114,40 @@ def check_and_restore_session() -> bool:
     Check for existing session in URL and validate against Firebase.
     Returns True if session was restored, False otherwise.
     """
-    # Check if already authenticated
-    if st.session_state.get('authenticated', False):
-        return True
-    
-    # Get session ID from URL
-    session_id = get_session_id_from_url()
-    
-    if not session_id:
-        return False
-    
-    # Validate against Firebase
-    user_info = validate_firebase_session(session_id)
-    
-    if user_info:
-        # Session is valid - restore session state
-        st.session_state.authenticated = True
-        st.session_state.user_id = user_info.get('id', '')
-        st.session_state.user_info = user_info
-        st.session_state.user_manager = SimpleUserManager()
-        st.session_state.current_session_id = session_id
+    try:
+        # Check if already authenticated
+        if st.session_state.get('authenticated', False):
+            return True
         
-        return True
-    else:
-        # Session is invalid or expired - clear it from URL
-        clear_session_from_url()
+        # Get session ID from URL
+        session_id = get_session_id_from_url()
+        
+        if not session_id:
+            return False
+        
+        # Validate against Firebase
+        user_info = validate_firebase_session(session_id)
+        
+        if user_info:
+            # Session is valid - restore session state
+            st.session_state.authenticated = True
+            st.session_state.user_id = user_info.get('id', '')
+            st.session_state.user_info = user_info
+            st.session_state.user_manager = SimpleUserManager()
+            st.session_state.current_session_id = session_id
+            
+            return True
+        else:
+            # Session is invalid or expired - clear it from URL
+            clear_session_from_url()
+            return False
+    except Exception as e:
+        # If anything goes wrong, just return False and let user login again
+        print(f"Session restore error: {e}")
+        try:
+            clear_session_from_url()
+        except:
+            pass
         return False
 
 
@@ -373,7 +384,8 @@ def render_login():
     
     # STEP 1: Try to restore session from URL token
     if check_and_restore_session():
-        # Session restored successfully - no need to show login
+        # Session restored successfully - rerun to show main app
+        st.rerun()
         return
     
     # Get Azure AD config
