@@ -988,6 +988,21 @@ class WAFReviewWorkflow:
         self.session.scan_timestamp = datetime.now()
         self.session.current_phase = ReviewPhase.QUESTIONNAIRE
         self.session.updated_at = datetime.now()
+        
+        # Update session state for dashboard - store findings immediately
+        findings_list = []
+        for f in findings:
+            if hasattr(f, '__dict__'):
+                findings_list.append({
+                    'severity': getattr(f, 'severity', 'MEDIUM'),
+                    'title': getattr(f, 'title', ''),
+                    'pillar': getattr(f, 'pillar', ''),
+                    'service': getattr(f, 'service', ''),
+                })
+            elif isinstance(f, dict):
+                findings_list.append(f)
+        st.session_state['last_findings'] = findings_list
+        
         st.rerun()
     
     def _map_service_to_pillar(self, service: str) -> str:
@@ -1543,6 +1558,9 @@ class WAFReviewWorkflow:
         if not self.session.pillar_scores:
             self._calculate_scores()
         
+        # Update session state for dashboard to read
+        self._update_dashboard_session_state()
+        
         # Overall score
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
@@ -1616,6 +1634,54 @@ class WAFReviewWorkflow:
                 self.session.current_phase = ReviewPhase.REMEDIATION
                 self.session.updated_at = datetime.now()
                 st.rerun()
+    
+    def _update_dashboard_session_state(self):
+        """Update session state keys for the unified dashboard to read"""
+        
+        # Store findings in format dashboard expects
+        findings_list = []
+        for f in self.session.findings:
+            if hasattr(f, '__dict__'):
+                findings_list.append({
+                    'severity': getattr(f, 'severity', 'MEDIUM'),
+                    'title': getattr(f, 'title', ''),
+                    'pillar': getattr(f, 'pillar', ''),
+                    'service': getattr(f, 'service', ''),
+                    'description': getattr(f, 'description', ''),
+                })
+            elif isinstance(f, dict):
+                findings_list.append(f)
+        
+        st.session_state['last_findings'] = findings_list
+        
+        # Store pillar scores in format dashboard expects
+        pillar_scores_dict = {}
+        for pillar_name, score_obj in self.session.pillar_scores.items():
+            if hasattr(score_obj, 'combined_score'):
+                pillar_scores_dict[pillar_name] = int(score_obj.combined_score)
+            elif hasattr(score_obj, 'score'):
+                pillar_scores_dict[pillar_name] = int(score_obj.score)
+            elif isinstance(score_obj, (int, float)):
+                pillar_scores_dict[pillar_name] = int(score_obj)
+        
+        # Store in unified_assessment_results for backward compatibility
+        st.session_state['unified_assessment_results'] = {
+            'overall_score': self.session.overall_score,
+            'pillar_scores': pillar_scores_dict,
+            'findings': findings_list,
+            'scan_completed': self.session.scan_completed,
+            'questionnaire_completed': self.session.questionnaire_completed,
+        }
+        
+        # Store in last_scan for backward compatibility
+        st.session_state['last_scan'] = {
+            'findings': self.session.findings,
+            'pillar_scores': self.session.pillar_scores,
+            'overall_score': self.session.overall_score,
+            'scan_time': datetime.now().isoformat(),
+            'accounts': self.session.accounts,
+            'regions': self.session.regions,
+        }
     
     def _calculate_scores(self):
         """Calculate scores for all pillars"""
