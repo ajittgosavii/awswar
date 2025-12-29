@@ -412,12 +412,23 @@ class WAFFrameworkMapper:
     }
     
     @classmethod
-    def map_finding_to_pillar(cls, finding: Finding) -> WAFPillarMapping:
-        """Map a finding to a WAF pillar with confidence score"""
+    def map_finding_to_pillar(cls, finding) -> WAFPillarMapping:
+        """Map a finding to a WAF pillar with confidence score
+        
+        Args:
+            finding: Can be a Finding object or a dict with finding data
+        """
+        
+        # Helper to get attribute from dict or object
+        def get_attr(obj, key, default=''):
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
         
         # Check if pillar is already set
-        if hasattr(finding, 'pillar') and finding.pillar:
-            pillar = finding.pillar.lower().replace(' ', '_')
+        pillar_val = get_attr(finding, 'pillar', None)
+        if pillar_val:
+            pillar = str(pillar_val).lower().replace(' ', '_')
             if pillar in cls.PILLARS:
                 return WAFPillarMapping(
                     pillar=pillar,
@@ -426,7 +437,9 @@ class WAFFrameworkMapper:
                 )
         
         # Analyze finding text for keywords
-        text = f"{finding.title} {finding.description}".lower()
+        title = get_attr(finding, 'title', '')
+        description = get_attr(finding, 'description', '')
+        text = f"{title} {description}".lower()
         
         scores = {}
         for pillar, data in cls.PILLARS.items():
@@ -453,8 +466,12 @@ class WAFFrameworkMapper:
         )
     
     @classmethod
-    def calculate_pillar_scores(cls, findings: List[Finding]) -> Dict[str, float]:
-        """Calculate WAF pillar scores based on findings"""
+    def calculate_pillar_scores(cls, findings) -> Dict[str, float]:
+        """Calculate WAF pillar scores based on findings
+        
+        Args:
+            findings: List of Finding objects or dicts
+        """
         
         # Initialize scores at 100
         scores = {pillar: 100.0 for pillar in cls.PILLARS.keys()}
@@ -464,6 +481,12 @@ class WAFFrameworkMapper:
             mapping = cls.map_finding_to_pillar(finding)
             pillar = mapping.pillar
             
+            # Get severity from dict or object
+            if isinstance(finding, dict):
+                severity = finding.get('severity', 'MEDIUM')
+            else:
+                severity = getattr(finding, 'severity', 'MEDIUM')
+            
             # Deduct points based on severity
             deduction = {
                 'CRITICAL': 15,
@@ -471,7 +494,7 @@ class WAFFrameworkMapper:
                 'MEDIUM': 5,
                 'LOW': 2,
                 'INFO': 0
-            }.get(finding.severity, 0)
+            }.get(severity, 0)
             
             scores[pillar] = max(0, scores[pillar] - deduction)
         
