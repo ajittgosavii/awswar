@@ -9,7 +9,7 @@ Complete end-to-end WAF review workflow:
 5. Re-scan to verify fixes
 6. Updated scores with before/after comparison
 
-Version: 1.1.0 - Updated with 195+ comprehensive questions
+Version: 1.2.0 - Added Save/Load progress functionality
 Author: Enterprise WAF Scanner Team
 """
 
@@ -23,6 +23,15 @@ from enum import Enum
 import hashlib
 import time
 from io import BytesIO
+
+# Import Firebase for questionnaire persistence
+try:
+    from auth_database_firebase import get_database_manager
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    FIREBASE_AVAILABLE = False
+    def get_database_manager():
+        return None
 
 # Import complete 195-question database
 try:
@@ -787,6 +796,167 @@ class WAFReviewWorkflow:
     def session(self) -> WAFReviewSession:
         return st.session_state[self.session_key]
     
+    def _get_user_id(self) -> Optional[str]:
+        """Get current user ID for Firebase storage"""
+        user_info = st.session_state.get('user_info', {})
+        return user_info.get('id') or user_info.get('email', 'anonymous')
+    
+    def save_progress(self) -> bool:
+        """Save questionnaire progress to Firebase"""
+        if not FIREBASE_AVAILABLE:
+            st.warning("⚠️ Firebase not available - progress saved locally only")
+            return False
+        
+        try:
+            db = get_database_manager()
+            if not db or not db.db_ref:
+                st.warning("⚠️ Database connection not available")
+                return False
+            
+            user_id = self._get_user_id()
+            if not user_id:
+                st.warning("⚠️ Please log in to save progress")
+                return False
+            
+            # Prepare data for saving
+            progress_data = {
+                'session_id': self.session.session_id,
+                'updated_at': datetime.now().isoformat(),
+                'current_phase': self.session.current_phase.value,
+                'scan_completed': self.session.scan_completed,
+                'questionnaire_completed': self.session.questionnaire_completed,
+                'responses': [
+                    {
+                        'question_id': r.question_id,
+                        'pillar': r.pillar,
+                        'response': r.response,
+                        'auto_detected': r.auto_detected,
+                        'confidence': r.confidence,
+                        'notes': r.notes
+                    }
+                    for r in self.session.responses
+                ],
+                'accounts': self.session.accounts,
+                'overall_score': self.session.overall_score,
+                'pillar_scores': {
+                    k: {
+                        'scan_score': v.scan_score,
+                        'questionnaire_score': v.questionnaire_score,
+                        'combined_score': v.combined_score,
+                        'findings_count': v.findings_count
+                    }
+                    for k, v in self.session.pillar_scores.items()
+                } if self.session.pillar_scores else {}
+            }
+            
+            # Save to Firebase under user's progress
+            db.db_ref.child('waf_progress').child(user_id).set(progress_data)
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Error saving progress: {str(e)}")
+            return False
+    
+    def load_progress(self) -> bool:
+        """Load saved questionnaire progress from Firebase"""
+        if not FIREBASE_AVAILABLE:
+            return False
+        
+        try:
+            db = get_database_manager()
+            if not db or not db.db_ref:
+                return False
+            
+            user_id = self._get_user_id()
+            if not user_id:
+                return False
+            
+            # Load from Firebase
+            progress_data = db.db_ref.child('waf_progress').child(user_id).get()
+            
+            if not progress_data:
+                return False
+            
+            # Restore responses
+            saved_responses = progress_data.get('responses', [])
+            if saved_responses:
+                self.session.responses = []
+                for r in saved_responses:
+                    self.session.responses.append(QuestionResponse(
+                        question_id=r.get('question_id', ''),
+                        pillar=r.get('pillar', ''),
+                        question_text='',  # Will be filled from questions database
+                        response=r.get('response', ''),
+                        auto_detected=r.get('auto_detected', False),
+                        confidence=r.get('confidence', 0.0),
+                        notes=r.get('notes', '')
+                    ))
+            
+            # Restore other state
+            phase_value = progress_data.get('current_phase', 'setup')
+            for phase in ReviewPhase:
+                if phase.value == phase_value:
+                    self.session.current_phase = phase
+                    break
+            
+            self.session.scan_completed = progress_data.get('scan_completed', False)
+            self.session.questionnaire_completed = progress_data.get('questionnaire_completed', False)
+            self.session.accounts = progress_data.get('accounts', [])
+            self.session.overall_score = progress_data.get('overall_score', 0.0)
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error loading progress: {e}")
+            return False
+    
+    def has_saved_progress(self) -> Tuple[bool, Optional[str]]:
+        """Check if user has saved progress"""
+        if not FIREBASE_AVAILABLE:
+            return False, None
+        
+        try:
+            db = get_database_manager()
+            if not db or not db.db_ref:
+                return False, None
+            
+            user_id = self._get_user_id()
+            if not user_id:
+                return False, None
+            
+            progress_data = db.db_ref.child('waf_progress').child(user_id).get()
+            
+            if progress_data:
+                updated_at = progress_data.get('updated_at', '')
+                responses_count = len(progress_data.get('responses', []))
+                answered = len([r for r in progress_data.get('responses', []) if r.get('response')])
+                return True, f"Last saved: {updated_at[:16]} ({answered} answers)"
+            
+            return False, None
+            
+        except Exception:
+            return False, None
+    
+    def clear_saved_progress(self) -> bool:
+        """Clear saved progress from Firebase"""
+        if not FIREBASE_AVAILABLE:
+            return False
+        
+        try:
+            db = get_database_manager()
+            if not db or not db.db_ref:
+                return False
+            
+            user_id = self._get_user_id()
+            if not user_id:
+                return False
+            
+            db.db_ref.child('waf_progress').child(user_id).delete()
+            return True
+            
+        except Exception:
+            return False
+    
     def render(self):
         """Render the complete WAF Review workflow"""
         
@@ -1448,7 +1618,26 @@ class WAFReviewWorkflow:
         Questions that can be auto-detected from scan results are pre-filled.
         """)
         
-        # Auto-detect answers from findings
+        # Check for saved progress
+        has_saved, saved_info = self.has_saved_progress()
+        if has_saved and not self.session.responses:
+            st.info(f"📂 **Saved progress found!** {saved_info}")
+            col_restore, col_new = st.columns(2)
+            with col_restore:
+                if st.button("📥 Restore Saved Progress", type="primary", use_container_width=True):
+                    if self.load_progress():
+                        st.success("✅ Progress restored!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Could not restore progress")
+            with col_new:
+                if st.button("🆕 Start Fresh", use_container_width=True):
+                    self.clear_saved_progress()
+                    self._auto_detect_answers()
+                    st.rerun()
+            st.markdown("---")
+        
+        # Auto-detect answers from findings (if no responses yet)
         if not self.session.responses:
             self._auto_detect_answers()
         
@@ -1484,18 +1673,32 @@ class WAFReviewWorkflow:
         
         st.markdown("---")
         
-        # Navigation
+        # Navigation with Save button
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
-            if st.button("⬅️ Back to Scan Results"):
+            if st.button("⬅️ Back to Scan Results", use_container_width=True):
                 self.session.current_phase = ReviewPhase.SCANNING
                 st.rerun()
+        with col2:
+            # Save Progress button
+            if st.button("💾 Save Progress", use_container_width=True, type="secondary"):
+                if self.save_progress():
+                    st.success("✅ Progress saved! You can continue later.")
+                    time.sleep(1)
+                    st.rerun()
         with col3:
-            if st.button("▶️ Calculate Scores", type="primary"):
+            if st.button("▶️ Calculate Scores", type="primary", use_container_width=True):
+                # Auto-save before moving to next phase
+                self.save_progress()
                 self.session.questionnaire_completed = True
                 self.session.current_phase = ReviewPhase.SCORING
                 self.session.updated_at = datetime.now()
                 st.rerun()
+        
+        # Show last saved info
+        has_saved, saved_info = self.has_saved_progress()
+        if has_saved:
+            st.caption(f"💾 {saved_info}")
     
     def _auto_detect_answers(self):
         """Auto-detect questionnaire answers from scan findings"""
