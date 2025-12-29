@@ -221,6 +221,48 @@ if 'initialized' not in st.session_state:
 MODULE_STATUS = {}
 MODULE_ERRORS = {}
 
+
+def _clear_assessment_data():
+    """Clear all assessment data when switching between Demo/Live modes.
+    This prevents stale data from appearing in the dashboard.
+    """
+    keys_to_clear = [
+        # WAF Review data
+        'waf_review_session',
+        'last_findings',
+        'last_scan',
+        'unified_assessment_results',
+        'multi_scan_results',
+        
+        # Architecture Designer data
+        'arch_findings',
+        'arch_waf_scores',
+        'arch_compliance_scores',
+        'arch_services',
+        'arch_config',
+        'arch_design',
+        
+        # EKS Modernization data
+        'eks_findings',
+        'eks_waf_scores',
+        'eks_compliance_scores',
+        'eks_workloads',
+        'eks_config',
+        
+        # Dashboard snapshots (for trending)
+        'dashboard_snapshots',
+        
+        # Scan results
+        'scan_results',
+        'current_scan',
+        'single_scan_results',
+    ]
+    
+    for key in keys_to_clear:
+        if key in st.session_state:
+            del st.session_state[key]
+
+
 # ============================================================================
 # IMPORT AWS MODULES
 # ============================================================================
@@ -560,6 +602,8 @@ def render_sidebar():
             )
             if demo_selected and not demo_mgr.is_demo_mode:
                 demo_mgr.is_demo_mode = True
+                # Clear stale live data when switching to Demo mode
+                _clear_assessment_data()
                 st.rerun()
         
         with col2:
@@ -571,6 +615,8 @@ def render_sidebar():
             )
             if live_selected and demo_mgr.is_demo_mode:
                 demo_mgr.is_demo_mode = False
+                # Clear demo data when switching to Live mode
+                _clear_assessment_data()
                 st.rerun()
         
         # Mode description
