@@ -1859,13 +1859,13 @@ Description: Remove overly permissive rules from security group {sg_id}
     # ========================================================================
     
     def _render_complete_phase(self):
-        """Render completion phase with final report"""
+        """Render completion phase with final report and navigation to WAF Assessment"""
         
         st.markdown("""
         <div style="background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%); 
                     padding: 30px; border-radius: 15px; text-align: center; color: white;">
-            <h1>🎉 WAF Review Complete!</h1>
-            <p>Your Well-Architected Framework review has been completed successfully.</p>
+            <h1>🎉 Unified Assessment Complete!</h1>
+            <p>Your assessment is ready. Proceed to WAF Assessment for detailed analysis and remediation.</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1883,6 +1883,71 @@ Description: Remove overly permissive rules from security group {sg_id}
         with col4:
             deployed = len([r for r in self.session.remediation_items if r.status == "deployed"])
             st.metric("Fixes Deployed", deployed)
+        
+        st.markdown("---")
+        
+        # Store assessment data for WAF Assessment tab
+        assessment_data = {
+            'session_id': self.session.session_id,
+            'completed_at': datetime.now().isoformat(),
+            'accounts': self.session.accounts,
+            'regions': self.session.regions,
+            'findings': [vars(f) if hasattr(f, '__dict__') else f for f in self.session.findings],
+            'pillar_scores': {k: vars(v) if hasattr(v, '__dict__') else v for k, v in self.session.pillar_scores.items()},
+            'overall_score': self.session.overall_score,
+            'initial_score': self.session.initial_score,
+            'final_score': self.session.final_score,
+            'score_improvement': self.session.score_improvement,
+            'questionnaire_responses': [vars(r) if hasattr(r, '__dict__') else r for r in self.session.responses],
+            'remediation_items': [vars(r) if hasattr(r, '__dict__') else r for r in self.session.remediation_items],
+            'resources_scanned': self.session.resources_scanned,
+            'services_scanned': self.session.services_scanned,
+        }
+        
+        # Store in session state for other tabs to access
+        st.session_state['unified_assessment_results'] = assessment_data
+        st.session_state['last_scan'] = {
+            'findings': self.session.findings,
+            'pillar_scores': self.session.pillar_scores,
+            'overall_score': self.session.overall_score,
+            'scan_time': datetime.now().isoformat(),
+            'accounts': self.session.accounts,
+            'regions': self.session.regions,
+        }
+        
+        # Navigation options
+        st.markdown("### 🚀 Next Steps")
+        
+        st.info("""
+        **Recommended Flow:**
+        1. **WAF Assessment** - View detailed pillar analysis and recommendations
+        2. **Remediation** - Deploy fixes for identified issues  
+        3. **Compliance** - Map findings to compliance frameworks
+        4. **AI Lens** - Get AI-powered insights and optimization suggestions
+        """)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("📊 Go to WAF Assessment", type="primary", use_container_width=True):
+                # Navigate to WAF Assessment tab
+                st.session_state['active_tab'] = 'WAF Assessment'
+                st.session_state['navigate_to'] = 'waf_assessment'
+                st.rerun()
+        
+        with col2:
+            if st.button("🔧 Go to Remediation", use_container_width=True):
+                # Navigate to Remediation tab
+                st.session_state['active_tab'] = 'Remediation'
+                st.session_state['navigate_to'] = 'remediation'
+                st.rerun()
+        
+        with col3:
+            if st.button("🤖 Go to AI Lens", use_container_width=True):
+                # Navigate to AI Lens tab
+                st.session_state['active_tab'] = 'AI Lens'
+                st.session_state['navigate_to'] = 'ai_lens'
+                st.rerun()
         
         st.markdown("---")
         
@@ -1908,7 +1973,7 @@ Description: Remove overly permissive rules from security group {sg_id}
         # Start new review
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            if st.button("🔄 Start New WAF Review", use_container_width=True):
+            if st.button("🔄 Start New Unified Assessment", use_container_width=True):
                 # Reset session
                 st.session_state[self.session_key] = WAFReviewSession(
                     session_id=hashlib.md5(str(datetime.now()).encode()).hexdigest()[:12],
