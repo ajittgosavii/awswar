@@ -27,14 +27,28 @@ from enum import Enum
 import json
 import hashlib
 
-# Import existing modules
+# Import existing modules with error handling
+AWS_CONNECTOR_OK = False
+LANDSCAPE_SCANNER_OK = False
+COMPLIANCE_OK = False
+
 try:
     from aws_connector import get_aws_session, test_aws_connection
-    from landscape_scanner import Finding as ScannerFinding, LandscapeAssessment
-    from compliance_module import COMPLIANCE_FRAMEWORKS
-except ImportError:
-    # Fallback for development
+    AWS_CONNECTOR_OK = True
+except (ImportError, KeyError):
     pass
+
+try:
+    from landscape_scanner import Finding as ScannerFinding, LandscapeAssessment
+    LANDSCAPE_SCANNER_OK = True
+except (ImportError, KeyError):
+    pass
+
+try:
+    from compliance_module import COMPLIANCE_FRAMEWORKS
+    COMPLIANCE_OK = True
+except (ImportError, KeyError):
+    COMPLIANCE_FRAMEWORKS = {}
 
 # ============================================================================
 # CORE DATA MODELS
