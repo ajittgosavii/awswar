@@ -195,11 +195,25 @@ class DashboardDataAggregator:
         if 'last_findings' in st.session_state:
             findings = st.session_state.last_findings
         
-        # Get WAF scores if available
+        # Get WAF scores if available - convert to standard format
         if 'current_integrated_assessment' in st.session_state:
             assessment = st.session_state.current_integrated_assessment
             if hasattr(assessment, 'waf_scores'):
-                waf_scores = {p: int(s) for p, s in assessment.waf_scores.items()}
+                # Create mapping from string names to enums
+                pillar_name_map = {p.value: p for p in WAFPillar}
+                for p, s in assessment.waf_scores.items():
+                    # Convert key to WAFPillar enum
+                    if isinstance(p, WAFPillar):
+                        pillar = p
+                    elif isinstance(p, str):
+                        pillar = pillar_name_map.get(p)
+                    else:
+                        continue
+                    
+                    if pillar:
+                        # Handle score as int or object
+                        score_val = s.score if hasattr(s, 'score') else s
+                        waf_scores[pillar] = int(score_val) if score_val else 0
         
         critical = len([f for f in findings if f.get('severity') == 'CRITICAL'])
         high = len([f for f in findings if f.get('severity') == 'HIGH'])
@@ -234,19 +248,35 @@ class DashboardDataAggregator:
         findings = []
         compliance_scores = {}
         
+        # Create mapping from string names to enums
+        pillar_name_map = {p.value: p for p in WAFPillar}
+        
         if 'arch_waf_scores' in st.session_state:
             scores = st.session_state.arch_waf_scores
-            waf_scores = {p: s.score for p, s in scores.items()}
+            for p, s in scores.items():
+                # Convert key to WAFPillar enum
+                if isinstance(p, WAFPillar):
+                    pillar = p
+                elif isinstance(p, str):
+                    pillar = pillar_name_map.get(p)
+                else:
+                    continue
+                if pillar:
+                    score_val = s.score if hasattr(s, 'score') else s
+                    waf_scores[pillar] = int(score_val) if score_val else 0
         
         if 'arch_findings' in st.session_state:
             findings = st.session_state.arch_findings
         
         if 'arch_compliance_scores' in st.session_state:
             scores = st.session_state.arch_compliance_scores
-            compliance_scores = {f.value: s.score for f, s in scores.items()}
+            for f, s in scores.items():
+                f_name = f.value if hasattr(f, 'value') else str(f)
+                score_val = s.score if hasattr(s, 'score') else s
+                compliance_scores[f_name] = int(score_val) if score_val else 0
         
-        critical = len([f for f in findings if f.severity == 'CRITICAL'])
-        high = len([f for f in findings if f.severity == 'HIGH'])
+        critical = len([f for f in findings if getattr(f, 'severity', '') == 'CRITICAL'])
+        high = len([f for f in findings if getattr(f, 'severity', '') == 'HIGH'])
         
         health = HealthStatus.UNKNOWN
         if findings:
@@ -278,19 +308,35 @@ class DashboardDataAggregator:
         findings = []
         compliance_scores = {}
         
+        # Create mapping from string names to enums
+        pillar_name_map = {p.value: p for p in WAFPillar}
+        
         if 'eks_waf_scores' in st.session_state:
             scores = st.session_state.eks_waf_scores
-            waf_scores = {p: s.score for p, s in scores.items()}
+            for p, s in scores.items():
+                # Convert key to WAFPillar enum
+                if isinstance(p, WAFPillar):
+                    pillar = p
+                elif isinstance(p, str):
+                    pillar = pillar_name_map.get(p)
+                else:
+                    continue
+                if pillar:
+                    score_val = s.score if hasattr(s, 'score') else s
+                    waf_scores[pillar] = int(score_val) if score_val else 0
         
         if 'eks_findings' in st.session_state:
             findings = st.session_state.eks_findings
         
         if 'eks_compliance_scores' in st.session_state:
             scores = st.session_state.eks_compliance_scores
-            compliance_scores = {f.value: s.score for f, s in scores.items()}
+            for f, s in scores.items():
+                f_name = f.value if hasattr(f, 'value') else str(f)
+                score_val = s.score if hasattr(s, 'score') else s
+                compliance_scores[f_name] = int(score_val) if score_val else 0
         
-        critical = len([f for f in findings if f.severity == 'CRITICAL'])
-        high = len([f for f in findings if f.severity == 'HIGH'])
+        critical = len([f for f in findings if getattr(f, 'severity', '') == 'CRITICAL'])
+        high = len([f for f in findings if getattr(f, 'severity', '') == 'HIGH'])
         
         health = HealthStatus.UNKNOWN
         if findings:
@@ -411,10 +457,33 @@ class DashboardDataAggregator:
         
         pillar_scores = {p: [] for p in WAFPillar}
         
+        # Create mapping from string names to enums
+        pillar_name_map = {p.value: p for p in WAFPillar}
+        
         for module, status in statuses.items():
-            for pillar, score in status.waf_scores.items():
-                if score > 0:
-                    pillar_scores[pillar].append(score)
+            try:
+                for pillar_key, score_val in status.waf_scores.items():
+                    # Handle score value - could be int or object with .score
+                    if hasattr(score_val, 'score'):
+                        score = int(score_val.score)
+                    else:
+                        score = int(score_val) if score_val else 0
+                    
+                    if score > 0:
+                        # Handle both enum and string keys
+                        if isinstance(pillar_key, WAFPillar):
+                            pillar = pillar_key
+                        elif isinstance(pillar_key, str):
+                            pillar = pillar_name_map.get(pillar_key)
+                        else:
+                            pillar = None
+                        
+                        if pillar and pillar in pillar_scores:
+                            pillar_scores[pillar].append(score)
+            except Exception as e:
+                # Skip problematic module data
+                print(f"Warning: Could not process WAF scores for {module}: {e}")
+                continue
         
         # Average scores per pillar
         aggregated = {}
