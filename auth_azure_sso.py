@@ -1,11 +1,196 @@
 """
 Azure AD SSO Authentication - FIXED BUTTON VERSION
 Works with personal Microsoft accounts
+Session persistence via JWT tokens in browser local storage
 """
 
 import streamlit as st
 from typing import Optional, Dict, List, Callable
 from functools import wraps
+import jwt
+import hashlib
+from datetime import datetime, timedelta
+import json
+
+# ============================================================================
+# SESSION PERSISTENCE CONFIGURATION
+# ============================================================================
+
+# Secret key for JWT signing (in production, use st.secrets)
+def get_jwt_secret():
+    """Get JWT secret from secrets or generate a stable one"""
+    try:
+        return st.secrets.get("jwt_secret", "waf-scanner-session-key-2024")
+    except:
+        return "waf-scanner-session-key-2024"
+
+SESSION_EXPIRY_DAYS = 7  # Session valid for 7 days
+
+# ============================================================================
+# JWT SESSION HELPERS
+# ============================================================================
+
+def create_session_token(user_info: Dict) -> str:
+    """Create a JWT session token for the user"""
+    payload = {
+        'user_id': user_info.get('id', ''),
+        'email': user_info.get('email', ''),
+        'name': user_info.get('name', ''),
+        'role': user_info.get('role', 'viewer'),
+        'exp': datetime.utcnow() + timedelta(days=SESSION_EXPIRY_DAYS),
+        'iat': datetime.utcnow()
+    }
+    return jwt.encode(payload, get_jwt_secret(), algorithm='HS256')
+
+
+def verify_session_token(token: str) -> Optional[Dict]:
+    """Verify and decode a JWT session token"""
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=['HS256'])
+        return payload
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
+
+
+def inject_session_storage_script():
+    """Inject JavaScript to handle session storage"""
+    st.markdown("""
+    <script>
+    // Session storage helper functions
+    window.saveSessionToken = function(token) {
+        try {
+            localStorage.setItem('waf_session_token', token);
+            return true;
+        } catch(e) {
+            console.error('Failed to save session:', e);
+            return false;
+        }
+    };
+    
+    window.getSessionToken = function() {
+        try {
+            return localStorage.getItem('waf_session_token');
+        } catch(e) {
+            return null;
+        }
+    };
+    
+    window.clearSessionToken = function() {
+        try {
+            localStorage.removeItem('waf_session_token');
+            return true;
+        } catch(e) {
+            return false;
+        }
+    };
+    </script>
+    """, unsafe_allow_html=True)
+
+
+def save_session_to_browser(token: str):
+    """Save session token to browser local storage"""
+    st.markdown(f"""
+    <script>
+    (function() {{
+        try {{
+            localStorage.setItem('waf_session_token', '{token}');
+            console.log('Session saved successfully');
+        }} catch(e) {{
+            console.error('Failed to save session:', e);
+        }}
+    }})();
+    </script>
+    """, unsafe_allow_html=True)
+
+
+def clear_session_from_browser():
+    """Clear session token from browser local storage"""
+    st.markdown("""
+    <script>
+    (function() {
+        try {
+            localStorage.removeItem('waf_session_token');
+            console.log('Session cleared');
+        } catch(e) {
+            console.error('Failed to clear session:', e);
+        }
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+
+
+def check_and_restore_session():
+    """
+    Check for existing session token in query params and restore session.
+    Returns True if session was restored, False otherwise.
+    """
+    # Check if already authenticated
+    if st.session_state.get('authenticated', False):
+        return True
+    
+    # Check for session token in query params (passed from JavaScript)
+    query_params = st.query_params
+    
+    if 'session_token' in query_params:
+        token = query_params.get('session_token')
+        
+        # Verify the token
+        payload = verify_session_token(token)
+        
+        if payload:
+            # Token is valid - restore session
+            user_info = {
+                'id': payload.get('user_id', ''),
+                'email': payload.get('email', ''),
+                'name': payload.get('name', ''),
+                'role': payload.get('role', 'viewer'),
+                'given_name': payload.get('name', '').split()[0] if payload.get('name') else '',
+            }
+            
+            # Set session state
+            st.session_state.authenticated = True
+            st.session_state.user_id = user_info['id']
+            st.session_state.user_info = user_info
+            st.session_state.user_manager = SimpleUserManager()
+            
+            # Clear the token from URL (for cleaner URLs)
+            st.query_params.clear()
+            
+            return True
+        else:
+            # Token expired or invalid - clear it
+            st.query_params.clear()
+    
+    return False
+
+
+def render_session_restore_script():
+    """Render JavaScript that checks for stored session and restores it"""
+    st.markdown("""
+    <script>
+    (function() {
+        // Only run if not already authenticated (check URL for auth indicators)
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // Skip if already processing OAuth callback
+        if (urlParams.has('code') || urlParams.has('session_token')) {
+            return;
+        }
+        
+        // Check for stored session token
+        const token = localStorage.getItem('waf_session_token');
+        
+        if (token) {
+            // Redirect with session token to restore session
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('session_token', token);
+            window.location.href = currentUrl.toString();
+        }
+    })();
+    </script>
+    """, unsafe_allow_html=True)
 
 
 # ============================================================================
@@ -217,7 +402,15 @@ def get_user_info(access_token: str) -> Optional[Dict]:
 
 
 def render_login():
-    """Render login UI with WORKING button"""
+    """Render login UI with WORKING button and session persistence"""
+    
+    # STEP 1: Try to restore session from browser storage
+    if check_and_restore_session():
+        # Session restored successfully - no need to show login
+        return
+    
+    # STEP 2: Inject session restore script for browser refresh handling
+    render_session_restore_script()
     
     # Get Azure AD config
     try:
@@ -317,6 +510,10 @@ def render_login():
                             st.session_state.user_id = final_user_info['id']
                             st.session_state.user_info = final_user_info
                             st.session_state.user_manager = SimpleUserManager()
+                            
+                            # Create and save session token for persistence
+                            session_token = create_session_token(final_user_info)
+                            save_session_to_browser(session_token)
                             
                             # Clear query params and redirect to app
                             st.query_params.clear()
@@ -479,4 +676,26 @@ def render_login():
         st.stop()
 
 
-__all__ = ['RoleManager', 'require_permission', 'SimpleUserManager', 'render_login']
+def perform_logout():
+    """Perform complete logout - clear session state and browser token"""
+    # Clear session state
+    st.session_state.authenticated = False
+    st.session_state.user_info = None
+    st.session_state.user_id = None
+    st.session_state.user_manager = None
+    
+    # Clear browser session token
+    clear_session_from_browser()
+
+
+__all__ = [
+    'RoleManager', 
+    'require_permission', 
+    'SimpleUserManager', 
+    'render_login',
+    'perform_logout',
+    'clear_session_from_browser',
+    'check_and_restore_session',
+    'create_session_token',
+    'verify_session_token'
+]
