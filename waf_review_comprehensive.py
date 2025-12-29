@@ -9,7 +9,7 @@ Complete end-to-end WAF review workflow:
 5. Re-scan to verify fixes
 6. Updated scores with before/after comparison
 
-Version: 1.2.0 - Added Save/Load progress functionality
+Version: 1.3.0 - Integrated real remediation engine with CloudFormation deployment
 Author: Enterprise WAF Scanner Team
 """
 
@@ -40,6 +40,24 @@ try:
 except ImportError:
     USE_COMPLETE_QUESTIONS = False
     WAFPillarComplete = None
+
+# Import real remediation engine for CloudFormation deployment
+try:
+    from remediation_engine_integrated import (
+        RemediationEngine,
+        RemediationAction,
+        RemediationStatus,
+        RiskLevel,
+        DeploymentMethod,
+        CloudFormationDeployer,
+        CLIExecutor
+    )
+    REMEDIATION_ENGINE_AVAILABLE = True
+except ImportError:
+    REMEDIATION_ENGINE_AVAILABLE = False
+    RemediationEngine = None
+    RemediationAction = None
+    RemediationStatus = None
 
 # ============================================================================
 # CONSTANTS & ENUMS
@@ -2129,40 +2147,91 @@ class WAFReviewWorkflow:
         self.session.overall_score = total_score / len(self.session.pillar_scores)
     
     # ========================================================================
-    # PHASE 5: REMEDIATION
+    # PHASE 5: REMEDIATION (Integrated with Real CloudFormation Deployment)
     # ========================================================================
     
+    def _get_remediation_engine(self):
+        """Get or create remediation engine instance"""
+        if not hasattr(self, '_remediation_engine') or self._remediation_engine is None:
+            if REMEDIATION_ENGINE_AVAILABLE:
+                self._remediation_engine = RemediationEngine()
+            else:
+                self._remediation_engine = None
+        return self._remediation_engine
+    
     def _render_remediation_phase(self):
-        """Render AI-powered remediation phase"""
+        """Render AI-powered remediation phase with real CloudFormation deployment"""
         
         st.markdown("## 🔨 Step 5: AI-Powered Remediation")
-        st.markdown("""
-        Review and deploy automated fixes for your findings. 
-        AI generates CloudFormation/Terraform code for each issue.
-        """)
+        
+        # Check if real remediation engine is available
+        if REMEDIATION_ENGINE_AVAILABLE:
+            st.markdown("""
+            Review and deploy automated fixes for your findings.
+            **Real CloudFormation deployment** is enabled - changes will be applied to your AWS account.
+            """)
+            st.success("✅ **Real Deployment Mode** - CloudFormation stacks will be created in your AWS account")
+        else:
+            st.markdown("""
+            Review remediation code for your findings.
+            Export CloudFormation/Terraform code for manual deployment.
+            """)
+            st.warning("⚠️ **Export Only Mode** - Remediation engine not available. Code will be generated for manual deployment.")
         
         # Generate remediation items if not done
         if not self.session.remediation_items:
             self._generate_remediation_items()
         
-        # Summary
-        col1, col2, col3, col4 = st.columns(4)
+        # Store findings for remediation tab integration
+        st.session_state['waf_review_findings'] = [
+            {
+                'id': f.id,
+                'title': f.title,
+                'service': f.service,
+                'severity': f.severity,
+                'resource': f.resource,
+                'account_id': f.account_id,
+                'region': getattr(f, 'region', 'us-east-1'),
+                'pillar': f.pillar
+            }
+            for f in self.session.findings
+        ]
+        
+        # Summary metrics
+        col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
             st.metric("Total Findings", len(self.session.findings))
         with col2:
             remediatable = len([r for r in self.session.remediation_items if r.cloudformation])
             st.metric("Auto-Remediatable", remediatable)
         with col3:
+            approved = len([r for r in self.session.remediation_items if r.status == "approved"])
+            st.metric("Approved", approved)
+        with col4:
             deployed = len([r for r in self.session.remediation_items if r.status == "deployed"])
             st.metric("Deployed", deployed)
-        with col4:
-            pending = len([r for r in self.session.remediation_items if r.status == "pending"])
-            st.metric("Pending", pending)
+        with col5:
+            failed = len([r for r in self.session.remediation_items if r.status == "failed"])
+            st.metric("Failed", failed, delta_color="inverse" if failed > 0 else "off")
+        
+        st.markdown("---")
+        
+        # Deployment method selection (only if real engine available)
+        if REMEDIATION_ENGINE_AVAILABLE:
+            deployment_method = st.radio(
+                "Deployment Method",
+                ["🚀 Auto Deploy (CloudFormation)", "📥 Export Only (Manual)"],
+                horizontal=True,
+                help="Auto Deploy will create CloudFormation stacks directly. Export Only generates code for manual deployment."
+            )
+            self._use_auto_deploy = "Auto Deploy" in deployment_method
+        else:
+            self._use_auto_deploy = False
         
         st.markdown("---")
         
         # Filter options
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
             severity_filter = st.multiselect(
                 "Filter by Severity",
@@ -2175,47 +2244,83 @@ class WAFReviewWorkflow:
                 [p.value for p in WAFPillar],
                 default=[p.value for p in WAFPillar]
             )
+        with col3:
+            status_filter = st.multiselect(
+                "Filter by Status",
+                ["pending", "approved", "deployed", "failed"],
+                default=["pending", "approved"]
+            )
         
         # Filtered items
         filtered_items = [
             r for r in self.session.remediation_items
-            if r.severity in severity_filter and r.pillar in pillar_filter
+            if r.severity in severity_filter and r.pillar in pillar_filter and r.status in status_filter
         ]
         
         st.markdown(f"### 📋 Remediation Items ({len(filtered_items)})")
         
         # Bulk actions
-        col1, col2, col3 = st.columns([1, 1, 2])
+        col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
         with col1:
-            if st.button("✅ Approve All", use_container_width=True):
+            if st.button("✅ Approve All Filtered", use_container_width=True):
+                approved_count = 0
                 for item in filtered_items:
                     if item.status == "pending":
                         item.status = "approved"
                         item.approved_at = datetime.now().isoformat()
-                st.success("All items approved!")
-                st.rerun()
+                        approved_count += 1
+                if approved_count > 0:
+                    st.success(f"✅ Approved {approved_count} items!")
+                    st.rerun()
+                else:
+                    st.info("No pending items to approve")
+        
         with col2:
-            if st.button("🚀 Deploy Approved", type="primary", use_container_width=True):
-                self._deploy_approved_items()
+            approved_items = [r for r in filtered_items if r.status == "approved"]
+            if st.button(f"🚀 Deploy Approved ({len(approved_items)})", type="primary", use_container_width=True, disabled=len(approved_items) == 0):
+                self._deploy_approved_items_real()
+        
+        with col3:
+            if st.button("🔄 Refresh Status", use_container_width=True):
+                self._refresh_deployment_status()
+                st.rerun()
+        
+        with col4:
+            if st.button("📥 Export All Code", use_container_width=True):
+                self._export_remediation_code()
         
         st.markdown("---")
         
-        # Render each remediation item with unique index
+        # Show deployment progress if any deployments are in progress
+        deploying_items = [r for r in self.session.remediation_items if r.status == "deploying"]
+        if deploying_items:
+            st.warning(f"⏳ {len(deploying_items)} deployment(s) in progress...")
+            for item in deploying_items:
+                st.markdown(f"- `{item.stack_name}`: {item.finding_title}")
+        
+        # Render each remediation item
         for idx, item in enumerate(filtered_items):
-            self._render_remediation_item(item, idx)
+            self._render_remediation_item_enhanced(item, idx)
         
         st.markdown("---")
         
         # Navigation
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
-            if st.button("⬅️ Back to Scores"):
+            if st.button("⬅️ Back to Scores", use_container_width=True):
                 self.session.current_phase = ReviewPhase.SCORING
                 st.rerun()
+        
+        with col2:
+            # Save progress
+            if st.button("💾 Save Progress", use_container_width=True):
+                if self.save_progress():
+                    st.success("✅ Progress saved!")
+        
         with col3:
             deployed_count = len([r for r in self.session.remediation_items if r.status == "deployed"])
             if deployed_count > 0:
-                if st.button("▶️ Re-scan to Verify", type="primary"):
+                if st.button("▶️ Verify Fixes (Re-scan)", type="primary", use_container_width=True):
                     self.session.current_phase = ReviewPhase.RESCAN
                     self.session.updated_at = datetime.now()
                     st.rerun()
@@ -2363,8 +2468,8 @@ Description: Remove overly permissive rules from security group {sg_id}
         
         return cfn, tf, cli
     
-    def _render_remediation_item(self, item: RemediationItem, idx: int):
-        """Render a single remediation item"""
+    def _render_remediation_item_enhanced(self, item: RemediationItem, idx: int):
+        """Render a single remediation item with enhanced deployment options"""
         
         severity_colors = {
             "CRITICAL": "🔴",
@@ -2376,12 +2481,20 @@ Description: Remove overly permissive rules from security group {sg_id}
         status_badges = {
             "pending": "⏳ Pending",
             "approved": "✅ Approved",
+            "deploying": "🔄 Deploying...",
             "deployed": "🚀 Deployed",
+            "verified": "✅ Verified",
             "failed": "❌ Failed",
             "rolled_back": "↩️ Rolled Back"
         }
         
-        with st.expander(f"{severity_colors.get(item.severity, '⚪')} **{item.severity}** - {item.finding_title} | {status_badges.get(item.status, item.status)}"):
+        # Determine if this item has real remediation code
+        has_remediation = item.cloudformation and not item.cloudformation.startswith('#')
+        
+        status_display = status_badges.get(item.status, item.status)
+        expander_label = f"{severity_colors.get(item.severity, '⚪')} **{item.severity}** - {item.finding_title} | {status_display}"
+        
+        with st.expander(expander_label, expanded=(item.status == "failed")):
             col1, col2 = st.columns([2, 1])
             
             with col1:
@@ -2389,21 +2502,55 @@ Description: Remove overly permissive rules from security group {sg_id}
                 st.markdown(f"**Resource:** `{item.resource}`")
                 st.markdown(f"**Account:** {item.account_id}")
                 st.markdown(f"**Pillar:** {item.pillar}")
+                
+                # Show stack info if deployed
+                if item.stack_name and item.status in ["deployed", "deploying", "verified"]:
+                    st.markdown(f"**Stack Name:** `{item.stack_name}`")
+                if item.stack_id:
+                    st.markdown(f"**Stack ID:** `{item.stack_id[:50]}...`")
+                if item.deployed_at:
+                    st.markdown(f"**Deployed:** {item.deployed_at}")
             
             with col2:
+                # Action buttons based on status
                 if item.status == "pending":
-                    if st.button("✅ Approve", key=f"approve_{idx}_{item.finding_id}"):
-                        item.status = "approved"
-                        item.approved_at = datetime.now().isoformat()
-                        st.rerun()
+                    if has_remediation:
+                        if st.button("✅ Approve", key=f"approve_{idx}_{item.finding_id}", use_container_width=True):
+                            item.status = "approved"
+                            item.approved_at = datetime.now().isoformat()
+                            st.rerun()
+                    else:
+                        st.info("Manual remediation required")
+                
                 elif item.status == "approved":
-                    if st.button("🚀 Deploy Now", key=f"deploy_{idx}_{item.finding_id}", type="primary"):
-                        self._deploy_single_item(item)
+                    if has_remediation and getattr(self, '_use_auto_deploy', False):
+                        if st.button("🚀 Deploy Now", key=f"deploy_{idx}_{item.finding_id}", type="primary", use_container_width=True):
+                            self._deploy_single_item_real(item)
+                            st.rerun()
+                    else:
+                        st.info("Export code below")
+                
+                elif item.status == "deploying":
+                    st.info("⏳ Deployment in progress...")
+                    if st.button("🔄 Check Status", key=f"check_{idx}_{item.finding_id}", use_container_width=True):
+                        self._check_deployment_status(item)
+                        st.rerun()
+                
+                elif item.status == "deployed":
+                    st.success("✅ Successfully deployed")
+                    if st.button("↩️ Rollback", key=f"rollback_{idx}_{item.finding_id}", use_container_width=True):
+                        self._rollback_deployment(item)
+                        st.rerun()
+                
+                elif item.status == "failed":
+                    st.error("❌ Deployment failed")
+                    if st.button("🔄 Retry", key=f"retry_{idx}_{item.finding_id}", use_container_width=True):
+                        item.status = "approved"
                         st.rerun()
             
             # Code tabs
             if item.cloudformation or item.terraform:
-                code_tabs = st.tabs(["☁️ CloudFormation", "🏗️ Terraform", "💻 AWS CLI"])
+                code_tabs = st.tabs(["☁️ CloudFormation", "🏗️ Terraform", "💻 AWS CLI", "📋 Copy"])
                 
                 with code_tabs[0]:
                     if item.cloudformation:
@@ -2422,26 +2569,80 @@ Description: Remove overly permissive rules from security group {sg_id}
                         st.code("\n".join(item.aws_cli), language="bash")
                     else:
                         st.info("No CLI commands available for this finding")
+                
+                with code_tabs[3]:
+                    # Copyable text area
+                    if item.cloudformation:
+                        st.text_area("CloudFormation (Copy)", item.cloudformation, height=150, key=f"copy_cfn_{idx}")
+                    if item.aws_cli:
+                        st.text_area("AWS CLI (Copy)", "\n".join(item.aws_cli), height=100, key=f"copy_cli_{idx}")
     
-    def _deploy_single_item(self, item: RemediationItem):
-        """Deploy a single remediation item"""
+    def _deploy_single_item_real(self, item: RemediationItem):
+        """Deploy a single remediation item using real CloudFormation"""
+        
+        if not REMEDIATION_ENGINE_AVAILABLE:
+            st.error("❌ Remediation engine not available")
+            return
         
         try:
-            # In production, this would actually deploy the CloudFormation stack
-            # For now, we simulate the deployment
-            item.status = "deployed"
-            item.deployed_at = datetime.now().isoformat()
-            item.stack_id = f"arn:aws:cloudformation:us-east-1:123456789012:stack/{item.stack_name}/xxx"
+            # Create remediation engine
+            engine = self._get_remediation_engine()
             
-            st.success(f"✅ Deployed: {item.finding_title}")
-            self.session.remediation_deployed += 1
+            if engine is None:
+                st.error("❌ Could not initialize remediation engine")
+                item.status = "failed"
+                return
             
+            # Set stack name if not set
+            if not item.stack_name:
+                item.stack_name = f"waf-fix-{item.finding_id[:8]}-{int(time.time())}"
+            
+            # Prepare region
+            region = getattr(item, 'region', None) or 'us-east-1'
+            
+            # Deploy via CloudFormation
+            with st.spinner(f"🚀 Deploying {item.finding_title}..."):
+                try:
+                    # Use boto3 directly for CloudFormation deployment
+                    session = boto3.Session()
+                    cf_client = session.client('cloudformation', region_name=region)
+                    
+                    # Create stack
+                    response = cf_client.create_stack(
+                        StackName=item.stack_name,
+                        TemplateBody=item.cloudformation,
+                        Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
+                        Tags=[
+                            {'Key': 'CreatedBy', 'Value': 'WAF-Scanner'},
+                            {'Key': 'FindingId', 'Value': item.finding_id},
+                            {'Key': 'Severity', 'Value': item.severity},
+                            {'Key': 'Pillar', 'Value': item.pillar},
+                        ],
+                        OnFailure='ROLLBACK'
+                    )
+                    
+                    item.stack_id = response.get('StackId', '')
+                    item.status = "deploying"
+                    item.deployed_at = datetime.now().isoformat()
+                    
+                    st.success(f"✅ Stack creation initiated: {item.stack_name}")
+                    st.info("Stack is being created. Click 'Refresh Status' to check progress.")
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    if 'AlreadyExistsException' in error_msg:
+                        st.warning(f"⚠️ Stack {item.stack_name} already exists. Checking status...")
+                        self._check_deployment_status(item)
+                    else:
+                        item.status = "failed"
+                        st.error(f"❌ CloudFormation deployment failed: {error_msg}")
+                    
         except Exception as e:
             item.status = "failed"
-            st.error(f"❌ Deployment failed: {str(e)}")
+            st.error(f"❌ Deployment error: {str(e)}")
     
-    def _deploy_approved_items(self):
-        """Deploy all approved remediation items"""
+    def _deploy_approved_items_real(self):
+        """Deploy all approved remediation items using real CloudFormation"""
         
         approved_items = [r for r in self.session.remediation_items if r.status == "approved"]
         
@@ -2449,38 +2650,245 @@ Description: Remove overly permissive rules from security group {sg_id}
             st.warning("No approved items to deploy")
             return
         
+        if not REMEDIATION_ENGINE_AVAILABLE and getattr(self, '_use_auto_deploy', False):
+            st.error("❌ Remediation engine not available for auto-deployment")
+            return
+        
+        # Confirmation dialog
+        st.warning(f"⚠️ You are about to deploy {len(approved_items)} remediation(s) to your AWS account.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            confirm = st.checkbox("I understand this will create CloudFormation stacks", key="deploy_confirm")
+        
+        if not confirm:
+            st.info("Check the box above to confirm deployment")
+            return
+        
+        # Deploy each item
         progress = st.progress(0)
-        status = st.empty()
+        status_container = st.empty()
+        results = {"success": 0, "failed": 0}
         
         for idx, item in enumerate(approved_items):
-            status.markdown(f"🚀 Deploying: {item.finding_title}...")
+            status_container.markdown(f"🚀 Deploying ({idx + 1}/{len(approved_items)}): {item.finding_title}...")
             progress.progress((idx + 1) / len(approved_items))
             
-            self._deploy_single_item(item)
-            time.sleep(0.5)  # Simulate deployment time
+            self._deploy_single_item_real(item)
+            
+            if item.status in ["deploying", "deployed"]:
+                results["success"] += 1
+            else:
+                results["failed"] += 1
+            
+            time.sleep(0.5)  # Brief pause between deployments
         
-        st.success(f"✅ Deployed {len(approved_items)} remediation(s)")
+        progress.progress(100)
+        
+        if results["failed"] == 0:
+            status_container.success(f"✅ All {results['success']} deployment(s) initiated successfully!")
+        else:
+            status_container.warning(f"⚠️ {results['success']} succeeded, {results['failed']} failed")
+        
+        self.session.remediation_deployed = len([r for r in self.session.remediation_items if r.status in ["deployed", "deploying"]])
+        
+        time.sleep(1)
         st.rerun()
     
+    def _check_deployment_status(self, item: RemediationItem):
+        """Check the status of a CloudFormation deployment"""
+        
+        if not item.stack_name:
+            return
+        
+        try:
+            region = getattr(item, 'region', None) or 'us-east-1'
+            session = boto3.Session()
+            cf_client = session.client('cloudformation', region_name=region)
+            
+            response = cf_client.describe_stacks(StackName=item.stack_name)
+            
+            if response.get('Stacks'):
+                stack = response['Stacks'][0]
+                stack_status = stack.get('StackStatus', '')
+                
+                if stack_status in ['CREATE_COMPLETE', 'UPDATE_COMPLETE']:
+                    item.status = "deployed"
+                    st.success(f"✅ Stack {item.stack_name} deployed successfully!")
+                elif stack_status in ['CREATE_IN_PROGRESS', 'UPDATE_IN_PROGRESS']:
+                    item.status = "deploying"
+                    st.info(f"⏳ Stack {item.stack_name} is still being created...")
+                elif stack_status in ['CREATE_FAILED', 'ROLLBACK_COMPLETE', 'ROLLBACK_FAILED', 'DELETE_COMPLETE']:
+                    item.status = "failed"
+                    reason = stack.get('StackStatusReason', 'Unknown reason')
+                    st.error(f"❌ Stack {item.stack_name} failed: {reason}")
+                else:
+                    st.info(f"Stack status: {stack_status}")
+                    
+        except Exception as e:
+            if 'does not exist' in str(e):
+                item.status = "failed"
+                st.error(f"❌ Stack {item.stack_name} does not exist or was deleted")
+            else:
+                st.error(f"❌ Error checking status: {str(e)}")
+    
+    def _refresh_deployment_status(self):
+        """Refresh status of all deploying items"""
+        
+        deploying_items = [r for r in self.session.remediation_items if r.status == "deploying"]
+        
+        for item in deploying_items:
+            self._check_deployment_status(item)
+    
+    def _rollback_deployment(self, item: RemediationItem):
+        """Rollback a deployed CloudFormation stack"""
+        
+        if not item.stack_name:
+            st.error("No stack name to rollback")
+            return
+        
+        try:
+            region = getattr(item, 'region', None) or 'us-east-1'
+            session = boto3.Session()
+            cf_client = session.client('cloudformation', region_name=region)
+            
+            with st.spinner(f"↩️ Rolling back {item.stack_name}..."):
+                cf_client.delete_stack(StackName=item.stack_name)
+                item.status = "rolled_back"
+                st.success(f"✅ Stack {item.stack_name} deletion initiated")
+                
+        except Exception as e:
+            st.error(f"❌ Rollback failed: {str(e)}")
+    
+    def _export_remediation_code(self):
+        """Export all remediation code to downloadable files"""
+        
+        # Create combined CloudFormation template
+        cfn_templates = []
+        tf_templates = []
+        cli_commands = []
+        
+        for item in self.session.remediation_items:
+            if item.cloudformation and not item.cloudformation.startswith('#'):
+                cfn_templates.append(f"# ====== {item.finding_title} ======\n{item.cloudformation}\n")
+            if item.terraform:
+                tf_templates.append(f"# ====== {item.finding_title} ======\n{item.terraform}\n")
+            if item.aws_cli:
+                cli_commands.append(f"# ====== {item.finding_title} ======\n" + "\n".join(item.aws_cli) + "\n")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if cfn_templates:
+                cfn_content = "\n".join(cfn_templates)
+                st.download_button(
+                    "📥 Download CloudFormation",
+                    cfn_content,
+                    file_name="waf_remediation_cloudformation.yaml",
+                    mime="text/yaml"
+                )
+        
+        with col2:
+            if tf_templates:
+                tf_content = "\n".join(tf_templates)
+                st.download_button(
+                    "📥 Download Terraform",
+                    tf_content,
+                    file_name="waf_remediation_terraform.tf",
+                    mime="text/plain"
+                )
+        
+        with col3:
+            if cli_commands:
+                cli_content = "#!/bin/bash\n" + "\n".join(cli_commands)
+                st.download_button(
+                    "📥 Download CLI Script",
+                    cli_content,
+                    file_name="waf_remediation_cli.sh",
+                    mime="text/x-sh"
+                )
+        
+        st.success(f"📦 Exported {len(cfn_templates)} CloudFormation, {len(tf_templates)} Terraform, {len(cli_commands)} CLI")
+    
+    # Keep old function for backward compatibility
+    def _render_remediation_item(self, item: RemediationItem, idx: int):
+        """Legacy function - redirects to enhanced version"""
+        self._render_remediation_item_enhanced(item, idx)
+    
+    def _deploy_single_item(self, item: RemediationItem):
+        """Legacy function - redirects to real deployment"""
+        self._deploy_single_item_real(item)
+    
+    def _deploy_approved_items(self):
+        """Legacy function - redirects to real deployment"""
+        self._deploy_approved_items_real()
+    
     # ========================================================================
-    # PHASE 6: RE-SCAN
+    # PHASE 6: RE-SCAN (Real Verification)
     # ========================================================================
     
     def _render_rescan_phase(self):
-        """Render re-scan verification phase"""
+        """Render re-scan verification phase with real AWS scanning"""
         
         st.markdown("## ✅ Step 6: Verify Remediation")
-        st.markdown("Re-scan your accounts to verify fixes have been applied.")
+        st.markdown("Re-scan your accounts to verify fixes have been applied and measure improvement.")
         
         deployed_count = len([r for r in self.session.remediation_items if r.status == "deployed"])
+        deploying_count = len([r for r in self.session.remediation_items if r.status == "deploying"])
         
-        st.info(f"📊 {deployed_count} remediation(s) deployed. Run a verification scan to measure improvement.")
+        # Show deployment summary
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Deployed", deployed_count)
+        with col2:
+            st.metric("In Progress", deploying_count)
+        with col3:
+            st.metric("Initial Score", f"{self.session.initial_score:.0f}")
+        with col4:
+            if self.session.rescan_completed:
+                st.metric("Final Score", f"{self.session.final_score:.0f}", delta=f"+{self.session.score_improvement:.0f}")
+            else:
+                st.metric("Final Score", "Pending")
+        
+        st.markdown("---")
+        
+        # Check if deployments are still in progress
+        if deploying_count > 0:
+            st.warning(f"⏳ {deploying_count} deployment(s) still in progress. Wait for completion before verifying.")
+            
+            if st.button("🔄 Refresh Deployment Status", use_container_width=True):
+                self._refresh_deployment_status()
+                st.rerun()
+            
+            with st.expander("📋 Deployments in Progress"):
+                for item in self.session.remediation_items:
+                    if item.status == "deploying":
+                        st.markdown(f"- **{item.finding_title}** - Stack: `{item.stack_name}`")
         
         if not self.session.rescan_completed:
+            st.info(f"📊 {deployed_count} remediation(s) deployed. Run a verification scan to measure improvement.")
+            
+            # Verification options
+            st.markdown("### 🔍 Verification Options")
+            
+            verification_method = st.radio(
+                "Choose verification method:",
+                ["🔄 Full Re-scan (Recommended)", "⚡ Quick Check (Stack Status Only)", "📊 Estimated Score"],
+                help="Full re-scan will run the same scan again to find remaining issues. Quick check verifies stack status only."
+            )
+            
             col1, col2, col3 = st.columns([1, 1, 1])
             with col2:
-                if st.button("🔍 Run Verification Scan", type="primary", use_container_width=True):
-                    self._run_verification_scan()
+                if "Full Re-scan" in verification_method:
+                    if st.button("🔍 Run Verification Scan", type="primary", use_container_width=True, disabled=deploying_count > 0):
+                        self._run_verification_scan_real()
+                elif "Quick Check" in verification_method:
+                    if st.button("⚡ Quick Verify", type="primary", use_container_width=True):
+                        self._run_quick_verification()
+                else:
+                    if st.button("📊 Calculate Estimated Score", type="primary", use_container_width=True):
+                        self._calculate_estimated_improvement()
+        
         else:
             # Show before/after comparison
             st.markdown("### 📊 Before & After Comparison")
@@ -2488,71 +2896,257 @@ Description: Remove overly permissive rules from security group {sg_id}
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.markdown("""
+                st.markdown(f"""
                 <div style="background: #ffebee; padding: 20px; border-radius: 10px; text-align: center;">
                     <h4>Before Remediation</h4>
-                    <h1 style="color: #c62828;">{:.0f}</h1>
+                    <h1 style="color: #c62828;">{self.session.initial_score:.0f}</h1>
+                    <p>{self.session.initial_findings_count} findings</p>
                 </div>
-                """.format(self.session.initial_score), unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
             
             with col2:
                 improvement = self.session.final_score - self.session.initial_score
+                findings_fixed = getattr(self.session, 'findings_fixed', deployed_count)
                 st.markdown(f"""
                 <div style="background: #e8f5e9; padding: 20px; border-radius: 10px; text-align: center;">
                     <h4>Improvement</h4>
                     <h1 style="color: #2e7d32;">+{improvement:.0f}</h1>
+                    <p>{findings_fixed} findings fixed</p>
                 </div>
                 """, unsafe_allow_html=True)
             
             with col3:
+                remaining_findings = getattr(self.session, 'remaining_findings_count', 0)
                 st.markdown(f"""
                 <div style="background: #e3f2fd; padding: 20px; border-radius: 10px; text-align: center;">
                     <h4>After Remediation</h4>
                     <h1 style="color: #1565c0;">{self.session.final_score:.0f}</h1>
+                    <p>{remaining_findings} findings remaining</p>
                 </div>
                 """, unsafe_allow_html=True)
             
             st.markdown("---")
             
-            # Pillar improvements
-            st.markdown("### 📈 Improvement by Pillar")
-            # This would show pillar-by-pillar comparison
+            # Show fixed vs remaining findings
+            if hasattr(self.session, 'fixed_findings') and self.session.fixed_findings:
+                st.markdown("### ✅ Verified Fixed")
+                with st.expander(f"Fixed Findings ({len(self.session.fixed_findings)})", expanded=False):
+                    for f in self.session.fixed_findings[:10]:
+                        st.markdown(f"- ✅ **{f.get('title', f.get('finding_title', 'Unknown'))}**")
+                    if len(self.session.fixed_findings) > 10:
+                        st.markdown(f"... and {len(self.session.fixed_findings) - 10} more")
             
+            if hasattr(self.session, 'remaining_findings') and self.session.remaining_findings:
+                st.markdown("### ⚠️ Remaining Issues")
+                with st.expander(f"Remaining Findings ({len(self.session.remaining_findings)})", expanded=False):
+                    for f in self.session.remaining_findings[:10]:
+                        severity = f.get('severity', 'UNKNOWN')
+                        st.markdown(f"- {'🔴' if severity == 'CRITICAL' else '🟠' if severity == 'HIGH' else '🟡'} **{f.get('title', 'Unknown')}** ({severity})")
+                    if len(self.session.remaining_findings) > 10:
+                        st.markdown(f"... and {len(self.session.remaining_findings) - 10} more")
+            
+            # Pillar comparison
+            if hasattr(self.session, 'pillar_comparison') and self.session.pillar_comparison:
+                st.markdown("### 📈 Improvement by Pillar")
+                for pillar, data in self.session.pillar_comparison.items():
+                    before = data.get('before', 0)
+                    after = data.get('after', 0)
+                    delta = after - before
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.progress(after / 100 if after else 0)
+                    with col2:
+                        st.markdown(f"**{pillar}**: {before:.0f} → {after:.0f} (+{delta:.0f})")
+            
+            st.markdown("---")
+            
+            # Navigation
             col1, col2, col3 = st.columns([1, 1, 1])
+            with col1:
+                if st.button("🔄 Re-scan Again", use_container_width=True):
+                    self.session.rescan_completed = False
+                    st.rerun()
             with col2:
+                if st.button("⬅️ Back to Remediate", use_container_width=True):
+                    self.session.current_phase = ReviewPhase.REMEDIATION
+                    st.rerun()
+            with col3:
                 if st.button("▶️ Complete Review", type="primary", use_container_width=True):
                     self.session.current_phase = ReviewPhase.COMPLETE
                     self.session.updated_at = datetime.now()
                     st.rerun()
     
-    def _run_verification_scan(self):
-        """Run verification scan after remediation"""
+    def _run_verification_scan_real(self):
+        """Run real verification scan after remediation"""
         
         progress = st.progress(0)
         status = st.empty()
         
-        status.markdown("🔍 **Running verification scan...**")
-        progress.progress(30)
+        # Store initial findings count
+        self.session.initial_findings_count = len(self.session.findings)
+        initial_finding_ids = {f.id for f in self.session.findings}
         
-        # Simulate scan
-        time.sleep(2)
-        progress.progress(70)
+        status.markdown("🔍 **Initiating verification scan...**")
+        progress.progress(10)
         
-        # Calculate improved scores
-        # In production, this would actually re-scan and compare
-        deployed_count = len([r for r in self.session.remediation_items if r.status == "deployed"])
-        estimated_improvement = min(deployed_count * 3, 30)  # Estimate 3 points per fix, max 30
+        try:
+            # Re-run the scan using the same configuration
+            from landscape_scanner import LandscapeScanner
+            
+            scanner = LandscapeScanner()
+            new_findings = []
+            
+            # Scan each account that was originally scanned
+            for idx, account in enumerate(self.session.accounts):
+                account_id = account.get('account_id', account.get('id', 'unknown'))
+                status.markdown(f"🔍 **Scanning account {account_id}...**")
+                progress.progress(10 + int((idx + 1) / len(self.session.accounts) * 60))
+                
+                try:
+                    # Scan account
+                    results = scanner.scan_account(
+                        account_id=account_id,
+                        regions=self.session.regions
+                    )
+                    new_findings.extend(results.get('findings', []))
+                except Exception as e:
+                    st.warning(f"⚠️ Could not scan {account_id}: {str(e)}")
+            
+            progress.progress(80)
+            status.markdown("📊 **Analyzing results...**")
+            
+            # Compare findings
+            new_finding_ids = {f.get('id', f.get('finding_id', '')) for f in new_findings}
+            
+            # Fixed = in original but not in new
+            fixed_ids = initial_finding_ids - new_finding_ids
+            self.session.fixed_findings = [f for f in self.session.findings if f.id in fixed_ids]
+            self.session.findings_fixed = len(fixed_ids)
+            
+            # Remaining = still present
+            self.session.remaining_findings = new_findings
+            self.session.remaining_findings_count = len(new_findings)
+            
+            # Calculate new score
+            # Score improvement based on findings fixed vs total
+            if self.session.initial_findings_count > 0:
+                fix_rate = self.session.findings_fixed / self.session.initial_findings_count
+                self.session.score_improvement = fix_rate * 30  # Max 30 points improvement
+            else:
+                self.session.score_improvement = 0
+            
+            self.session.final_score = min(100, self.session.initial_score + self.session.score_improvement)
+            
+            # Pillar comparison
+            self.session.pillar_comparison = {}
+            for pillar in WAFPillar:
+                before_count = len([f for f in self.session.findings if f.pillar == pillar.value])
+                after_count = len([f for f in new_findings if f.get('pillar') == pillar.value])
+                
+                before_score = self.session.pillar_scores.get(pillar.value, PillarScore(pillar=pillar.value)).combined_score
+                # Estimate after score based on reduction
+                if before_count > 0:
+                    reduction = (before_count - after_count) / before_count
+                    after_score = min(100, before_score + (reduction * 20))
+                else:
+                    after_score = before_score
+                
+                self.session.pillar_comparison[pillar.value] = {
+                    'before': before_score,
+                    'after': after_score,
+                    'findings_before': before_count,
+                    'findings_after': after_count
+                }
+            
+            progress.progress(100)
+            status.markdown("✅ **Verification scan complete!**")
+            
+        except ImportError:
+            # Fallback to estimated improvement if scanner not available
+            status.markdown("⚠️ **Scanner not available, using estimated improvement...**")
+            self._calculate_estimated_improvement()
+            return
+        except Exception as e:
+            st.error(f"❌ Verification scan failed: {str(e)}")
+            status.markdown("⚠️ **Using estimated improvement due to scan error...**")
+            self._calculate_estimated_improvement()
+            return
         
-        self.session.final_score = min(100, self.session.initial_score + estimated_improvement)
-        self.session.score_improvement = self.session.final_score - self.session.initial_score
         self.session.rescan_completed = True
         self.session.rescan_timestamp = datetime.now()
         
-        progress.progress(100)
-        status.markdown("✅ **Verification scan complete!**")
+        time.sleep(1)
+        st.rerun()
+    
+    def _run_quick_verification(self):
+        """Quick verification by checking stack status only"""
+        
+        progress = st.progress(0)
+        status = st.empty()
+        
+        status.markdown("⚡ **Checking deployment status...**")
+        
+        verified_count = 0
+        failed_count = 0
+        
+        deployed_items = [r for r in self.session.remediation_items if r.status in ["deployed", "deploying"]]
+        
+        for idx, item in enumerate(deployed_items):
+            progress.progress(int((idx + 1) / len(deployed_items) * 100))
+            
+            if item.stack_name:
+                self._check_deployment_status(item)
+                
+                if item.status == "deployed":
+                    verified_count += 1
+                elif item.status == "failed":
+                    failed_count += 1
+        
+        # Calculate score based on verified deployments
+        self.session.findings_fixed = verified_count
+        self.session.initial_findings_count = len(self.session.findings)
+        
+        if self.session.initial_findings_count > 0:
+            fix_rate = verified_count / self.session.initial_findings_count
+            self.session.score_improvement = fix_rate * 25
+        else:
+            self.session.score_improvement = 0
+        
+        self.session.final_score = min(100, self.session.initial_score + self.session.score_improvement)
+        self.session.remaining_findings_count = self.session.initial_findings_count - verified_count
+        
+        self.session.rescan_completed = True
+        self.session.rescan_timestamp = datetime.now()
+        
+        status.markdown(f"✅ **Quick verification complete!** {verified_count} verified, {failed_count} failed")
         
         time.sleep(1)
         st.rerun()
+    
+    def _calculate_estimated_improvement(self):
+        """Calculate estimated score improvement based on deployments"""
+        
+        deployed_count = len([r for r in self.session.remediation_items if r.status == "deployed"])
+        
+        self.session.initial_findings_count = len(self.session.findings)
+        self.session.findings_fixed = deployed_count
+        self.session.remaining_findings_count = max(0, self.session.initial_findings_count - deployed_count)
+        
+        # Estimate improvement: ~3 points per fix, max 30
+        self.session.score_improvement = min(deployed_count * 3, 30)
+        self.session.final_score = min(100, self.session.initial_score + self.session.score_improvement)
+        
+        self.session.rescan_completed = True
+        self.session.rescan_timestamp = datetime.now()
+        
+        st.success(f"📊 Estimated improvement calculated: +{self.session.score_improvement:.0f} points")
+        time.sleep(1)
+        st.rerun()
+    
+    # Keep legacy function for compatibility
+    def _run_verification_scan(self):
+        """Legacy function - redirects to real verification"""
+        self._run_verification_scan_real()
     
     # ========================================================================
     # PHASE 7: COMPLETE
