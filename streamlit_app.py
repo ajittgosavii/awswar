@@ -572,17 +572,16 @@ def render_sidebar():
                             st.rerun()
                 with col_b:
                     if st.button("Logout", use_container_width=True, key="sidebar_logout_btn"):
-                        # Clear session state
-                        st.session_state.authenticated = False
-                        st.session_state.user_info = None
-                        st.session_state.user_id = None
-                        
-                        # Clear browser session token
+                        # Use the centralized logout function
                         try:
-                            from auth_azure_sso import clear_session_from_browser
-                            clear_session_from_browser()
-                        except:
-                            pass
+                            from auth_azure_sso import perform_logout
+                            perform_logout()
+                        except Exception:
+                            # Fallback: manual cleanup
+                            st.session_state.authenticated = False
+                            st.session_state.user_info = None
+                            st.session_state.user_id = None
+                            st.query_params.clear()
                         
                         st.rerun()
                 
