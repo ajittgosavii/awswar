@@ -20,9 +20,20 @@ import json
 import uuid
 from io import BytesIO
 
-# Import existing modules
+# Initialize availability flags
+AWS_AVAILABLE = False
+ANTHROPIC_AVAILABLE = False
+PDF_AVAILABLE = False
+
+# Import existing modules with better error handling
 try:
     from aws_connector import get_aws_session, test_aws_connection
+    AWS_CONNECTOR_OK = True
+except ImportError as e:
+    AWS_CONNECTOR_OK = False
+    print(f"AWS connector import warning: {e}")
+
+try:
     from landscape_scanner import (
         AWSLandscapeScanner,
         Finding,
@@ -30,14 +41,44 @@ try:
         LandscapeAssessment,
         generate_demo_assessment
     )
+    LANDSCAPE_SCANNER_OK = True
+except ImportError as e:
+    LANDSCAPE_SCANNER_OK = False
+    print(f"Landscape scanner import warning: {e}")
+
+try:
     from waf_framework_core import (
         Pillar, RiskLevel, AssessmentType,
         Question, Choice, Response, ActionItem, WAFAssessment
     )
-    AWS_AVAILABLE = True
-except ImportError as e:
-    AWS_AVAILABLE = False
-    print(f"Import warning: {e}")
+    WAF_FRAMEWORK_OK = True
+except (ImportError, KeyError) as e:
+    WAF_FRAMEWORK_OK = False
+    print(f"WAF framework import warning: {e}")
+    
+    # Define fallback classes if import fails
+    class Pillar(Enum):
+        OPERATIONAL_EXCELLENCE = "Operational Excellence"
+        SECURITY = "Security"
+        RELIABILITY = "Reliability"
+        PERFORMANCE_EFFICIENCY = "Performance Efficiency"
+        COST_OPTIMIZATION = "Cost Optimization"
+        SUSTAINABILITY = "Sustainability"
+    
+    class RiskLevel(Enum):
+        CRITICAL = "Critical"
+        HIGH = "High"
+        MEDIUM = "Medium"
+        LOW = "Low"
+        INFO = "Info"
+    
+    class AssessmentType(Enum):
+        AUTOMATED = "Automated Scan"
+        MANUAL = "Manual Assessment"
+        HYBRID = "Hybrid (Automated + Manual)"
+
+# Set AWS_AVAILABLE based on all required imports
+AWS_AVAILABLE = AWS_CONNECTOR_OK and LANDSCAPE_SCANNER_OK and WAF_FRAMEWORK_OK
 
 try:
     import anthropic
