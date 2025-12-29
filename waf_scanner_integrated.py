@@ -655,8 +655,8 @@ def run_enhanced_single_account_scan(session, account_id, region, scan_mode, waf
             
             pillar_scores = {}
             for finding in scan_results.get('findings', []):
-                mapping = mapper.map_to_pillar(finding)
-                pillar = mapping['pillar']
+                mapping = mapper.map_finding_to_pillar(finding)
+                pillar = mapping.pillar
                 if pillar not in pillar_scores:
                     pillar_scores[pillar] = {'score': 100, 'findings': []}
                 
@@ -774,8 +774,8 @@ def fetch_and_analyze_security_hub(hub_region, use_hub_creds, severity_filter, m
             for account_id in filtered_results:
                 pillar_scores = {}
                 for finding in filtered_results[account_id]:
-                    mapping = mapper.map_to_pillar(finding)
-                    pillar = mapping['pillar']
+                    mapping = mapper.map_finding_to_pillar(finding)
+                    pillar = mapping.pillar
                     
                     if pillar not in pillar_scores:
                         pillar_scores[pillar] = {'score': 100, 'findings': []}
@@ -2043,8 +2043,8 @@ def apply_waf_mapping(scan_results):
         
         for finding in findings:
             try:
-                mapping = mapper.map_to_pillar(finding)
-                pillar = mapping.get('pillar', 'Security')  # Default to Security
+                mapping = mapper.map_finding_to_pillar(finding)
+                pillar = getattr(mapping, 'pillar', 'Security')  # Default to Security
                 
                 # Make sure pillar exists in our structure
                 if pillar not in pillar_scores:
