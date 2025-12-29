@@ -814,7 +814,15 @@ class WAFReviewWorkflow:
             ("Complete", ReviewPhase.COMPLETE, "🎉")
         ]
         
-        current_idx = [p[1] for p in phases].index(self.session.current_phase)
+        # Use .value comparison for safe enum matching
+        current_phase_value = self.session.current_phase.value if hasattr(self.session.current_phase, 'value') else str(self.session.current_phase)
+        phase_values = [p[1].value for p in phases]
+        
+        try:
+            current_idx = phase_values.index(current_phase_value)
+        except ValueError:
+            # Default to SETUP if phase not found
+            current_idx = 0
         
         cols = st.columns(len(phases))
         for idx, (name, phase, icon) in enumerate(phases):
