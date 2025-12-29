@@ -3308,20 +3308,30 @@ def render_main_content():
         # Clear the navigation flag
         del st.session_state['navigate_to']
     
-    # Determine which tabs to show based on user role
+    # ========================================================================
+    # SIMPLIFIED TAB STRUCTURE - Clean use cases
+    # ========================================================================
+    # 1. Dashboard - Overview
+    # 2. AWS Connector - Connect accounts
+    # 3. WAF Assessment - MAIN (Scan+200Q OR 200Q only) + Compliance + AI Lens → Remediation
+    # 4. Architecture Designer - WAF + Compliance + AI Lens integrated
+    # 5. EKS Modernization - WAF + Compliance + AI Lens integrated
+    # 6. FinOps - Cost Optimization (unchanged)
+    # 7. Remediation - Deploy fixes from any assessment
+    # 8. AI Lens - Standalone analysis (unchanged)
+    # 9. AI Assistant - (unchanged)
+    # ========================================================================
+    
     base_tabs = [
-        "📊 Dashboard",           # NEW: Unified Security Dashboard
+        "📊 Dashboard",
         "☁️ AWS Connector",
-        "🔍 WAF Scanner",
-        "🔗 Unified Assessment",  # Combined Scanner + Assessment workflow
-        "⚡ WAF Assessment",
-        "🎨 Architecture Designer",
-        "💰 Cost Optimization",
-        "🚀 EKS Modernization",
-        "🔒 Compliance",
-        "🔧 Remediation",          # NEW: AI Remediation Engine
-        "🧠 AI Lens",              # ML, GenAI, Responsible AI lenses
-        "🤖 AI Assistant"
+        "🏗️ WAF Assessment",        # MAIN: Dual mode with 200+ questions
+        "🎨 Architecture Designer",  # WAF + Compliance + AI Lens
+        "🚀 EKS Modernization",      # WAF + Compliance + AI Lens
+        "💰 FinOps",                  # Cost Optimization (unchanged)
+        "🔧 Remediation",            # Deploy fixes
+        "🧠 AI Lens",                # Standalone (unchanged)
+        "🤖 AI Assistant"            # (unchanged)
     ]
     
     # Add Admin Panel if user is admin
@@ -3335,247 +3345,244 @@ def render_main_content():
     # Create tabs
     tabs = st.tabs(base_tabs)
     
-    # Tab 0: Dashboard (NEW - Unified Security Dashboard)
+    # ========================================================================
+    # TAB 0: DASHBOARD
+    # ========================================================================
     with tabs[0]:
         try:
             if UNIFIED_DASHBOARD_AVAILABLE:
                 render_unified_dashboard()
             else:
-                st.warning("Unified Dashboard module not available")
-                st.info("""
-                **Unified Security Dashboard** provides:
-                - Real-time WAF scores across all modules
-                - Compliance posture summary
-                - AI insights aggregation
-                - Trend tracking over time
-                - Executive summary PDF generation
-                """)
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #232F3E 0%, #FF9900 100%); 
+                            padding: 30px; border-radius: 15px; color: white; margin-bottom: 20px;">
+                    <h1>📊 Security & Compliance Dashboard</h1>
+                    <p>Unified view of your AWS Well-Architected posture</p>
+                </div>
+                """, unsafe_allow_html=True)
+                st.info("Dashboard provides real-time WAF scores, compliance status, and trend analysis across all assessments.")
         except Exception as e:
             st.error(f"Error loading Dashboard: {str(e)}")
-            import traceback
-            with st.expander("Error Details"):
-                st.code(traceback.format_exc())
     
-    # Tab 1: AWS Connector
+    # ========================================================================
+    # TAB 1: AWS CONNECTOR
+    # ========================================================================
     with tabs[1]:
         render_aws_connector_tab()
     
-    # Tab 2: WAF Scanner
+    # ========================================================================
+    # TAB 2: WAF ASSESSMENT (MAIN - Dual Mode with 200+ Questions)
+    # Use Case 1: Scan + Assessment (200 questions pre-filled from scan)
+    # Use Case 2: Assessment Only (200 questions manual)
+    # Integrated with Compliance + AI Lens throughout → Remediation
+    # ========================================================================
     with tabs[2]:
-        render_waf_scanner_tab()
-    
-    # Tab 3: Unified Assessment (Combined Scanner + Assessment)
-    with tabs[3]:
         try:
-            render_unified_waf_workflow()
-        except Exception as e:
-            st.error(f"Error loading Unified Assessment: {str(e)}")
-            import traceback
-            with st.expander("Error Details"):
-                st.code(traceback.format_exc())
-    
-    # Tab 4: WAF Assessment
-    with tabs[4]:
-        try:
-            # Check if we have results from Unified Assessment
-            if st.session_state.get('unified_assessment_results'):
-                unified_results = st.session_state.get('unified_assessment_results')
-                
+            st.markdown("""
+            <div style="background: linear-gradient(135deg, #1565C0 0%, #0D47A1 100%); 
+                        padding: 25px; border-radius: 15px; color: white; margin-bottom: 20px;">
+                <h1>🏗️ Well-Architected Framework Assessment</h1>
+                <p>Complete assessment with 200+ questions across 6 pillars • Compliance mapping • AI insights</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Mode selection
+            st.markdown("### Choose Your Assessment Mode")
+            
+            mode_col1, mode_col2 = st.columns(2)
+            
+            with mode_col1:
                 st.markdown("""
-                <div style="background: linear-gradient(135deg, #1565C0 0%, #0D47A1 100%); 
-                            padding: 20px; border-radius: 10px; color: white; margin-bottom: 20px;">
-                    <h2>📊 WAF Assessment Results</h2>
-                    <p>Displaying results from your completed Unified Assessment</p>
+                <div style="background: #E8F5E9; padding: 20px; border-radius: 10px; border-left: 4px solid #4CAF50; min-height: 200px;">
+                    <h3>🔍 Option 1: Scan + Assessment</h3>
+                    <p><b>Recommended for AWS accounts</b></p>
+                    <ul>
+                        <li>✅ Run AWS account scan first</li>
+                        <li>✅ Auto-fill questions from scan findings</li>
+                        <li>✅ Override/confirm auto-detected answers</li>
+                        <li>✅ Complete remaining questions manually</li>
+                        <li>✅ 200+ questions across 6 pillars</li>
+                    </ul>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Display summary metrics
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Overall Score", f"{unified_results.get('overall_score', 0):.0f}/100")
-                with col2:
-                    st.metric("Initial Score", f"{unified_results.get('initial_score', 0):.0f}")
-                with col3:
-                    st.metric("Final Score", f"{unified_results.get('final_score', 0):.0f}")
-                with col4:
-                    st.metric("Improvement", f"+{unified_results.get('score_improvement', 0):.0f}")
-                
-                st.markdown("---")
-                
-                # Pillar scores
-                st.markdown("### 📈 Pillar Scores")
-                pillar_scores = unified_results.get('pillar_scores', {})
-                
-                if pillar_scores:
-                    pillar_cols = st.columns(len(pillar_scores) if len(pillar_scores) <= 6 else 3)
-                    for idx, (pillar, score_data) in enumerate(pillar_scores.items()):
-                        with pillar_cols[idx % len(pillar_cols)]:
-                            score = score_data.get('combined_score', 0) if isinstance(score_data, dict) else 0
-                            color = "#4CAF50" if score >= 80 else "#FF9800" if score >= 60 else "#F44336"
-                            st.markdown(f"""
-                            <div style="background: {color}20; padding: 15px; border-radius: 10px; 
-                                        border-left: 4px solid {color}; margin-bottom: 10px;">
-                                <strong>{pillar}</strong><br>
-                                <span style="font-size: 24px; color: {color};">{score:.0f}</span>
-                            </div>
-                            """, unsafe_allow_html=True)
-                
-                st.markdown("---")
-                
-                # Findings
-                findings = unified_results.get('findings', [])
-                st.markdown(f"### 🔍 Findings ({len(findings)} total)")
-                
-                if findings:
-                    # Group by severity
-                    severity_order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
-                    for severity in severity_order:
-                        sev_findings = [f for f in findings if (f.get('severity') if isinstance(f, dict) else getattr(f, 'severity', '')) == severity]
-                        if sev_findings:
-                            with st.expander(f"**{severity}** ({len(sev_findings)} findings)", expanded=(severity in ['CRITICAL', 'HIGH'])):
-                                for f in sev_findings[:10]:
-                                    title = f.get('title') if isinstance(f, dict) else getattr(f, 'title', 'Unknown')
-                                    desc = f.get('description') if isinstance(f, dict) else getattr(f, 'description', '')
-                                    st.markdown(f"- **{title}**")
-                                    if desc:
-                                        st.caption(desc[:200])
-                
-                st.markdown("---")
-                
-                # Action buttons
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    if st.button("🔧 Go to Remediation", use_container_width=True):
-                        st.session_state['navigate_to'] = 'remediation'
-                        st.rerun()
-                with col2:
-                    if st.button("🔒 View Compliance Mapping", use_container_width=True):
-                        st.session_state['navigate_to'] = 'compliance'
-                        st.rerun()
-                with col3:
-                    if st.button("🤖 Get AI Insights", use_container_width=True):
-                        st.session_state['navigate_to'] = 'ai_lens'
-                        st.rerun()
-                
-                st.markdown("---")
-                
-                if st.button("🔄 Clear Results & Start New Assessment"):
-                    del st.session_state['unified_assessment_results']
+                if st.button("🔍 Start Scan + Assessment", type="primary", use_container_width=True, key="mode_scan"):
+                    st.session_state['waf_assessment_mode'] = 'scan_and_assess'
                     st.rerun()
-            else:
-                # No unified results - show comprehensive WAF Review
+            
+            with mode_col2:
+                st.markdown("""
+                <div style="background: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 4px solid #1976D2; min-height: 200px;">
+                    <h3>📝 Option 2: Assessment Only</h3>
+                    <p><b>For manual questionnaire without scan</b></p>
+                    <ul>
+                        <li>✅ No AWS connection required</li>
+                        <li>✅ Answer all questions manually</li>
+                        <li>✅ Ideal for planning/design phase</li>
+                        <li>✅ Good for multi-cloud scenarios</li>
+                        <li>✅ 200+ questions across 6 pillars</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.button("📝 Start Assessment Only", use_container_width=True, key="mode_manual"):
+                    st.session_state['waf_assessment_mode'] = 'assess_only'
+                    st.rerun()
+            
+            st.markdown("---")
+            
+            # Check if mode is selected
+            assessment_mode = st.session_state.get('waf_assessment_mode')
+            
+            if assessment_mode:
+                st.markdown(f"### Selected Mode: **{assessment_mode.replace('_', ' ').title()}**")
+                
+                # Render the full WAF Review module with 200+ questions
                 if WAF_REVIEW_COMPREHENSIVE_AVAILABLE:
                     render_comprehensive_waf_review()
                 elif MODULE_STATUS.get('WAF Review'):
                     render_waf_review_tab()
                 else:
                     st.error("WAF Review module not available")
+            
         except Exception as e:
             st.error(f"Error loading WAF Assessment: {str(e)}")
             import traceback
             with st.expander("Error Details"):
                 st.code(traceback.format_exc())
     
-    # Tab 5: Architecture Designer
-    with tabs[5]:
+    # ========================================================================
+    # TAB 3: ARCHITECTURE DESIGNER (WAF + Compliance + AI Lens Integrated)
+    # ========================================================================
+    with tabs[3]:
         try:
-            # Use integrated Architecture Designer first (WAF + Compliance + AI)
             if ARCHITECTURE_INTEGRATED_AVAILABLE:
                 render_architecture_designer_integrated()
-            elif MODULE_STATUS.get('Architecture Designer'):
-                if ARCHITECTURE_DESIGNER_REVAMPED:
-                    render_architecture_designer_revamped()
-                elif ARCHITECTURE_DESIGNER_AI:
-                    render_architecture_designer_ai()
-                elif ArchitectureDesignerModule is not None:
-                    ArchitectureDesignerModule.render()
-                else:
-                    st.error("Architecture Designer module not properly loaded")
+            elif ARCHITECTURE_DESIGNER_REVAMPED:
+                render_architecture_designer_revamped()
+            elif ARCHITECTURE_DESIGNER_AI:
+                render_architecture_designer_ai()
+            elif MODULE_STATUS.get('Architecture Designer') and ArchitectureDesignerModule is not None:
+                ArchitectureDesignerModule.render()
             else:
-                st.error("Architecture Designer module not available")
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #6A1B9A 0%, #8E24AA 100%); 
+                            padding: 25px; border-radius: 15px; color: white; margin-bottom: 20px;">
+                    <h1>🎨 Architecture Designer</h1>
+                    <p>Design AWS architectures with integrated WAF + Compliance + AI analysis</p>
+                </div>
+                """, unsafe_allow_html=True)
+                st.warning("Architecture Designer module not available")
         except Exception as e:
             st.error(f"Error loading Architecture Designer: {str(e)}")
             import traceback
             with st.expander("Error Details"):
                 st.code(traceback.format_exc())
     
-    # Tab 6: Cost Optimization (FinOps)
-    with tabs[6]:
-        if MODULE_STATUS.get('FinOps'):
-            try:
-                FinOpsEnterpriseModule.render()
-            except Exception as e:
-                st.error(f"Error loading FinOps: {str(e)}")
-                import traceback
-                with st.expander("Error Details"):
-                    st.code(traceback.format_exc())
-        else:
-            st.warning("FinOps module not available")
-            st.info("Cost optimization features require the FinOps module.")
-    
-    # Tab 7: EKS Modernization
-    with tabs[7]:
+    # ========================================================================
+    # TAB 4: EKS MODERNIZATION (WAF + Compliance + AI Lens Integrated)
+    # ========================================================================
+    with tabs[4]:
         try:
-            # Use integrated EKS Modernization first (WAF + Compliance + AI)
             if EKS_INTEGRATED_AVAILABLE:
                 render_eks_modernization_integrated()
-            elif MODULE_STATUS.get('EKS Modernization'):
+            elif MODULE_STATUS.get('EKS Modernization') and EKSArchitectureWizardModule is not None:
                 EKSArchitectureWizardModule.render()
             else:
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #00695C 0%, #00897B 100%); 
+                            padding: 25px; border-radius: 15px; color: white; margin-bottom: 20px;">
+                    <h1>🚀 EKS Modernization Hub</h1>
+                    <p>Kubernetes architecture design with WAF + Compliance + AI integration</p>
+                </div>
+                """, unsafe_allow_html=True)
                 st.warning("EKS Modernization module not available")
-                st.info("The EKS Modernization module provides AI-powered Kubernetes architecture design with Terraform/CloudFormation generation.")
         except Exception as e:
             st.error(f"Error loading EKS Modernization: {str(e)}")
             import traceback
             with st.expander("Error Details"):
                 st.code(traceback.format_exc())
     
-    # Tab 8: Compliance
-    with tabs[8]:
-        if MODULE_STATUS.get('Compliance'):
-            try:
-                ComplianceModule.render()
-            except Exception as e:
-                st.error(f"Error loading Compliance: {str(e)}")
-        else:
-            st.warning("Compliance module not available")
+    # ========================================================================
+    # TAB 5: FINOPS (Cost Optimization - Unchanged)
+    # ========================================================================
+    with tabs[5]:
+        try:
+            if MODULE_STATUS.get('FinOps') and FinOpsEnterpriseModule is not None:
+                FinOpsEnterpriseModule.render()
+            else:
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #F57C00 0%, #FF9800 100%); 
+                            padding: 25px; border-radius: 15px; color: white; margin-bottom: 20px;">
+                    <h1>💰 FinOps & Cost Optimization</h1>
+                    <p>AWS cost analysis, optimization recommendations, and budget tracking</p>
+                </div>
+                """, unsafe_allow_html=True)
+                st.warning("FinOps module not available")
+        except Exception as e:
+            st.error(f"Error loading FinOps: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
     
-    # Tab 9: Remediation (NEW - AI Remediation Engine)
-    with tabs[9]:
+    # ========================================================================
+    # TAB 6: REMEDIATION (Deploy fixes from any assessment)
+    # ========================================================================
+    with tabs[6]:
         try:
             if REMEDIATION_ENGINE_AVAILABLE:
                 render_remediation_engine()
             else:
-                st.warning("AI Remediation Engine not available")
-                st.info("""
-                **AI Remediation Engine** provides:
-                - Automated CloudFormation/Terraform code generation
-                - One-click deployment via AWS APIs
-                - Approval workflows for high-risk changes
-                - Stack status tracking and rollback
-                - Before/after verification scanning
-                """)
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #C62828 0%, #E53935 100%); 
+                            padding: 25px; border-radius: 15px; color: white; margin-bottom: 20px;">
+                    <h1>🔧 Remediation Engine</h1>
+                    <p>Automated CloudFormation deployment for WAF findings</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Check if we have findings to remediate
+                findings = st.session_state.get('last_findings', [])
+                if findings:
+                    st.success(f"✅ {len(findings)} findings available for remediation")
+                    
+                    severity_counts = {}
+                    for f in findings:
+                        sev = f.get('severity') if isinstance(f, dict) else getattr(f, 'severity', 'UNKNOWN')
+                        severity_counts[sev] = severity_counts.get(sev, 0) + 1
+                    
+                    cols = st.columns(4)
+                    for i, sev in enumerate(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']):
+                        with cols[i]:
+                            st.metric(sev, severity_counts.get(sev, 0))
+                else:
+                    st.info("Complete a WAF Assessment first to get findings for remediation.")
         except Exception as e:
             st.error(f"Error loading Remediation: {str(e)}")
             import traceback
             with st.expander("Error Details"):
                 st.code(traceback.format_exc())
     
-    # Tab 10: AI Lens (ML, GenAI, Responsible AI)
-    with tabs[10]:
+    # ========================================================================
+    # TAB 7: AI LENS (Unchanged)
+    # ========================================================================
+    with tabs[7]:
         try:
             if AI_LENS_AVAILABLE:
                 render_ai_lens_tab()
             else:
-                st.warning("AI Lens module not available")
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #5E35B1 0%, #7E57C2 100%); 
+                            padding: 25px; border-radius: 15px; color: white; margin-bottom: 20px;">
+                    <h1>🧠 AI Lens</h1>
+                    <p>Machine Learning • Generative AI • Responsible AI assessments</p>
+                </div>
+                """, unsafe_allow_html=True)
                 st.info("""
                 **AWS Well-Architected AI Lens** provides specialized assessments for:
-                - 🧠 **Machine Learning Lens** - ML lifecycle best practices (training, deployment, monitoring)
-                - ✨ **Generative AI Lens** - LLM/Foundation model applications (prompts, RAG, safety)
-                - ⚖️ **Responsible AI Lens** - Ethical AI practices (fairness, explainability, oversight)
-                
-                The AI Lens module provides 150+ questions across all three lenses and can export
-                Custom Lens JSON for use in AWS Well-Architected Tool.
+                - 🧠 **Machine Learning Lens** - ML lifecycle best practices
+                - ✨ **Generative AI Lens** - LLM/Foundation model applications
+                - ⚖️ **Responsible AI Lens** - Ethical AI practices
                 """)
         except Exception as e:
             st.error(f"Error loading AI Lens: {str(e)}")
@@ -3583,23 +3590,33 @@ def render_main_content():
             with st.expander("Error Details"):
                 st.code(traceback.format_exc())
     
-    # Tab 11: AI Assistant
-    with tabs[11]:
-        if MODULE_STATUS.get('AI Assistant'):
-            try:
+    # ========================================================================
+    # TAB 8: AI ASSISTANT (Unchanged)
+    # ========================================================================
+    with tabs[8]:
+        try:
+            if MODULE_STATUS.get('AI Assistant') and AIAssistantModule is not None:
                 AIAssistantModule.render()
-            except Exception as e:
-                st.error(f"Error loading AI Assistant: {str(e)}")
-                import traceback
-                with st.expander("Error Details"):
-                    st.code(traceback.format_exc())
-        else:
-            st.warning("AI Assistant module not available")
-            st.info("AI-powered assistance requires the AI Assistant module and Anthropic API key.")
+            else:
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #37474F 0%, #546E7A 100%); 
+                            padding: 25px; border-radius: 15px; color: white; margin-bottom: 20px;">
+                    <h1>🤖 AI Assistant</h1>
+                    <p>Claude-powered Q&A for AWS Well-Architected guidance</p>
+                </div>
+                """, unsafe_allow_html=True)
+                st.info("AI Assistant requires Anthropic API key configuration.")
+        except Exception as e:
+            st.error(f"Error loading AI Assistant: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
     
-    # Tab 12: Admin Panel - only for admins
-    if show_admin_tab and len(tabs) > 12:
-        with tabs[12]:
+    # ========================================================================
+    # TAB 9: ADMIN PANEL (if admin - Unchanged)
+    # ========================================================================
+    if show_admin_tab and len(tabs) > 9:
+        with tabs[9]:
             render_admin_panel_firebase()
 
 # ============================================================================
