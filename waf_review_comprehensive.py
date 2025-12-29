@@ -26,10 +26,11 @@ from io import BytesIO
 
 # Import complete 195-question database
 try:
-    from waf_questions_complete import WAF_QUESTIONS_COMPLETE
+    from waf_questions_complete import WAF_QUESTIONS_COMPLETE, WAFPillar as WAFPillarComplete
     USE_COMPLETE_QUESTIONS = True
 except ImportError:
     USE_COMPLETE_QUESTIONS = False
+    WAFPillarComplete = None
 
 # ============================================================================
 # CONSTANTS & ENUMS
@@ -188,7 +189,15 @@ class WAFReviewSession:
 
 # Use complete 195-question database if available, otherwise use fallback
 if USE_COMPLETE_QUESTIONS:
-    WAF_QUESTIONS = WAF_QUESTIONS_COMPLETE
+    # Convert keys from waf_questions_complete's WAFPillar to our local WAFPillar
+    # This is needed because Python enums with same values are different objects
+    WAF_QUESTIONS = {}
+    for pillar in WAFPillar:
+        # Find matching key in WAF_QUESTIONS_COMPLETE by value
+        for key in WAF_QUESTIONS_COMPLETE.keys():
+            if key.value == pillar.value:
+                WAF_QUESTIONS[pillar] = WAF_QUESTIONS_COMPLETE[key]
+                break
 else:
     # Fallback: Basic 43-question set (if waf_questions_complete.py not found)
     WAF_QUESTIONS = {
@@ -966,12 +975,15 @@ class WAFReviewWorkflow:
                 continue
             
             for finding in data.get('findings', []):
+                # Use pillar from scan if available, otherwise map from service
+                pillar = finding.get('pillar', '') or self._map_service_to_pillar(finding.get('service', ''))
+                
                 findings.append(Finding(
                     id=hashlib.md5(f"{account_id}-{finding.get('resource', '')}-{finding.get('title', '')}".encode()).hexdigest()[:8],
                     title=finding.get('title', 'Unknown'),
                     description=finding.get('description', ''),
                     severity=finding.get('severity', 'MEDIUM'),
-                    pillar=self._map_service_to_pillar(finding.get('service', '')),
+                    pillar=pillar,
                     service=finding.get('service', 'Unknown'),
                     resource=finding.get('resource', 'Unknown'),
                     account_id=account_id
@@ -1007,20 +1019,77 @@ class WAFReviewWorkflow:
     
     def _map_service_to_pillar(self, service: str) -> str:
         """Map AWS service to WAF pillar"""
+        service = service.upper() if service else ''
         service_pillar_map = {
+            # Security pillar
             'IAM': WAFPillar.SECURITY.value,
             'S3': WAFPillar.SECURITY.value,
+            'VPC': WAFPillar.SECURITY.value,
+            'KMS': WAFPillar.SECURITY.value,
+            'CLOUDTRAIL': WAFPillar.SECURITY.value,
+            'GUARDDUTY': WAFPillar.SECURITY.value,
+            'SECURITY HUB': WAFPillar.SECURITY.value,
+            'SECURITYHUB': WAFPillar.SECURITY.value,
+            'WAF': WAFPillar.SECURITY.value,
+            'SHIELD': WAFPillar.SECURITY.value,
+            'SECRETS MANAGER': WAFPillar.SECURITY.value,
+            'SECRETSMANAGER': WAFPillar.SECURITY.value,
+            'ACM': WAFPillar.SECURITY.value,
+            'INSPECTOR': WAFPillar.SECURITY.value,
+            'MACIE': WAFPillar.SECURITY.value,
+            'NETWORK FIREWALL': WAFPillar.SECURITY.value,
+            
+            # Reliability pillar
             'EC2': WAFPillar.RELIABILITY.value,
             'RDS': WAFPillar.RELIABILITY.value,
-            'VPC': WAFPillar.SECURITY.value,
-            'Lambda': WAFPillar.PERFORMANCE_EFFICIENCY.value,
-            'CloudWatch': WAFPillar.OPERATIONAL_EXCELLENCE.value,
-            'CloudTrail': WAFPillar.SECURITY.value,
-            'KMS': WAFPillar.SECURITY.value,
             'ELB': WAFPillar.RELIABILITY.value,
-            'Auto Scaling': WAFPillar.RELIABILITY.value,
-            'Cost Explorer': WAFPillar.COST_OPTIMIZATION.value,
-            'Trusted Advisor': WAFPillar.COST_OPTIMIZATION.value
+            'ELB/ALB': WAFPillar.RELIABILITY.value,
+            'ALB': WAFPillar.RELIABILITY.value,
+            'NLB': WAFPillar.RELIABILITY.value,
+            'AUTO SCALING': WAFPillar.RELIABILITY.value,
+            'AUTOSCALING': WAFPillar.RELIABILITY.value,
+            'ROUTE53': WAFPillar.RELIABILITY.value,
+            'ROUTE 53': WAFPillar.RELIABILITY.value,
+            'BACKUP': WAFPillar.RELIABILITY.value,
+            'ELASTICACHE': WAFPillar.RELIABILITY.value,
+            'DYNAMODB': WAFPillar.RELIABILITY.value,
+            'SQS': WAFPillar.RELIABILITY.value,
+            'SNS': WAFPillar.RELIABILITY.value,
+            
+            # Operational Excellence pillar
+            'CLOUDWATCH': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'CLOUDFORMATION': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'CONFIG': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'SYSTEMS MANAGER': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'SSM': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'X-RAY': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'XRAY': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'CODEPIPELINE': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'CODEBUILD': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'CODEDEPLOY': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'EVENTBRIDGE': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            
+            # Performance Efficiency pillar
+            'LAMBDA': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'ECS': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'EKS': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'FARGATE': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'CLOUDFRONT': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'API GATEWAY': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'APIGATEWAY': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'GLOBAL ACCELERATOR': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            
+            # Cost Optimization pillar
+            'COST EXPLORER': WAFPillar.COST_OPTIMIZATION.value,
+            'TRUSTED ADVISOR': WAFPillar.COST_OPTIMIZATION.value,
+            'BUDGETS': WAFPillar.COST_OPTIMIZATION.value,
+            'SAVINGS PLANS': WAFPillar.COST_OPTIMIZATION.value,
+            'RESERVED INSTANCES': WAFPillar.COST_OPTIMIZATION.value,
+            'COMPUTE OPTIMIZER': WAFPillar.COST_OPTIMIZATION.value,
+            
+            # Sustainability pillar
+            'SUSTAINABILITY': WAFPillar.SUSTAINABILITY.value,
+            'GRAVITON': WAFPillar.SUSTAINABILITY.value,
         }
         return service_pillar_map.get(service, WAFPillar.SECURITY.value)
     
@@ -1431,9 +1500,15 @@ class WAFReviewWorkflow:
     def _auto_detect_answers(self):
         """Auto-detect questionnaire answers from scan findings"""
         
+        # Debug: Show findings count
+        total_findings = len(self.session.findings)
+        
         for pillar in WAFPillar:
             questions = WAF_QUESTIONS.get(pillar, [])
             pillar_findings = [f for f in self.session.findings if f.pillar == pillar.value]
+            
+            # Debug info - show what we're working with
+            scan_detectable_qs = [q for q in questions if q.get('scan_detectable', False)]
             
             for q in questions:
                 # Check if question can be auto-detected
@@ -1494,6 +1569,13 @@ class WAFReviewWorkflow:
         
         questions = WAF_QUESTIONS.get(pillar, [])
         pillar_responses = [r for r in self.session.responses if r.pillar == pillar.value]
+        
+        # Debug: Show question count for this pillar
+        if not questions:
+            st.warning(f"⚠️ No questions found for {pillar.value}. WAF_QUESTIONS has {len(WAF_QUESTIONS)} pillars with keys: {[k.value for k in WAF_QUESTIONS.keys()]}")
+            return
+        
+        st.caption(f"📝 {len(questions)} questions in this pillar | {len(pillar_responses)} responses recorded")
         
         for q in questions:
             response = next((r for r in pillar_responses if r.question_id == q['id']), None)
