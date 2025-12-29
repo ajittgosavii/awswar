@@ -462,6 +462,176 @@ class FirebaseManager:
         except Exception as e:
             st.error(f"Failed to cleanup logs: {str(e)}")
             return 0
+    
+    # ========================================================================
+    # SESSION MANAGEMENT - For browser refresh persistence
+    # ========================================================================
+    
+    def create_session(self, user_id: str, user_info: Dict[str, Any], 
+                       expires_days: int = 7) -> Optional[str]:
+        """
+        Create a new session in Firebase.
+        Returns session_id if successful, None otherwise.
+        """
+        if not self.db_ref:
+            return None
+        
+        try:
+            import secrets
+            
+            # Generate unique session ID
+            session_id = secrets.token_urlsafe(32)
+            
+            # Calculate expiry
+            from datetime import timedelta
+            expires_at = datetime.utcnow() + timedelta(days=expires_days)
+            
+            # Session data
+            session_data = {
+                'user_id': user_id,
+                'email': user_info.get('email', ''),
+                'name': user_info.get('name', ''),
+                'role': user_info.get('role', 'viewer'),
+                'created_at': datetime.utcnow().isoformat(),
+                'expires_at': expires_at.isoformat(),
+                'last_accessed': datetime.utcnow().isoformat(),
+            }
+            
+            # Save to Firebase
+            sessions_ref = self._get_reference('sessions')
+            sessions_ref.child(session_id).set(session_data)
+            
+            return session_id
+            
+        except Exception as e:
+            print(f"Failed to create session: {str(e)}")
+            return None
+    
+    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get session data by ID"""
+        if not self.db_ref or not session_id:
+            return None
+        
+        try:
+            sessions_ref = self._get_reference('sessions')
+            session_data = sessions_ref.child(session_id).get()
+            return session_data
+        except Exception as e:
+            print(f"Failed to get session: {str(e)}")
+            return None
+    
+    def validate_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Validate a session and return user info if valid.
+        Also updates last_accessed timestamp.
+        Returns user_info dict if valid, None if invalid/expired.
+        """
+        if not self.db_ref or not session_id:
+            return None
+        
+        try:
+            session_data = self.get_session(session_id)
+            
+            if not session_data:
+                return None
+            
+            # Check expiry
+            expires_at_str = session_data.get('expires_at', '')
+            if expires_at_str:
+                expires_at = datetime.fromisoformat(expires_at_str)
+                if datetime.utcnow() > expires_at:
+                    # Session expired - delete it
+                    self.delete_session(session_id)
+                    return None
+            
+            # Update last_accessed
+            sessions_ref = self._get_reference('sessions')
+            sessions_ref.child(session_id).update({
+                'last_accessed': datetime.utcnow().isoformat()
+            })
+            
+            # Get full user info from users collection
+            user_id = session_data.get('user_id')
+            if user_id:
+                user_info = self.get_user(user_id)
+                if user_info:
+                    return user_info
+            
+            # Fallback to session data
+            return {
+                'id': session_data.get('user_id', ''),
+                'email': session_data.get('email', ''),
+                'name': session_data.get('name', ''),
+                'role': session_data.get('role', 'viewer'),
+            }
+            
+        except Exception as e:
+            print(f"Failed to validate session: {str(e)}")
+            return None
+    
+    def delete_session(self, session_id: str) -> bool:
+        """Delete a session"""
+        if not self.db_ref or not session_id:
+            return False
+        
+        try:
+            sessions_ref = self._get_reference('sessions')
+            sessions_ref.child(session_id).delete()
+            return True
+        except Exception as e:
+            print(f"Failed to delete session: {str(e)}")
+            return False
+    
+    def delete_user_sessions(self, user_id: str) -> int:
+        """Delete all sessions for a user (for logout from all devices)"""
+        if not self.db_ref:
+            return 0
+        
+        try:
+            sessions_ref = self._get_reference('sessions')
+            all_sessions = sessions_ref.get()
+            
+            if not all_sessions:
+                return 0
+            
+            deleted_count = 0
+            for sid, session_data in all_sessions.items():
+                if session_data.get('user_id') == user_id:
+                    sessions_ref.child(sid).delete()
+                    deleted_count += 1
+            
+            return deleted_count
+        except Exception as e:
+            print(f"Failed to delete user sessions: {str(e)}")
+            return 0
+    
+    def cleanup_expired_sessions(self) -> int:
+        """Remove all expired sessions"""
+        if not self.db_ref:
+            return 0
+        
+        try:
+            sessions_ref = self._get_reference('sessions')
+            all_sessions = sessions_ref.get()
+            
+            if not all_sessions:
+                return 0
+            
+            deleted_count = 0
+            now = datetime.utcnow()
+            
+            for sid, session_data in all_sessions.items():
+                expires_at_str = session_data.get('expires_at', '')
+                if expires_at_str:
+                    expires_at = datetime.fromisoformat(expires_at_str)
+                    if now > expires_at:
+                        sessions_ref.child(sid).delete()
+                        deleted_count += 1
+            
+            return deleted_count
+        except Exception as e:
+            print(f"Failed to cleanup sessions: {str(e)}")
+            return 0
 
 
 # Initialize Firebase manager
