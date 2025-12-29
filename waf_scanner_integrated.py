@@ -621,15 +621,31 @@ def run_enhanced_single_account_scan(session, account_id, region, scan_mode, waf
         
         scanner = AWSLandscapeScanner(session)
         
-        if scan_mode == "quick":
-            scan_results = scanner.quick_scan(region)
-            progress_bar.progress(40)
-        elif scan_mode == "comprehensive":
-            scan_results = scanner.comprehensive_scan(region)
-            progress_bar.progress(40)
-        else:  # standard
-            scan_results = scanner.scan(region)
-            progress_bar.progress(40)
+        # All scan modes use run_scan - the only available method
+        # scan_mode only affects how we process results later
+        status_text.text(f"🔍 Running {scan_mode} scan...")
+        scan_results = scanner.run_scan([region])
+        progress_bar.progress(40)
+        
+        # Convert LandscapeAssessment to dict format if needed
+        if hasattr(scan_results, 'findings'):
+            findings = []
+            for f in scan_results.findings:
+                findings.append({
+                    'id': getattr(f, 'id', ''),
+                    'title': getattr(f, 'title', ''),
+                    'severity': getattr(f, 'severity', 'MEDIUM'),
+                    'description': getattr(f, 'description', ''),
+                    'resource_type': getattr(f, 'resource_type', ''),
+                    'resource_id': getattr(f, 'resource_id', ''),
+                    'pillar': getattr(f, 'pillar', 'Security'),
+                    'recommendation': getattr(f, 'recommendation', ''),
+                })
+            scan_results = {
+                'findings': findings,
+                'overall_score': getattr(scan_results, 'overall_score', 0),
+                'pillar_scores': getattr(scan_results, 'pillar_scores', {}),
+            }
         
         # Step 2: WAF Pillar Mapping
         if enable_waf_mapping:

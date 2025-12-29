@@ -1955,31 +1955,56 @@ def run_single_account_waf_scan(session, region, depth, pillars, account_id):
         status_text.text("🔍 Initializing scanner...")
         progress_bar.progress(10)
         
-        scanner = AWSLandscapeScanner(session, region)
+        # AWSLandscapeScanner only takes session as argument
+        scanner = AWSLandscapeScanner(session)
         
         status_text.text("🔍 Scanning AWS infrastructure...")
         progress_bar.progress(30)
         
-        assessment = scanner.scan_landscape()
+        # Define progress callback for status updates
+        def progress_callback(service_name, current, total):
+            pct = 30 + int((current / total) * 50) if total > 0 else 30
+            progress_bar.progress(min(pct, 80))
+            status_text.text(f"🔍 Scanning {service_name}...")
+        
+        # run_scan takes a list of regions and optional progress callback
+        assessment = scanner.run_scan([region], progress_callback)
         
         status_text.text("📊 Analyzing against WAF best practices...")
-        progress_bar.progress(60)
+        progress_bar.progress(85)
         
         status_text.text("✅ Generating WAF assessment...")
-        progress_bar.progress(90)
+        progress_bar.progress(95)
+        
+        # Extract data from assessment
+        resource_count = 0
+        issue_count = len(assessment.findings) if hasattr(assessment, 'findings') else 0
+        overall_score = assessment.overall_score if hasattr(assessment, 'overall_score') else 0
+        
+        if hasattr(assessment, 'inventory'):
+            inv = assessment.inventory
+            resource_count = sum([
+                getattr(inv, 'ec2_instances', 0),
+                getattr(inv, 's3_buckets', 0),
+                getattr(inv, 'rds_instances', 0),
+                getattr(inv, 'lambda_functions', 0),
+                getattr(inv, 'iam_users', 0),
+            ])
         
         scan_results = {
             'account_id': account_id,
             'region': region,
             'scan_time': datetime.now().isoformat(),
-            'resource_count': 150,
-            'issue_count': 23,
-            'compliance_score': 78,
+            'resource_count': resource_count,
+            'issue_count': issue_count,
+            'compliance_score': overall_score,
             'pillars': pillars,
-            'assessment': assessment
+            'assessment': assessment,
+            'findings': assessment.findings if hasattr(assessment, 'findings') else []
         }
         
         st.session_state.last_scan = scan_results
+        st.session_state.last_findings = scan_results.get('findings', [])
         
         progress_bar.progress(100)
         status_text.text("")
@@ -1989,7 +2014,10 @@ def run_single_account_waf_scan(session, region, depth, pillars, account_id):
         display_scan_results(scan_results)
         
     except Exception as e:
+        import traceback
         st.error(f"❌ Scan failed: {str(e)}")
+        with st.expander("Error Details"):
+            st.code(traceback.format_exc())
 
 def fetch_from_security_hub(region, use_hub_creds=True):
     """
