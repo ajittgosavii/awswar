@@ -1,196 +1,163 @@
 """
 Azure AD SSO Authentication - FIXED BUTTON VERSION
 Works with personal Microsoft accounts
-Session persistence via JWT tokens in browser local storage
+Session persistence via Firebase Realtime Database
 """
 
 import streamlit as st
 from typing import Optional, Dict, List, Callable
 from functools import wraps
-import jwt
-import hashlib
 from datetime import datetime, timedelta
-import json
 
 # ============================================================================
 # SESSION PERSISTENCE CONFIGURATION
 # ============================================================================
 
-# Secret key for JWT signing (in production, use st.secrets)
-def get_jwt_secret():
-    """Get JWT secret from secrets or generate a stable one"""
-    try:
-        return st.secrets.get("jwt_secret", "waf-scanner-session-key-2024")
-    except:
-        return "waf-scanner-session-key-2024"
-
 SESSION_EXPIRY_DAYS = 7  # Session valid for 7 days
 
 # ============================================================================
-# JWT SESSION HELPERS
+# FIREBASE SESSION HELPERS
 # ============================================================================
 
-def create_session_token(user_info: Dict) -> str:
-    """Create a JWT session token for the user"""
-    payload = {
-        'user_id': user_info.get('id', ''),
-        'email': user_info.get('email', ''),
-        'name': user_info.get('name', ''),
-        'role': user_info.get('role', 'viewer'),
-        'exp': datetime.utcnow() + timedelta(days=SESSION_EXPIRY_DAYS),
-        'iat': datetime.utcnow()
-    }
-    return jwt.encode(payload, get_jwt_secret(), algorithm='HS256')
-
-
-def verify_session_token(token: str) -> Optional[Dict]:
-    """Verify and decode a JWT session token"""
-    try:
-        payload = jwt.decode(token, get_jwt_secret(), algorithms=['HS256'])
-        return payload
-    except jwt.ExpiredSignatureError:
-        return None
-    except jwt.InvalidTokenError:
-        return None
-
-
-def inject_session_storage_script():
-    """Inject JavaScript to handle session storage"""
-    st.markdown("""
-    <script>
-    // Session storage helper functions
-    window.saveSessionToken = function(token) {
-        try {
-            localStorage.setItem('waf_session_token', token);
-            return true;
-        } catch(e) {
-            console.error('Failed to save session:', e);
-            return false;
-        }
-    };
-    
-    window.getSessionToken = function() {
-        try {
-            return localStorage.getItem('waf_session_token');
-        } catch(e) {
-            return null;
-        }
-    };
-    
-    window.clearSessionToken = function() {
-        try {
-            localStorage.removeItem('waf_session_token');
-            return true;
-        } catch(e) {
-            return false;
-        }
-    };
-    </script>
-    """, unsafe_allow_html=True)
-
-
-def save_session_to_browser(token: str):
-    """Save session token to browser local storage"""
-    st.markdown(f"""
-    <script>
-    (function() {{
-        try {{
-            localStorage.setItem('waf_session_token', '{token}');
-            console.log('Session saved successfully');
-        }} catch(e) {{
-            console.error('Failed to save session:', e);
-        }}
-    }})();
-    </script>
-    """, unsafe_allow_html=True)
-
-
-def clear_session_from_browser():
-    """Clear session token from browser local storage"""
-    st.markdown("""
-    <script>
-    (function() {
-        try {
-            localStorage.removeItem('waf_session_token');
-            console.log('Session cleared');
-        } catch(e) {
-            console.error('Failed to clear session:', e);
-        }
-    })();
-    </script>
-    """, unsafe_allow_html=True)
-
-
-def check_and_restore_session():
+def save_session_to_firebase(user_info: Dict) -> Optional[str]:
     """
-    Check for existing session token in query params and restore session.
+    Create a session in Firebase and return the session ID.
+    """
+    try:
+        from auth_database_firebase import get_database_manager
+        db_manager = get_database_manager()
+        
+        if db_manager and db_manager.db_ref:
+            session_id = db_manager.create_session(
+                user_id=user_info.get('id', ''),
+                user_info=user_info,
+                expires_days=SESSION_EXPIRY_DAYS
+            )
+            return session_id
+    except Exception as e:
+        print(f"Failed to create Firebase session: {e}")
+    
+    return None
+
+
+def validate_firebase_session(session_id: str) -> Optional[Dict]:
+    """
+    Validate a session ID against Firebase.
+    Returns user_info if valid, None otherwise.
+    """
+    if not session_id:
+        return None
+    
+    try:
+        from auth_database_firebase import get_database_manager
+        db_manager = get_database_manager()
+        
+        if db_manager and db_manager.db_ref:
+            user_info = db_manager.validate_session(session_id)
+            return user_info
+    except Exception as e:
+        print(f"Failed to validate Firebase session: {e}")
+    
+    return None
+
+
+def delete_firebase_session(session_id: str) -> bool:
+    """Delete a session from Firebase."""
+    if not session_id:
+        return False
+    
+    try:
+        from auth_database_firebase import get_database_manager
+        db_manager = get_database_manager()
+        
+        if db_manager and db_manager.db_ref:
+            return db_manager.delete_session(session_id)
+    except Exception as e:
+        print(f"Failed to delete Firebase session: {e}")
+    
+    return False
+
+
+def save_session_id_to_url(session_id: str):
+    """Save session ID to URL query parameters."""
+    if session_id:
+        try:
+            st.query_params['sid'] = session_id
+        except Exception:
+            pass
+
+
+def get_session_id_from_url() -> Optional[str]:
+    """Get session ID from URL query parameters."""
+    try:
+        return st.query_params.get('sid')
+    except Exception:
+        return None
+
+
+def clear_session_from_url():
+    """Clear session ID from URL."""
+    try:
+        if 'sid' in st.query_params:
+            del st.query_params['sid']
+    except Exception:
+        try:
+            st.query_params.clear()
+        except:
+            pass
+
+
+def check_and_restore_session() -> bool:
+    """
+    Check for existing session in URL and validate against Firebase.
     Returns True if session was restored, False otherwise.
     """
     # Check if already authenticated
     if st.session_state.get('authenticated', False):
         return True
     
-    # Check for session token in query params (passed from JavaScript)
-    query_params = st.query_params
+    # Get session ID from URL
+    session_id = get_session_id_from_url()
     
-    if 'session_token' in query_params:
-        token = query_params.get('session_token')
-        
-        # Verify the token
-        payload = verify_session_token(token)
-        
-        if payload:
-            # Token is valid - restore session
-            user_info = {
-                'id': payload.get('user_id', ''),
-                'email': payload.get('email', ''),
-                'name': payload.get('name', ''),
-                'role': payload.get('role', 'viewer'),
-                'given_name': payload.get('name', '').split()[0] if payload.get('name') else '',
-            }
-            
-            # Set session state
-            st.session_state.authenticated = True
-            st.session_state.user_id = user_info['id']
-            st.session_state.user_info = user_info
-            st.session_state.user_manager = SimpleUserManager()
-            
-            # Clear the token from URL (for cleaner URLs)
-            st.query_params.clear()
-            
-            return True
-        else:
-            # Token expired or invalid - clear it
-            st.query_params.clear()
+    if not session_id:
+        return False
     
-    return False
+    # Validate against Firebase
+    user_info = validate_firebase_session(session_id)
+    
+    if user_info:
+        # Session is valid - restore session state
+        st.session_state.authenticated = True
+        st.session_state.user_id = user_info.get('id', '')
+        st.session_state.user_info = user_info
+        st.session_state.user_manager = SimpleUserManager()
+        st.session_state.current_session_id = session_id
+        
+        return True
+    else:
+        # Session is invalid or expired - clear it from URL
+        clear_session_from_url()
+        return False
 
 
-def render_session_restore_script():
-    """Render JavaScript that checks for stored session and restores it"""
-    st.markdown("""
-    <script>
-    (function() {
-        // Only run if not already authenticated (check URL for auth indicators)
-        const urlParams = new URLSearchParams(window.location.search);
-        
-        // Skip if already processing OAuth callback
-        if (urlParams.has('code') || urlParams.has('session_token')) {
-            return;
-        }
-        
-        // Check for stored session token
-        const token = localStorage.getItem('waf_session_token');
-        
-        if (token) {
-            // Redirect with session token to restore session
-            const currentUrl = new URL(window.location.href);
-            currentUrl.searchParams.set('session_token', token);
-            window.location.href = currentUrl.toString();
-        }
-    })();
-    </script>
-    """, unsafe_allow_html=True)
+def perform_logout():
+    """Perform complete logout - clear session state, Firebase, and URL."""
+    # Get current session ID
+    session_id = st.session_state.get('current_session_id') or get_session_id_from_url()
+    
+    # Delete from Firebase
+    if session_id:
+        delete_firebase_session(session_id)
+    
+    # Clear session state
+    st.session_state.authenticated = False
+    st.session_state.user_info = None
+    st.session_state.user_id = None
+    st.session_state.user_manager = None
+    st.session_state.current_session_id = None
+    
+    # Clear URL
+    clear_session_from_url()
 
 
 # ============================================================================
@@ -404,13 +371,10 @@ def get_user_info(access_token: str) -> Optional[Dict]:
 def render_login():
     """Render login UI with WORKING button and session persistence"""
     
-    # STEP 1: Try to restore session from browser storage
+    # STEP 1: Try to restore session from URL token
     if check_and_restore_session():
         # Session restored successfully - no need to show login
         return
-    
-    # STEP 2: Inject session restore script for browser refresh handling
-    render_session_restore_script()
     
     # Get Azure AD config
     try:
@@ -511,12 +475,17 @@ def render_login():
                             st.session_state.user_info = final_user_info
                             st.session_state.user_manager = SimpleUserManager()
                             
-                            # Create and save session token for persistence
-                            session_token = create_session_token(final_user_info)
-                            save_session_to_browser(session_token)
+                            # Create Firebase session for persistence
+                            session_id = save_session_to_firebase(final_user_info)
                             
-                            # Clear query params and redirect to app
+                            # Clear OAuth code from URL
                             st.query_params.clear()
+                            
+                            # Add session ID to URL for refresh persistence
+                            if session_id:
+                                save_session_id_to_url(session_id)
+                                st.session_state.current_session_id = session_id
+                            
                             st.success("✅ Login successful!")
                             st.rerun()
                             
@@ -677,15 +646,23 @@ def render_login():
 
 
 def perform_logout():
-    """Perform complete logout - clear session state and browser token"""
+    """Perform complete logout - clear Firebase session, session state, and URL."""
+    # Get current session ID
+    session_id = st.session_state.get('current_session_id') or get_session_id_from_url()
+    
+    # Delete from Firebase
+    if session_id:
+        delete_firebase_session(session_id)
+    
     # Clear session state
     st.session_state.authenticated = False
     st.session_state.user_info = None
     st.session_state.user_id = None
     st.session_state.user_manager = None
+    st.session_state.current_session_id = None
     
-    # Clear browser session token
-    clear_session_from_browser()
+    # Clear URL
+    clear_session_from_url()
 
 
 __all__ = [
@@ -694,8 +671,9 @@ __all__ = [
     'SimpleUserManager', 
     'render_login',
     'perform_logout',
-    'clear_session_from_browser',
+    'clear_session_from_url',
     'check_and_restore_session',
-    'create_session_token',
-    'verify_session_token'
+    'save_session_to_firebase',
+    'validate_firebase_session',
+    'delete_firebase_session',
 ]
