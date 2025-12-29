@@ -1029,41 +1029,45 @@ class WAFReviewWorkflow:
     # ========================================================================
     
     def _render_scanning_phase(self):
-        """Render scanning phase"""
+        """Render scanning phase - contained to prevent UI bleeding to other tabs"""
         
-        st.markdown("## 🔍 Step 2: AWS Account Scanning")
+        # Use a container to isolate the scanning UI
+        scanning_container = st.container()
         
-        # Check if we should use existing results
-        if 'multi_scan_results' in st.session_state and not self.session.scan_completed:
-            results = st.session_state.multi_scan_results
-            account_count = len([k for k in results.keys() if k != 'consolidated_pdf'])
+        with scanning_container:
+            st.markdown("## 🔍 Step 2: AWS Account Scanning")
             
-            st.info(f"📊 Found existing scan results from WAF Review tab ({account_count} accounts)")
+            # Check if we should use existing results
+            if 'multi_scan_results' in st.session_state and not self.session.scan_completed:
+                results = st.session_state.multi_scan_results
+                account_count = len([k for k in results.keys() if k != 'consolidated_pdf'])
+                
+                st.info(f"📊 Found existing scan results from WAF Review tab ({account_count} accounts)")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Use Existing Results", type="primary", use_container_width=True):
+                        self._import_existing_results(results)
+                with col2:
+                    if st.button("🔄 Run New Scan", use_container_width=True):
+                        self._run_new_scan()
             
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("✅ Use Existing Results", type="primary", use_container_width=True):
-                    self._import_existing_results(results)
-            with col2:
-                if st.button("🔄 Run New Scan", use_container_width=True):
-                    self._run_new_scan()
-        
-        elif self.session.scan_completed:
-            # Show scan results summary
-            st.success(f"✅ Scan completed at {self.session.scan_timestamp}")
+            elif self.session.scan_completed:
+                # Show scan results summary
+                st.success(f"✅ Scan completed at {self.session.scan_timestamp}")
+                
+                # Show findings summary by pillar
+                self._render_findings_summary()
+                
+                col1, col2, col3 = st.columns([1, 1, 1])
+                with col2:
+                    if st.button("▶️ Continue to Questionnaire", type="primary", use_container_width=True):
+                        self.session.current_phase = ReviewPhase.QUESTIONNAIRE
+                        self.session.updated_at = datetime.now()
+                        st.rerun()
             
-            # Show findings summary by pillar
-            self._render_findings_summary()
-            
-            col1, col2, col3 = st.columns([1, 1, 1])
-            with col2:
-                if st.button("▶️ Continue to Questionnaire", type="primary", use_container_width=True):
-                    self.session.current_phase = ReviewPhase.QUESTIONNAIRE
-                    self.session.updated_at = datetime.now()
-                    st.rerun()
-        
-        else:
-            self._run_new_scan()
+            else:
+                self._run_new_scan()
     
     def _run_new_scan(self):
         """Execute new AWS scan"""
