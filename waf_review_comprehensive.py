@@ -1072,16 +1072,221 @@ class WAFReviewWorkflow:
         st.rerun()
     
     def _scan_security_hub(self) -> List[Finding]:
-        """Scan using Security Hub"""
-        # Implementation for Security Hub integration
-        # This would query Security Hub findings
-        return []
+        """Scan using Security Hub - FIXED VERSION"""
+        findings = []
+        
+        connected_accounts = st.session_state.get('connected_accounts', [])
+        
+        if not connected_accounts:
+            if st.session_state.get('aws_access_key') and st.session_state.get('aws_secret_key'):
+                connected_accounts = [{
+                    'name': 'Primary Account',
+                    'access_key': st.session_state.get('aws_access_key'),
+                    'secret_key': st.session_state.get('aws_secret_key'),
+                    'region': st.session_state.get('aws_region', 'us-east-1')
+                }]
+        
+        if not connected_accounts:
+            return []
+        
+        for account in connected_accounts:
+            try:
+                # Create session
+                if account.get('auth_method') == 'assume_role':
+                    session = self._create_assume_role_session(account)
+                else:
+                    session = boto3.Session(
+                        aws_access_key_id=account.get('access_key'),
+                        aws_secret_access_key=account.get('secret_key'),
+                        region_name=account.get('region', 'us-east-1')
+                    )
+                
+                if not session:
+                    continue
+                
+                # Query Security Hub
+                securityhub = session.client('securityhub')
+                
+                # Get findings
+                paginator = securityhub.get_paginator('get_findings')
+                
+                filters = {
+                    'RecordState': [{'Value': 'ACTIVE', 'Comparison': 'EQUALS'}],
+                    'WorkflowStatus': [{'Value': 'NEW', 'Comparison': 'EQUALS'}]
+                }
+                
+                for page in paginator.paginate(Filters=filters, MaxResults=100):
+                    for sh_finding in page.get('Findings', []):
+                        severity = sh_finding.get('Severity', {}).get('Label', 'MEDIUM')
+                        finding_type = sh_finding.get('Type', [''])[0] if sh_finding.get('Type') else ''
+                        pillar = self._map_securityhub_to_pillar(finding_type)
+                        
+                        finding = Finding(
+                            id=sh_finding.get('Id', ''),
+                            title=sh_finding.get('Title', 'Unknown'),
+                            description=sh_finding.get('Description', ''),
+                            severity=severity,
+                            pillar=pillar,
+                            service='Security Hub',
+                            resource=sh_finding.get('Resources', [{}])[0].get('Id', 'N/A'),
+                            account_id=sh_finding.get('AwsAccountId', ''),
+                            region=sh_finding.get('Region', ''),
+                            recommendation=sh_finding.get('Remediation', {}).get('Recommendation', {}).get('Text', ''),
+                            compliance_frameworks=[]
+                        )
+                        findings.append(finding)
+                
+            except Exception as e:
+                st.warning(f"Security Hub query failed for {account.get('name', 'account')}: {str(e)}")
+        
+        return findings
+    
+    def _map_securityhub_to_pillar(self, finding_type: str) -> str:
+        """Map Security Hub finding type to WAF pillar"""
+        finding_type_lower = finding_type.lower()
+        
+        if any(x in finding_type_lower for x in ['iam', 'encryption', 'kms', 'secret', 'password', 'access']):
+            return 'Security'
+        elif any(x in finding_type_lower for x in ['backup', 'availability', 'redundancy', 'failover']):
+            return 'Reliability'
+        elif any(x in finding_type_lower for x in ['performance', 'latency', 'throughput']):
+            return 'Performance Efficiency'
+        elif any(x in finding_type_lower for x in ['cost', 'unused', 'idle', 'savings']):
+            return 'Cost Optimization'
+        elif any(x in finding_type_lower for x in ['logging', 'monitoring', 'cloudwatch', 'cloudtrail']):
+            return 'Operational Excellence'
+        else:
+            return 'Security'
     
     def _scan_direct_api(self) -> List[Finding]:
-        """Scan using direct AWS API calls"""
-        # This uses the existing multi-account scan results if available
-        # Or runs new scans
-        return []
+        """Scan using direct AWS API calls - FIXED VERSION using AWSLandscapeScanner"""
+        findings = []
+        
+        # Check if we have connected accounts
+        connected_accounts = st.session_state.get('connected_accounts', [])
+        
+        if not connected_accounts:
+            # Try single account from session
+            if st.session_state.get('aws_access_key') and st.session_state.get('aws_secret_key'):
+                connected_accounts = [{
+                    'name': 'Primary Account',
+                    'access_key': st.session_state.get('aws_access_key'),
+                    'secret_key': st.session_state.get('aws_secret_key'),
+                    'region': st.session_state.get('aws_region', 'us-east-1')
+                }]
+        
+        if not connected_accounts:
+            st.warning("⚠️ No AWS accounts connected. Please connect accounts in the AWS Connector tab.")
+            return []
+        
+        # Import scanner
+        try:
+            from landscape_scanner import AWSLandscapeScanner
+        except ImportError:
+            st.error("❌ Landscape scanner module not available")
+            return []
+        
+        total_accounts = len(connected_accounts)
+        
+        for idx, account in enumerate(connected_accounts):
+            account_name = account.get('name', f'Account {idx+1}')
+            
+            st.markdown(f"**Scanning {account_name}...** ({idx+1}/{total_accounts})")
+            
+            try:
+                # Create boto3 session for this account
+                if account.get('auth_method') == 'assume_role':
+                    session = self._create_assume_role_session(account)
+                else:
+                    session = boto3.Session(
+                        aws_access_key_id=account.get('access_key'),
+                        aws_secret_access_key=account.get('secret_key'),
+                        region_name=account.get('region', 'us-east-1')
+                    )
+                
+                if not session:
+                    st.warning(f"⚠️ Could not create session for {account_name}")
+                    continue
+                
+                # Get account ID
+                try:
+                    sts = session.client('sts')
+                    account_id = sts.get_caller_identity()['Account']
+                except:
+                    account_id = account.get('account_id', 'unknown')
+                
+                # Initialize scanner with session
+                scanner = AWSLandscapeScanner(session=session, account_id=account_id)
+                
+                # Run scan
+                regions = [account.get('region', 'us-east-1')]
+                
+                assessment = scanner.run_scan(regions=regions)
+                
+                # Convert landscape findings to our Finding format
+                for lf in assessment.findings:
+                    finding = Finding(
+                        id=lf.id,
+                        title=lf.title,
+                        description=lf.description,
+                        severity=lf.severity,
+                        pillar=lf.pillar,
+                        service=lf.source_service,
+                        resource=', '.join(lf.affected_resources[:3]) if lf.affected_resources else 'N/A',
+                        account_id=account_id,
+                        region=lf.region or regions[0],
+                        recommendation=lf.recommendation,
+                        compliance_frameworks=lf.compliance_frameworks
+                    )
+                    findings.append(finding)
+                
+                st.success(f"✅ {account_name}: Found {len(assessment.findings)} findings")
+                
+            except Exception as e:
+                st.error(f"❌ Error scanning {account_name}: {str(e)}")
+                import traceback
+                with st.expander("Error Details"):
+                    st.code(traceback.format_exc())
+        
+        return findings
+    
+    def _create_assume_role_session(self, account: dict):
+        """Create a session using AssumeRole"""
+        try:
+            hub_access_key = st.session_state.get('multi_hub_access_key')
+            hub_secret_key = st.session_state.get('multi_hub_secret_key')
+            
+            if not hub_access_key or not hub_secret_key:
+                st.warning("Hub credentials not configured for AssumeRole")
+                return None
+            
+            base_session = boto3.Session(
+                aws_access_key_id=hub_access_key,
+                aws_secret_access_key=hub_secret_key
+            )
+            
+            sts = base_session.client('sts')
+            
+            assume_params = {
+                'RoleArn': account.get('role_arn'),
+                'RoleSessionName': 'WAFReviewScan'
+            }
+            
+            if account.get('external_id'):
+                assume_params['ExternalId'] = account.get('external_id')
+            
+            response = sts.assume_role(**assume_params)
+            
+            return boto3.Session(
+                aws_access_key_id=response['Credentials']['AccessKeyId'],
+                aws_secret_access_key=response['Credentials']['SecretAccessKey'],
+                aws_session_token=response['Credentials']['SessionToken'],
+                region_name=account.get('region', 'us-east-1')
+            )
+            
+        except Exception as e:
+            st.error(f"AssumeRole failed: {str(e)}")
+            return None
     
     def _render_findings_summary(self):
         """Render summary of findings by pillar"""
