@@ -29,10 +29,26 @@ PREVIOUS UPDATES:
 import streamlit as st
 import sys
 from datetime import datetime
-from waf_unified_workflow import render_unified_waf_workflow
+
+# Import unified workflow with error handling
+try:
+    from waf_unified_workflow import render_unified_waf_workflow
+    WAF_UNIFIED_WORKFLOW_AVAILABLE = True
+except (ImportError, KeyError) as e:
+    WAF_UNIFIED_WORKFLOW_AVAILABLE = False
+    print(f"WAF Unified Workflow not available: {e}")
+    def render_unified_waf_workflow():
+        st.error("WAF Unified Workflow module not available. Please check dependencies.")
 
 # Import integrated WAF scanner (keeps all functionality + adds AI)
-from waf_scanner_integrated import render_integrated_waf_scanner
+try:
+    from waf_scanner_integrated import render_integrated_waf_scanner
+    WAF_SCANNER_INTEGRATED_AVAILABLE = True
+except (ImportError, KeyError) as e:
+    WAF_SCANNER_INTEGRATED_AVAILABLE = False
+    print(f"WAF Scanner Integrated not available: {e}")
+    def render_integrated_waf_scanner():
+        st.error("WAF Scanner Integrated module not available. Please check dependencies.")
 
 # ============================================================================
 # NEW v6.0.0 INTEGRATED MODULES
@@ -42,7 +58,7 @@ from waf_scanner_integrated import render_integrated_waf_scanner
 try:
     from unified_dashboard import render_unified_dashboard
     UNIFIED_DASHBOARD_AVAILABLE = True
-except ImportError as e:
+except (ImportError, KeyError) as e:
     UNIFIED_DASHBOARD_AVAILABLE = False
     print(f"Unified Dashboard not available: {e}")
 
@@ -50,7 +66,7 @@ except ImportError as e:
 try:
     from remediation_engine_integrated import render_remediation_engine
     REMEDIATION_ENGINE_AVAILABLE = True
-except ImportError as e:
+except (ImportError, KeyError) as e:
     REMEDIATION_ENGINE_AVAILABLE = False
     print(f"Remediation Engine not available: {e}")
 
@@ -58,7 +74,7 @@ except ImportError as e:
 try:
     from architecture_designer_integrated import render_architecture_designer_integrated
     ARCHITECTURE_INTEGRATED_AVAILABLE = True
-except ImportError as e:
+except (ImportError, KeyError) as e:
     ARCHITECTURE_INTEGRATED_AVAILABLE = False
     print(f"Integrated Architecture Designer not available: {e}")
 
@@ -66,7 +82,7 @@ except ImportError as e:
 try:
     from eks_modernization_integrated import render_eks_modernization_integrated
     EKS_INTEGRATED_AVAILABLE = True
-except ImportError as e:
+except (ImportError, KeyError) as e:
     EKS_INTEGRATED_AVAILABLE = False
     print(f"Integrated EKS Modernization not available: {e}")
 
@@ -74,7 +90,7 @@ except ImportError as e:
 try:
     from waf_review_comprehensive import render_comprehensive_waf_review
     WAF_REVIEW_COMPREHENSIVE_AVAILABLE = True
-except ImportError as e:
+except (ImportError, KeyError) as e:
     WAF_REVIEW_COMPREHENSIVE_AVAILABLE = False
     print(f"WAF Review Comprehensive not available: {e}")
 
@@ -86,7 +102,7 @@ try:
         get_integration_service
     )
     INTEGRATION_SERVICE_AVAILABLE = True
-except ImportError as e:
+except (ImportError, KeyError) as e:
     INTEGRATION_SERVICE_AVAILABLE = False
     print(f"Integration Service not available: {e}")
 
@@ -96,7 +112,7 @@ except ImportError as e:
 try:
     from ai_lens_module import AILensModule, render_ai_lens_tab
     AI_LENS_AVAILABLE = True
-except ImportError as e:
+except (ImportError, KeyError) as e:
     AI_LENS_AVAILABLE = False
     print(f"AI Lens module not available: {e}")
 
@@ -168,7 +184,7 @@ try:
     from auth_azure_sso import render_login, RoleManager
     from auth_database_firebase import get_database_manager
     SSO_AVAILABLE = True
-except ImportError as e:
+except (ImportError, KeyError) as e:
     SSO_AVAILABLE = False
     print(f"Authentication modules not found: {e}")
     print("Running without authentication")
