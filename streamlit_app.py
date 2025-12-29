@@ -534,6 +534,14 @@ def render_sidebar():
                         st.session_state.authenticated = False
                         st.session_state.user_info = None
                         st.session_state.user_id = None
+                        
+                        # Clear browser session token
+                        try:
+                            from auth_azure_sso import clear_session_from_browser
+                            clear_session_from_browser()
+                        except:
+                            pass
+                        
                         st.rerun()
                 
                 st.markdown("---")
