@@ -1124,8 +1124,7 @@ class WAFReviewWorkflow:
                             resource=sh_finding.get('Resources', [{}])[0].get('Id', 'N/A'),
                             account_id=sh_finding.get('AwsAccountId', ''),
                             region=sh_finding.get('Region', ''),
-                            recommendation=sh_finding.get('Remediation', {}).get('Recommendation', {}).get('Text', ''),
-                            compliance_frameworks=[]
+                            recommendation=sh_finding.get('Remediation', {}).get('Recommendation', {}).get('Text', '')
                         )
                         findings.append(finding)
                 
@@ -1292,8 +1291,7 @@ class WAFReviewWorkflow:
                         resource=', '.join(lf.affected_resources[:3]) if lf.affected_resources else 'N/A',
                         account_id=account_id,
                         region=lf.region or regions[0],
-                        recommendation=lf.recommendation,
-                        compliance_frameworks=lf.compliance_frameworks
+                        recommendation=lf.recommendation
                     )
                     findings.append(finding)
                 
