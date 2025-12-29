@@ -13,7 +13,7 @@ Features:
 - Priority action queue
 - Health monitoring
 
-Version: 1.0.0
+Version: 1.0.1 - Fixed colors and KeyError
 """
 
 import streamlit as st
@@ -152,6 +152,8 @@ class DashboardDataAggregator:
     
     def __init__(self):
         self.modules_data = {}
+        # Create pillar name mapping once
+        self.pillar_name_map = {p.value: p for p in WAFPillar}
     
     def collect_all_data(self) -> Dict[ModuleType, ModuleStatus]:
         """Collect data from all modules via session state"""
@@ -178,6 +180,25 @@ class DashboardDataAggregator:
         
         return statuses
     
+    def _normalize_pillar_key(self, key) -> Optional[WAFPillar]:
+        """Convert any pillar key format to WAFPillar enum"""
+        if isinstance(key, WAFPillar):
+            return key
+        elif isinstance(key, str):
+            return self.pillar_name_map.get(key)
+        return None
+    
+    def _extract_score(self, score_val) -> int:
+        """Extract integer score from various formats"""
+        if score_val is None:
+            return 0
+        if hasattr(score_val, 'score'):
+            return int(score_val.score) if score_val.score else 0
+        try:
+            return int(score_val)
+        except (TypeError, ValueError):
+            return 0
+    
     def _collect_waf_review_data(self) -> ModuleStatus:
         """Collect WAF Review module data"""
         
@@ -195,25 +216,14 @@ class DashboardDataAggregator:
         if 'last_findings' in st.session_state:
             findings = st.session_state.last_findings
         
-        # Get WAF scores if available - convert to standard format
+        # Get WAF scores if available - normalize to WAFPillar enum keys
         if 'current_integrated_assessment' in st.session_state:
             assessment = st.session_state.current_integrated_assessment
             if hasattr(assessment, 'waf_scores'):
-                # Create mapping from string names to enums
-                pillar_name_map = {p.value: p for p in WAFPillar}
                 for p, s in assessment.waf_scores.items():
-                    # Convert key to WAFPillar enum
-                    if isinstance(p, WAFPillar):
-                        pillar = p
-                    elif isinstance(p, str):
-                        pillar = pillar_name_map.get(p)
-                    else:
-                        continue
-                    
+                    pillar = self._normalize_pillar_key(p)
                     if pillar:
-                        # Handle score as int or object
-                        score_val = s.score if hasattr(s, 'score') else s
-                        waf_scores[pillar] = int(score_val) if score_val else 0
+                        waf_scores[pillar] = self._extract_score(s)
         
         critical = len([f for f in findings if f.get('severity') == 'CRITICAL'])
         high = len([f for f in findings if f.get('severity') == 'HIGH'])
@@ -248,22 +258,12 @@ class DashboardDataAggregator:
         findings = []
         compliance_scores = {}
         
-        # Create mapping from string names to enums
-        pillar_name_map = {p.value: p for p in WAFPillar}
-        
         if 'arch_waf_scores' in st.session_state:
             scores = st.session_state.arch_waf_scores
             for p, s in scores.items():
-                # Convert key to WAFPillar enum
-                if isinstance(p, WAFPillar):
-                    pillar = p
-                elif isinstance(p, str):
-                    pillar = pillar_name_map.get(p)
-                else:
-                    continue
+                pillar = self._normalize_pillar_key(p)
                 if pillar:
-                    score_val = s.score if hasattr(s, 'score') else s
-                    waf_scores[pillar] = int(score_val) if score_val else 0
+                    waf_scores[pillar] = self._extract_score(s)
         
         if 'arch_findings' in st.session_state:
             findings = st.session_state.arch_findings
@@ -272,8 +272,7 @@ class DashboardDataAggregator:
             scores = st.session_state.arch_compliance_scores
             for f, s in scores.items():
                 f_name = f.value if hasattr(f, 'value') else str(f)
-                score_val = s.score if hasattr(s, 'score') else s
-                compliance_scores[f_name] = int(score_val) if score_val else 0
+                compliance_scores[f_name] = self._extract_score(s)
         
         critical = len([f for f in findings if getattr(f, 'severity', '') == 'CRITICAL'])
         high = len([f for f in findings if getattr(f, 'severity', '') == 'HIGH'])
@@ -308,22 +307,12 @@ class DashboardDataAggregator:
         findings = []
         compliance_scores = {}
         
-        # Create mapping from string names to enums
-        pillar_name_map = {p.value: p for p in WAFPillar}
-        
         if 'eks_waf_scores' in st.session_state:
             scores = st.session_state.eks_waf_scores
             for p, s in scores.items():
-                # Convert key to WAFPillar enum
-                if isinstance(p, WAFPillar):
-                    pillar = p
-                elif isinstance(p, str):
-                    pillar = pillar_name_map.get(p)
-                else:
-                    continue
+                pillar = self._normalize_pillar_key(p)
                 if pillar:
-                    score_val = s.score if hasattr(s, 'score') else s
-                    waf_scores[pillar] = int(score_val) if score_val else 0
+                    waf_scores[pillar] = self._extract_score(s)
         
         if 'eks_findings' in st.session_state:
             findings = st.session_state.eks_findings
@@ -332,8 +321,7 @@ class DashboardDataAggregator:
             scores = st.session_state.eks_compliance_scores
             for f, s in scores.items():
                 f_name = f.value if hasattr(f, 'value') else str(f)
-                score_val = s.score if hasattr(s, 'score') else s
-                compliance_scores[f_name] = int(score_val) if score_val else 0
+                compliance_scores[f_name] = self._extract_score(s)
         
         critical = len([f for f in findings if getattr(f, 'severity', '') == 'CRITICAL'])
         high = len([f for f in findings if getattr(f, 'severity', '') == 'HIGH'])
@@ -378,11 +366,12 @@ class DashboardDataAggregator:
                 data = st.session_state[source]
                 if hasattr(data, 'compliance_status'):
                     for f, s in data.compliance_status.items():
-                        compliance_scores[f.value] = s.score
+                        f_name = f.value if hasattr(f, 'value') else str(f)
+                        compliance_scores[f_name] = self._extract_score(s)
                 elif isinstance(data, dict):
                     for f, s in data.items():
-                        if hasattr(f, 'value'):
-                            compliance_scores[f.value] = s.score if hasattr(s, 'score') else s
+                        f_name = f.value if hasattr(f, 'value') else str(f)
+                        compliance_scores[f_name] = self._extract_score(s)
         
         # Determine health based on lowest compliance score
         if compliance_scores:
@@ -431,9 +420,9 @@ class DashboardDataAggregator:
                 last_updated=datetime.now()
             )
         
-        pending = len([a for a in actions if a.status.value in ['pending', 'approved']])
-        deployed = len([a for a in actions if a.status.value == 'deployed'])
-        failed = len([a for a in actions if a.status.value == 'failed'])
+        pending = len([a for a in actions if getattr(a, 'status', None) and a.status.value in ['pending', 'approved']])
+        deployed = len([a for a in actions if getattr(a, 'status', None) and a.status.value == 'deployed'])
+        failed = len([a for a in actions if getattr(a, 'status', None) and a.status.value == 'failed'])
         
         if failed > 0:
             health = HealthStatus.WARNING
@@ -455,34 +444,28 @@ class DashboardDataAggregator:
     def get_aggregated_waf_scores(self, statuses: Dict[ModuleType, ModuleStatus]) -> Dict[WAFPillar, int]:
         """Aggregate WAF scores across all modules"""
         
+        # Initialize with all pillars set to empty lists
         pillar_scores = {p: [] for p in WAFPillar}
-        
-        # Create mapping from string names to enums
-        pillar_name_map = {p.value: p for p in WAFPillar}
         
         for module, status in statuses.items():
             try:
-                for pillar_key, score_val in status.waf_scores.items():
-                    # Handle score value - could be int or object with .score
-                    if hasattr(score_val, 'score'):
-                        score = int(score_val.score)
-                    else:
-                        score = int(score_val) if score_val else 0
+                if not status.waf_scores:
+                    continue
                     
-                    if score > 0:
-                        # Handle both enum and string keys
-                        if isinstance(pillar_key, WAFPillar):
-                            pillar = pillar_key
-                        elif isinstance(pillar_key, str):
-                            pillar = pillar_name_map.get(pillar_key)
-                        else:
-                            pillar = None
+                for pillar_key, score_val in status.waf_scores.items():
+                    # Normalize the pillar key
+                    pillar = self._normalize_pillar_key(pillar_key)
+                    if pillar is None:
+                        continue
+                    
+                    # Extract score value
+                    score = self._extract_score(score_val)
+                    
+                    if score > 0 and pillar in pillar_scores:
+                        pillar_scores[pillar].append(score)
                         
-                        if pillar and pillar in pillar_scores:
-                            pillar_scores[pillar].append(score)
             except Exception as e:
-                # Skip problematic module data
-                print(f"Warning: Could not process WAF scores for {module}: {e}")
+                # Skip problematic module data silently
                 continue
         
         # Average scores per pillar
@@ -501,6 +484,8 @@ class DashboardDataAggregator:
         framework_scores = {}
         
         for module, status in statuses.items():
+            if not status.compliance_scores:
+                continue
             for framework, score in status.compliance_scores.items():
                 if framework not in framework_scores:
                     framework_scores[framework] = []
@@ -750,7 +735,7 @@ class ExecutiveSummaryGenerator:
             posture_color = {
                 "Strong": colors.green,
                 "Moderate": colors.orange,
-                "Needs Improvement": colors.red
+                "Needs Improvement": colors.HexColor('#B45309')
             }.get(summary.overall_posture, colors.gray)
             
             story.append(Paragraph(f"<b>Overall Security Posture:</b> <font color='{posture_color}'>{summary.overall_posture}</font>", styles['Heading2']))
@@ -927,7 +912,6 @@ class UnifiedDashboard:
         
         # Overall WAF Score
         waf_score = sum(aggregated_waf.values()) // len(aggregated_waf) if aggregated_waf else 0
-        waf_color = "#4CAF50" if waf_score >= 80 else "#FF9800" if waf_score >= 60 else "#F44336"
         
         with col1:
             st.markdown(f"""
@@ -942,7 +926,6 @@ class UnifiedDashboard:
         
         # Overall Compliance Score
         compliance_score = sum(aggregated_compliance.values()) // len(aggregated_compliance) if aggregated_compliance else 0
-        comp_color = "#4CAF50" if compliance_score >= 80 else "#FF9800" if compliance_score >= 60 else "#F44336"
         
         with col2:
             st.markdown(f"""
@@ -955,24 +938,23 @@ class UnifiedDashboard:
             </div>
             """, unsafe_allow_html=True)
         
-        # Total Findings
+        # Total Findings - AMBER instead of RED
         total_findings = sum(s.findings_count for s in statuses.values())
         critical_findings = sum(s.critical_count for s in statuses.values())
         
         with col3:
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #C0392B 0%, #E74C3C 100%); 
+            <div style="background: linear-gradient(135deg, #B45309 0%, #D97706 100%); 
                         padding: 20px; border-radius: 15px; text-align: center; color: white;
                         box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                 <h4 style="margin: 0; font-weight: 500; opacity: 0.9;">Findings</h4>
                 <h1 style="font-size: 48px; margin: 10px 0; color: white;">{total_findings}</h1>
-                <small style="opacity: 0.8;">🔴 {critical_findings} Critical</small>
+                <small style="opacity: 0.8;">⚠️ {critical_findings} Critical</small>
             </div>
             """, unsafe_allow_html=True)
         
         # Trend
         trend_icon = {"improving": "📈", "stable": "➡️", "declining": "📉"}.get(trend.get("direction", "stable"), "➡️")
-        trend_color = {"improving": "#4CAF50", "stable": "#2196F3", "declining": "#F44336"}.get(trend.get("direction", "stable"), "#2196F3")
         
         with col4:
             st.markdown(f"""
@@ -993,17 +975,18 @@ class UnifiedDashboard:
         cols = st.columns(len(statuses))
         
         for idx, (module, status) in enumerate(statuses.items()):
+            # Professional colors for health status - no bright red
             health_color = {
-                HealthStatus.HEALTHY: "#4CAF50",
-                HealthStatus.WARNING: "#FF9800",
-                HealthStatus.CRITICAL: "#F44336",
-                HealthStatus.UNKNOWN: "#9E9E9E"
-            }.get(status.health, "#9E9E9E")
+                HealthStatus.HEALTHY: "#2E7D32",    # Forest green
+                HealthStatus.WARNING: "#F57C00",    # Orange
+                HealthStatus.CRITICAL: "#B45309",   # Amber (was red)
+                HealthStatus.UNKNOWN: "#757575"     # Gray
+            }.get(status.health, "#757575")
             
             health_icon = {
                 HealthStatus.HEALTHY: "✅",
                 HealthStatus.WARNING: "⚠️",
-                HealthStatus.CRITICAL: "🔴",
+                HealthStatus.CRITICAL: "🔶",  # Changed from red circle
                 HealthStatus.UNKNOWN: "❓"
             }.get(status.health, "❓")
             
@@ -1033,7 +1016,8 @@ class UnifiedDashboard:
         for idx, pillar in enumerate(WAFPillar):
             score = aggregated_waf.get(pillar, 0)
             config = PILLAR_CONFIG.get(pillar, {"icon": "📋", "color": "#666"})
-            score_color = "#2E7D32" if score >= 80 else "#F57C00" if score >= 60 else "#C62828" if score > 0 else "#757575"
+            # Professional score colors - amber instead of red
+            score_color = "#2E7D32" if score >= 80 else "#F57C00" if score >= 60 else "#92400E" if score > 0 else "#757575"
             
             with cols[idx]:
                 st.markdown(f"""
@@ -1057,7 +1041,8 @@ class UnifiedDashboard:
         for idx, pillar in enumerate(WAFPillar):
             score = aggregated_waf.get(pillar, 0)
             config = PILLAR_CONFIG.get(pillar, {"icon": "📋", "color": "#666"})
-            score_color = "#2E7D32" if score >= 80 else "#F57C00" if score >= 60 else "#C62828" if score > 0 else "#757575"
+            # Professional score colors - amber instead of red
+            score_color = "#2E7D32" if score >= 80 else "#F57C00" if score >= 60 else "#92400E" if score > 0 else "#757575"
             
             with cols[idx]:
                 st.markdown(f"""
@@ -1105,7 +1090,7 @@ class UnifiedDashboard:
             if score < 80:
                 config = PILLAR_CONFIG.get(pillar, {"icon": "📋", "color": "#666"})
                 st.markdown(f"""
-                <div style="padding: 15px; background: #fff3cd; border-left: 4px solid {config['color']}; 
+                <div style="padding: 15px; background: #FEF3C7; border-left: 4px solid {config['color']}; 
                             border-radius: 0 8px 8px 0; margin-bottom: 10px;">
                     <h4>{config['icon']} {pillar.value} (Score: {score}%)</h4>
                     <p>This pillar needs improvement. Review findings and implement recommendations.</p>
@@ -1122,11 +1107,12 @@ class UnifiedDashboard:
             st.info("No compliance data available. Run assessments with compliance frameworks selected.")
             return
         
-        # Framework cards
+        # Framework cards - professional colors
         cols = st.columns(4)
         for idx, (framework, score) in enumerate(aggregated_compliance.items()):
-            color = "#2E7D32" if score >= 80 else "#F57C00" if score >= 60 else "#C62828"
-            status_icon = "✅" if score >= 80 else "⚠️" if score >= 60 else "❌"
+            # Professional colors - amber instead of red
+            color = "#2E7D32" if score >= 80 else "#F57C00" if score >= 60 else "#92400E"
+            status_icon = "✅" if score >= 80 else "⚠️" if score >= 60 else "🔶"
             
             with cols[idx % 4]:
                 st.markdown(f"""
@@ -1172,7 +1158,7 @@ class UnifiedDashboard:
         for framework, score in sorted(aggregated_compliance.items(), key=lambda x: x[1]):
             if score < 70:
                 gaps_found = True
-                st.error(f"**{framework}**: Score {score}% - Below acceptable threshold")
+                st.warning(f"**{framework}**: Score {score}% - Below acceptable threshold")
         
         if not gaps_found:
             st.success("✅ All compliance frameworks meet minimum thresholds!")
@@ -1188,14 +1174,15 @@ class UnifiedDashboard:
             return
         
         for action in priority_actions:
+            # Professional severity colors - amber instead of red
             severity_color = {
-                "CRITICAL": "#dc3545",
-                "HIGH": "#fd7e14",
-                "MEDIUM": "#ffc107"
-            }.get(action.severity, "#6c757d")
+                "CRITICAL": "#B45309",   # Amber
+                "HIGH": "#D97706",       # Light amber
+                "MEDIUM": "#F59E0B"      # Yellow
+            }.get(action.severity, "#6B7280")
             
             severity_icon = {
-                "CRITICAL": "🔴",
+                "CRITICAL": "🔶",
                 "HIGH": "🟠",
                 "MEDIUM": "🟡"
             }.get(action.severity, "⚪")
@@ -1226,7 +1213,7 @@ class UnifiedDashboard:
         high = len([a for a in priority_actions if a.severity == "HIGH"])
         medium = len([a for a in priority_actions if a.severity == "MEDIUM"])
         
-        col1.metric("🔴 Critical Actions", critical)
+        col1.metric("🔶 Critical Actions", critical)
         col2.metric("🟠 High Priority", high)
         col3.metric("🟡 Medium Priority", medium)
     
@@ -1241,10 +1228,11 @@ class UnifiedDashboard:
         
         col1, col2, col3 = st.columns(3)
         
+        # Professional posture colors - amber instead of red
         posture_color = {
             "Strong": "#2E7D32",
             "Moderate": "#F57C00",
-            "Needs Improvement": "#C62828"
+            "Needs Improvement": "#92400E"
         }.get(summary.overall_posture, "#757575")
         
         with col1:
@@ -1282,7 +1270,8 @@ class UnifiedDashboard:
         st.markdown("#### ⚠️ Top Risks")
         
         for risk in summary.top_risks[:5]:
-            impact_color = "#C62828" if risk['impact'] == "High" else "#F57C00"
+            # Professional impact colors - amber instead of red
+            impact_color = "#92400E" if risk['impact'] == "High" else "#F57C00"
             st.markdown(f"• **{risk['category']}**: {risk['item']} ({risk['score']}%) - <span style='color:{impact_color}'>Impact: {risk['impact']}</span>", unsafe_allow_html=True)
         
         # Recommendations
