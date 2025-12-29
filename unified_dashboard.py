@@ -66,24 +66,24 @@ class HealthStatus(Enum):
     CRITICAL = "critical"
     UNKNOWN = "unknown"
 
-# Configuration
+# Configuration - Professional muted colors
 PILLAR_CONFIG = {
-    WAFPillar.OPERATIONAL_EXCELLENCE: {"icon": "⚙️", "color": "#FF6B6B"},
-    WAFPillar.SECURITY: {"icon": "🔒", "color": "#4ECDC4"},
-    WAFPillar.RELIABILITY: {"icon": "🛡️", "color": "#45B7D1"},
-    WAFPillar.PERFORMANCE_EFFICIENCY: {"icon": "⚡", "color": "#96CEB4"},
-    WAFPillar.COST_OPTIMIZATION: {"icon": "💰", "color": "#FFEAA7"},
-    WAFPillar.SUSTAINABILITY: {"icon": "🌱", "color": "#81C784"}
+    WAFPillar.OPERATIONAL_EXCELLENCE: {"icon": "⚙️", "color": "#5D6D7E"},  # Slate gray
+    WAFPillar.SECURITY: {"icon": "🔒", "color": "#2874A6"},               # Professional blue
+    WAFPillar.RELIABILITY: {"icon": "🛡️", "color": "#148F77"},            # Teal
+    WAFPillar.PERFORMANCE_EFFICIENCY: {"icon": "⚡", "color": "#B9770E"}, # Amber
+    WAFPillar.COST_OPTIMIZATION: {"icon": "💰", "color": "#1E8449"},      # Forest green
+    WAFPillar.SUSTAINABILITY: {"icon": "🌱", "color": "#117A65"}          # Dark teal
 }
 
 MODULE_CONFIG = {
-    ModuleType.WAF_REVIEW: {"icon": "🔍", "color": "#2196F3"},
-    ModuleType.ARCHITECTURE: {"icon": "🏗️", "color": "#9C27B0"},
-    ModuleType.EKS: {"icon": "☸️", "color": "#FF5722"},
-    ModuleType.COMPLIANCE: {"icon": "🔒", "color": "#4CAF50"},
-    ModuleType.FINOPS: {"icon": "💰", "color": "#FFC107"},
-    ModuleType.AI_LENS: {"icon": "🤖", "color": "#E91E63"},
-    ModuleType.REMEDIATION: {"icon": "🔧", "color": "#00BCD4"}
+    ModuleType.WAF_REVIEW: {"icon": "🔍", "color": "#2E86AB"},      # Steel blue
+    ModuleType.ARCHITECTURE: {"icon": "🏗️", "color": "#6C5B7B"},   # Muted purple
+    ModuleType.EKS: {"icon": "☸️", "color": "#C06C52"},            # Terracotta
+    ModuleType.COMPLIANCE: {"icon": "🔒", "color": "#2E7D32"},     # Forest green
+    ModuleType.FINOPS: {"icon": "💰", "color": "#F9A825"},         # Amber
+    ModuleType.AI_LENS: {"icon": "🤖", "color": "#7B1FA2"},        # Deep purple
+    ModuleType.REMEDIATION: {"icon": "🔧", "color": "#00695C"}     # Deep teal
 }
 
 # ============================================================================
@@ -862,11 +862,12 @@ class UnifiedDashboard:
         
         with col1:
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                        padding: 20px; border-radius: 15px; text-align: center; color: white;">
-                <h4 style="margin: 0;">WAF Score</h4>
-                <h1 style="font-size: 48px; margin: 10px 0; color: {waf_color};">{waf_score}</h1>
-                <small>Across all modules</small>
+            <div style="background: linear-gradient(135deg, #2C3E50 0%, #3D5A80 100%); 
+                        padding: 20px; border-radius: 15px; text-align: center; color: white;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <h4 style="margin: 0; font-weight: 500; opacity: 0.9;">WAF Score</h4>
+                <h1 style="font-size: 48px; margin: 10px 0; color: white;">{waf_score}</h1>
+                <small style="opacity: 0.8;">Across all modules</small>
             </div>
             """, unsafe_allow_html=True)
         
@@ -876,11 +877,12 @@ class UnifiedDashboard:
         
         with col2:
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); 
-                        padding: 20px; border-radius: 15px; text-align: center; color: white;">
-                <h4 style="margin: 0;">Compliance</h4>
-                <h1 style="font-size: 48px; margin: 10px 0; color: {comp_color};">{compliance_score}%</h1>
-                <small>{len(aggregated_compliance)} frameworks</small>
+            <div style="background: linear-gradient(135deg, #1D6F5E 0%, #2A9D8F 100%); 
+                        padding: 20px; border-radius: 15px; text-align: center; color: white;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <h4 style="margin: 0; font-weight: 500; opacity: 0.9;">Compliance</h4>
+                <h1 style="font-size: 48px; margin: 10px 0; color: white;">{compliance_score}%</h1>
+                <small style="opacity: 0.8;">{len(aggregated_compliance)} frameworks</small>
             </div>
             """, unsafe_allow_html=True)
         
@@ -890,11 +892,12 @@ class UnifiedDashboard:
         
         with col3:
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); 
-                        padding: 20px; border-radius: 15px; text-align: center; color: white;">
-                <h4 style="margin: 0;">Findings</h4>
-                <h1 style="font-size: 48px; margin: 10px 0;">{total_findings}</h1>
-                <small>🔴 {critical_findings} Critical</small>
+            <div style="background: linear-gradient(135deg, #C0392B 0%, #E74C3C 100%); 
+                        padding: 20px; border-radius: 15px; text-align: center; color: white;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <h4 style="margin: 0; font-weight: 500; opacity: 0.9;">Findings</h4>
+                <h1 style="font-size: 48px; margin: 10px 0; color: white;">{total_findings}</h1>
+                <small style="opacity: 0.8;">🔴 {critical_findings} Critical</small>
             </div>
             """, unsafe_allow_html=True)
         
@@ -904,11 +907,12 @@ class UnifiedDashboard:
         
         with col4:
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
-                        padding: 20px; border-radius: 15px; text-align: center; color: white;">
-                <h4 style="margin: 0;">Trend</h4>
-                <h1 style="font-size: 48px; margin: 10px 0;">{trend_icon}</h1>
-                <small style="color: {trend_color};">{trend.get("direction", "stable").title()}</small>
+            <div style="background: linear-gradient(135deg, #34495E 0%, #5D6D7E 100%); 
+                        padding: 20px; border-radius: 15px; text-align: center; color: white;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <h4 style="margin: 0; font-weight: 500; opacity: 0.9;">Trend</h4>
+                <h1 style="font-size: 48px; margin: 10px 0; color: white;">{trend_icon}</h1>
+                <small style="opacity: 0.8;">{trend.get("direction", "stable").title()}</small>
             </div>
             """, unsafe_allow_html=True)
         
@@ -938,10 +942,12 @@ class UnifiedDashboard:
             
             with cols[idx]:
                 st.markdown(f"""
-                <div style="border: 2px solid {health_color}; border-radius: 10px; padding: 15px; 
-                            text-align: center; background: white; min-height: 180px;">
+                <div style="border: 1px solid #E0E0E0; border-left: 4px solid {health_color}; 
+                            border-radius: 8px; padding: 15px; 
+                            text-align: center; background: #FAFAFA; min-height: 180px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                     <div style="font-size: 28px;">{config['icon']}</div>
-                    <h4 style="margin: 5px 0; font-size: 12px;">{module.value}</h4>
+                    <h4 style="margin: 5px 0; font-size: 12px; color: #333;">{module.value}</h4>
                     <div style="font-size: 24px; margin: 10px 0;">{health_icon}</div>
                     <div style="font-size: 11px; color: #666;">
                         Score: {status.overall_score}%<br>
@@ -958,14 +964,15 @@ class UnifiedDashboard:
         for idx, pillar in enumerate(WAFPillar):
             score = aggregated_waf.get(pillar, 0)
             config = PILLAR_CONFIG.get(pillar, {"icon": "📋", "color": "#666"})
-            score_color = "#4CAF50" if score >= 80 else "#FF9800" if score >= 60 else "#F44336" if score > 0 else "#9E9E9E"
+            score_color = "#2E7D32" if score >= 80 else "#F57C00" if score >= 60 else "#C62828" if score > 0 else "#757575"
             
             with cols[idx]:
                 st.markdown(f"""
                 <div style="text-align: center; padding: 10px; border-left: 4px solid {config['color']}; 
-                            background: #f8f9fa; border-radius: 0 8px 8px 0;">
+                            background: #FAFAFA; border-radius: 0 8px 8px 0;
+                            box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
                     <div style="font-size: 20px;">{config['icon']}</div>
-                    <div style="font-size: 24px; font-weight: bold; color: {score_color};">{score}</div>
+                    <div style="font-size: 24px; font-weight: 600; color: {score_color};">{score}</div>
                     <div style="font-size: 9px; color: #666;">{pillar.value[:12]}</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -981,15 +988,17 @@ class UnifiedDashboard:
         for idx, pillar in enumerate(WAFPillar):
             score = aggregated_waf.get(pillar, 0)
             config = PILLAR_CONFIG.get(pillar, {"icon": "📋", "color": "#666"})
-            score_color = "#4CAF50" if score >= 80 else "#FF9800" if score >= 60 else "#F44336" if score > 0 else "#9E9E9E"
+            score_color = "#2E7D32" if score >= 80 else "#F57C00" if score >= 60 else "#C62828" if score > 0 else "#757575"
             
             with cols[idx]:
                 st.markdown(f"""
-                <div style="text-align: center; padding: 20px; border: 2px solid {config['color']}; 
-                            border-radius: 10px; background: white;">
+                <div style="text-align: center; padding: 20px; border: 1px solid #E0E0E0; 
+                            border-left: 4px solid {config['color']};
+                            border-radius: 8px; background: #FAFAFA;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                     <div style="font-size: 32px;">{config['icon']}</div>
                     <h3 style="font-size: 40px; color: {score_color}; margin: 10px 0;">{score}</h3>
-                    <div style="font-size: 11px; font-weight: bold;">{pillar.value}</div>
+                    <div style="font-size: 11px; font-weight: 500; color: #555;">{pillar.value}</div>
                 </div>
                 """, unsafe_allow_html=True)
         
@@ -1047,14 +1056,15 @@ class UnifiedDashboard:
         # Framework cards
         cols = st.columns(4)
         for idx, (framework, score) in enumerate(aggregated_compliance.items()):
-            color = "#4CAF50" if score >= 80 else "#FF9800" if score >= 60 else "#F44336"
+            color = "#2E7D32" if score >= 80 else "#F57C00" if score >= 60 else "#C62828"
             status_icon = "✅" if score >= 80 else "⚠️" if score >= 60 else "❌"
             
             with cols[idx % 4]:
                 st.markdown(f"""
-                <div style="padding: 20px; background: white; border-radius: 10px; 
-                            border-left: 4px solid {color}; margin-bottom: 15px; text-align: center;">
-                    <h4 style="margin: 0; font-size: 12px;">{framework}</h4>
+                <div style="padding: 20px; background: #FAFAFA; border-radius: 8px; 
+                            border-left: 4px solid {color}; margin-bottom: 15px; text-align: center;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <h4 style="margin: 0; font-size: 12px; color: #333;">{framework}</h4>
                     <h2 style="color: {color}; margin: 10px 0;">{score}%</h2>
                     <div style="font-size: 20px;">{status_icon}</div>
                 </div>
@@ -1163,32 +1173,38 @@ class UnifiedDashboard:
         col1, col2, col3 = st.columns(3)
         
         posture_color = {
-            "Strong": "#4CAF50",
-            "Moderate": "#FF9800",
-            "Needs Improvement": "#F44336"
-        }.get(summary.overall_posture, "#9E9E9E")
+            "Strong": "#2E7D32",
+            "Moderate": "#F57C00",
+            "Needs Improvement": "#C62828"
+        }.get(summary.overall_posture, "#757575")
         
         with col1:
             st.markdown(f"""
-            <div style="padding: 20px; background: white; border-radius: 10px; border: 2px solid {posture_color};">
-                <h4>Overall Posture</h4>
-                <h2 style="color: {posture_color};">{summary.overall_posture}</h2>
+            <div style="padding: 20px; background: #FAFAFA; border-radius: 8px; 
+                        border-left: 4px solid {posture_color};
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <h4 style="color: #333; margin: 0 0 10px 0;">Overall Posture</h4>
+                <h2 style="color: {posture_color}; margin: 0;">{summary.overall_posture}</h2>
             </div>
             """, unsafe_allow_html=True)
         
         with col2:
             st.markdown(f"""
-            <div style="padding: 20px; background: white; border-radius: 10px; border: 2px solid #2196F3;">
-                <h4>WAF Score</h4>
-                <h2>{summary.waf_score}%</h2>
+            <div style="padding: 20px; background: #FAFAFA; border-radius: 8px; 
+                        border-left: 4px solid #2C3E50;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <h4 style="color: #333; margin: 0 0 10px 0;">WAF Score</h4>
+                <h2 style="color: #2C3E50; margin: 0;">{summary.waf_score}%</h2>
             </div>
             """, unsafe_allow_html=True)
         
         with col3:
             st.markdown(f"""
-            <div style="padding: 20px; background: white; border-radius: 10px; border: 2px solid #4CAF50;">
-                <h4>Compliance Score</h4>
-                <h2>{summary.compliance_score}%</h2>
+            <div style="padding: 20px; background: #FAFAFA; border-radius: 8px; 
+                        border-left: 4px solid #1D6F5E;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <h4 style="color: #333; margin: 0 0 10px 0;">Compliance Score</h4>
+                <h2 style="color: #1D6F5E; margin: 0;">{summary.compliance_score}%</h2>
             </div>
             """, unsafe_allow_html=True)
         
@@ -1197,7 +1213,7 @@ class UnifiedDashboard:
         st.markdown("#### ⚠️ Top Risks")
         
         for risk in summary.top_risks[:5]:
-            impact_color = "#F44336" if risk['impact'] == "High" else "#FF9800"
+            impact_color = "#C62828" if risk['impact'] == "High" else "#F57C00"
             st.markdown(f"• **{risk['category']}**: {risk['item']} ({risk['score']}%) - <span style='color:{impact_color}'>Impact: {risk['impact']}</span>", unsafe_allow_html=True)
         
         # Recommendations
