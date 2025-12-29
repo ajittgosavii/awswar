@@ -1609,6 +1609,25 @@ class WAFReviewWorkflow:
     # PHASE 3: QUESTIONNAIRE
     # ========================================================================
     
+    def _get_pending_questions_by_pillar(self) -> Dict[str, List[Dict]]:
+        """Get pending (unanswered) questions organized by pillar"""
+        pending_by_pillar = {}
+        
+        for pillar in WAFPillar:
+            questions = WAF_QUESTIONS.get(pillar, [])
+            pillar_responses = {r.question_id: r for r in self.session.responses if r.pillar == pillar.value}
+            
+            pending = []
+            for q in questions:
+                response = pillar_responses.get(q['id'])
+                if not response or not response.response:
+                    pending.append(q)
+            
+            if pending:
+                pending_by_pillar[pillar.value] = pending
+        
+        return pending_by_pillar
+    
     def _render_questionnaire_phase(self):
         """Render WAF questionnaire phase"""
         
@@ -1662,14 +1681,53 @@ class WAFReviewWorkflow:
         
         st.progress(answered / total_questions if total_questions > 0 else 0)
         
+        # Get pending questions by pillar
+        pending_by_pillar = self._get_pending_questions_by_pillar()
+        
+        # Show pending questions summary if there are any
+        if pending > 0:
+            st.markdown("---")
+            
+            # Filter toggle
+            show_pending_only = st.checkbox("🔍 **Show Pending Questions Only**", key="show_pending_filter")
+            
+            # Show which pillars have pending questions
+            pending_pillars = []
+            for pillar in WAFPillar:
+                pillar_pending = pending_by_pillar.get(pillar.value, [])
+                if pillar_pending:
+                    pending_pillars.append(f"{PILLAR_ICONS[pillar]} {pillar.value} ({len(pillar_pending)})")
+            
+            if pending_pillars:
+                st.warning(f"⚠️ **Pending questions in:** {', '.join(pending_pillars)}")
+                
+                # Quick jump to pending questions
+                with st.expander("📋 **View All Pending Questions**", expanded=False):
+                    for pillar_name, questions in pending_by_pillar.items():
+                        st.markdown(f"**{pillar_name}:**")
+                        for q in questions:
+                            st.markdown(f"- `{q['id']}`: {q['question'][:80]}...")
+        else:
+            show_pending_only = False
+            st.success("✅ **All questions answered!** You can now calculate scores.")
+        
         st.markdown("---")
         
+        # Build pillar tab labels with pending counts
+        pillar_tab_labels = []
+        for p in WAFPillar:
+            pillar_pending = pending_by_pillar.get(p.value, [])
+            if pillar_pending:
+                pillar_tab_labels.append(f"{PILLAR_ICONS[p]} {p.value} ⚠️({len(pillar_pending)})")
+            else:
+                pillar_tab_labels.append(f"{PILLAR_ICONS[p]} {p.value} ✅")
+        
         # Render questions by pillar
-        pillar_tabs = st.tabs([f"{PILLAR_ICONS[p]} {p.value}" for p in WAFPillar])
+        pillar_tabs = st.tabs(pillar_tab_labels)
         
         for idx, pillar in enumerate(WAFPillar):
             with pillar_tabs[idx]:
-                self._render_pillar_questions(pillar)
+                self._render_pillar_questions(pillar, show_pending_only=show_pending_only)
         
         st.markdown("---")
         
@@ -1767,26 +1825,49 @@ class WAFReviewWorkflow:
         self.session.auto_detected_count = len([r for r in self.session.responses if r.auto_detected and r.response])
         self.session.manual_required_count = len([r for r in self.session.responses if not r.response])
     
-    def _render_pillar_questions(self, pillar: WAFPillar):
+    def _render_pillar_questions(self, pillar: WAFPillar, show_pending_only: bool = False):
         """Render questions for a specific pillar"""
         
         questions = WAF_QUESTIONS.get(pillar, [])
-        pillar_responses = [r for r in self.session.responses if r.pillar == pillar.value]
+        pillar_responses = {r.question_id: r for r in self.session.responses if r.pillar == pillar.value}
         
         # Debug: Show question count for this pillar
         if not questions:
             st.warning(f"⚠️ No questions found for {pillar.value}. WAF_QUESTIONS has {len(WAF_QUESTIONS)} pillars with keys: {[k.value for k in WAF_QUESTIONS.keys()]}")
             return
         
-        st.caption(f"📝 {len(questions)} questions in this pillar | {len(pillar_responses)} responses recorded")
+        # Count answered vs pending for this pillar
+        answered_count = len([q for q in questions if pillar_responses.get(q['id']) and pillar_responses[q['id']].response])
+        pending_count = len(questions) - answered_count
         
-        for q in questions:
-            response = next((r for r in pillar_responses if r.question_id == q['id']), None)
+        # Show summary
+        if pending_count > 0:
+            st.caption(f"📝 {len(questions)} questions | ✅ {answered_count} answered | ⚠️ {pending_count} pending")
+        else:
+            st.caption(f"📝 {len(questions)} questions | ✅ All answered!")
+        
+        # Filter questions if showing pending only
+        if show_pending_only:
+            questions_to_show = [q for q in questions if not pillar_responses.get(q['id']) or not pillar_responses[q['id']].response]
+            if not questions_to_show:
+                st.success("✅ All questions in this pillar are answered!")
+                return
+            st.info(f"🔍 Showing {len(questions_to_show)} pending questions only")
+        else:
+            questions_to_show = questions
+        
+        for q in questions_to_show:
+            response = pillar_responses.get(q['id'])
             
             # Determine if question has an answer
             has_answer = response and response.response in ["yes", "partial", "no", "not_applicable"]
             
-            with st.expander(f"**{q['id']}**: {q['question']}", expanded=not has_answer):
+            # Add visual indicator for pending questions
+            q_label = f"**{q['id']}**: {q['question']}"
+            if not has_answer:
+                q_label = f"⚠️ **{q['id']}**: {q['question']}"
+            
+            with st.expander(q_label, expanded=not has_answer):
                 st.markdown(f"*{q.get('description', '')}*")
                 
                 # Show auto-detection status
@@ -1799,10 +1880,10 @@ class WAFReviewWorkflow:
                         <br><small>Evidence: {', '.join(response.evidence[:3])}</small>
                     </div>
                     """, unsafe_allow_html=True)
-                elif response and not response.response:
+                elif not has_answer:
                     st.markdown("""
                     <div style="background: #fff3e0; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
-                        ⚠️ <b>Manual answer required</b> - Could not auto-detect from scan
+                        ⚠️ <b>Answer required</b> - Please select an option below
                     </div>
                     """, unsafe_allow_html=True)
                 
@@ -1822,11 +1903,21 @@ class WAFReviewWorkflow:
                     horizontal=True
                 )
                 
-                # Update response only if changed and not empty
-                if response and new_response:
-                    response.response = new_response
-                elif response and new_response == "":
-                    response.response = ""  # Clear if user selects "Select..."
+                # Update response - create new if doesn't exist
+                if response:
+                    if new_response:
+                        response.response = new_response
+                    else:
+                        response.response = ""
+                elif new_response:
+                    # Create new response if user answers a question that wasn't tracked
+                    self.session.responses.append(QuestionResponse(
+                        question_id=q['id'],
+                        pillar=pillar.value,
+                        question_text=q['question'],
+                        response=new_response,
+                        auto_detected=False
+                    ))
                 
                 # Best practices
                 if q.get('best_practices'):
