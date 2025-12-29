@@ -564,10 +564,14 @@ class DashboardDataAggregator:
         )
     
     def _collect_compliance_data(self) -> ModuleStatus:
-        """Collect Compliance module data - FIXED to aggregate from all findings"""
+        """Collect Compliance module data - FIXED to use demo data and not default to 85%"""
         
         compliance_scores = {}
         framework_findings = {}  # Track findings per framework
+        has_real_data = False  # Track if we have actual data
+        
+        # Check if we're in Demo Mode
+        is_demo_mode = st.session_state.get('demo_mode', False)
         
         # FRAMEWORKS TO TRACK
         frameworks = [
@@ -611,6 +615,7 @@ class DashboardDataAggregator:
         if 'waf_review_session' in st.session_state:
             session = st.session_state.waf_review_session
             if hasattr(session, 'findings') and session.findings:
+                has_real_data = True
                 for finding in session.findings:
                     # Get compliance frameworks from finding
                     fw_list = []
@@ -633,7 +638,8 @@ class DashboardDataAggregator:
                                 framework_findings[norm_fw]["medium"] += 1
         
         # SOURCE 2: last_findings session state
-        if 'last_findings' in st.session_state:
+        if 'last_findings' in st.session_state and st.session_state.last_findings:
+            has_real_data = True
             for finding in st.session_state.last_findings:
                 fw_list = finding.get('compliance_frameworks', []) if isinstance(finding, dict) else []
                 severity = finding.get('severity', 'MEDIUM') if isinstance(finding, dict) else 'MEDIUM'
@@ -649,6 +655,7 @@ class DashboardDataAggregator:
         
         # SOURCE 3: Architecture compliance scores (keep existing)
         if 'arch_compliance_scores' in st.session_state:
+            has_real_data = True
             scores = st.session_state.arch_compliance_scores
             for f, s in scores.items():
                 f_name = f.value if hasattr(f, 'value') else str(f)
@@ -658,6 +665,7 @@ class DashboardDataAggregator:
         
         # SOURCE 4: EKS compliance scores (keep existing)
         if 'eks_compliance_scores' in st.session_state:
+            has_real_data = True
             scores = st.session_state.eks_compliance_scores
             for f, s in scores.items():
                 f_name = f.value if hasattr(f, 'value') else str(f)
@@ -665,34 +673,73 @@ class DashboardDataAggregator:
                 if norm_fw not in compliance_scores:
                     compliance_scores[norm_fw] = self._extract_score(s)
         
-        # Calculate compliance scores from findings
-        for fw, counts in framework_findings.items():
-            if counts["total"] > 0:
-                # Score = 100 - penalty for findings
-                # Critical: -20, High: -10, Medium: -5
-                penalty = (counts["critical"] * 20) + (counts["high"] * 10) + (counts["medium"] * 5)
-                score = max(0, min(100, 100 - penalty))
+        # SOURCE 5: DEMO MODE - Use demo compliance data if no real data
+        if is_demo_mode and not has_real_data:
+            try:
+                from demo_mode_manager import DemoModeManager
+                demo_mgr = DemoModeManager()
+                demo_compliance = demo_mgr.get_demo_compliance_status()
                 
-                # Only update if we don't have a score from arch/eks or findings-based is lower
-                if fw not in compliance_scores or score < compliance_scores[fw]:
-                    compliance_scores[fw] = score
-            elif fw not in compliance_scores:
-                # No findings for this framework = good compliance
-                compliance_scores[fw] = 85  # Default good score
+                # Map demo data to our framework format
+                demo_mapping = {
+                    'cis_aws': 'CIS AWS',
+                    'pci_dss': 'PCI-DSS',
+                    'hipaa': 'HIPAA',
+                    'soc2': 'SOC 2',
+                    'nist_csf': 'NIST CSF',
+                }
+                
+                for demo_key, norm_fw in demo_mapping.items():
+                    if demo_key in demo_compliance:
+                        compliance_scores[norm_fw] = int(demo_compliance[demo_key].get('score', 0))
+                
+                # Add defaults for frameworks not in demo data
+                if 'ISO 27001' not in compliance_scores:
+                    compliance_scores['ISO 27001'] = 79  # Similar to others
+                if 'GDPR' not in compliance_scores:
+                    compliance_scores['GDPR'] = 76  # Similar to others
+                    
+                has_real_data = True  # We now have demo data
+                
+            except Exception as e:
+                pass  # Fall through to calculate from findings
+        
+        # Calculate compliance scores from findings (only if we have data)
+        if has_real_data:
+            for fw, counts in framework_findings.items():
+                if counts["total"] > 0:
+                    # Score = 100 - penalty for findings
+                    # Critical: -20, High: -10, Medium: -5
+                    penalty = (counts["critical"] * 20) + (counts["high"] * 10) + (counts["medium"] * 5)
+                    score = max(0, min(100, 100 - penalty))
+                    
+                    # Only update if we don't have a score from arch/eks or findings-based is lower
+                    if fw not in compliance_scores or score < compliance_scores[fw]:
+                        compliance_scores[fw] = score
+                elif fw not in compliance_scores:
+                    # No findings for this framework but we have other data = assume good
+                    compliance_scores[fw] = 90
+        
+        # If still no compliance scores, return empty (don't default to fake 85%)
+        if not compliance_scores:
+            return ModuleStatus(
+                module=ModuleType.COMPLIANCE,
+                health=HealthStatus.UNKNOWN,
+                last_updated=datetime.now(),
+                overall_score=0,
+                compliance_scores={}
+            )
         
         # Determine health based on lowest compliance score
-        if compliance_scores:
-            min_score = min(compliance_scores.values())
-            if min_score < 50:
-                health = HealthStatus.CRITICAL
-            elif min_score < 70:
-                health = HealthStatus.WARNING
-            else:
-                health = HealthStatus.HEALTHY
+        min_score = min(compliance_scores.values())
+        if min_score < 50:
+            health = HealthStatus.CRITICAL
+        elif min_score < 70:
+            health = HealthStatus.WARNING
         else:
-            health = HealthStatus.UNKNOWN
+            health = HealthStatus.HEALTHY
         
-        overall = sum(compliance_scores.values()) // len(compliance_scores) if compliance_scores else 0
+        overall = sum(compliance_scores.values()) // len(compliance_scores)
         
         return ModuleStatus(
             module=ModuleType.COMPLIANCE,
