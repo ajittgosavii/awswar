@@ -597,11 +597,13 @@ def render_sidebar():
                             from auth_azure_sso import perform_logout
                             perform_logout()
                         except Exception:
-                            # Fallback: manual cleanup
+                            # Fallback: manual cleanup - preserve mode param
                             st.session_state.authenticated = False
                             st.session_state.user_info = None
                             st.session_state.user_id = None
-                            st.query_params.clear()
+                            # Only clear session ID, not mode
+                            if 'sid' in st.query_params:
+                                del st.query_params['sid']
                         
                         st.rerun()
                 

@@ -76,13 +76,37 @@ class DemoModeManager:
     
     @property
     def is_demo_mode(self) -> bool:
-        """Check if demo mode is active"""
-        return st.session_state.get('demo_mode', True)
+        """Check if demo mode is active - with URL persistence"""
+        # First check session_state
+        if 'demo_mode' in st.session_state:
+            return st.session_state.demo_mode
+        
+        # Then check URL parameter for persistence across refresh
+        try:
+            mode_param = st.query_params.get('mode')
+            if mode_param == 'live':
+                st.session_state.demo_mode = False
+                return False
+            elif mode_param == 'demo':
+                st.session_state.demo_mode = True
+                return True
+        except:
+            pass
+        
+        # Default to Demo mode (True) for safety
+        return True
     
     @is_demo_mode.setter
     def is_demo_mode(self, value: bool):
-        """Set demo mode state"""
+        """Set demo mode state - persists to URL"""
         st.session_state.demo_mode = value
+        
+        # Persist mode to URL for refresh survival
+        try:
+            st.query_params['mode'] = 'demo' if value else 'live'
+        except:
+            pass
+        
         if value:
             self._initialize_demo_session()
     

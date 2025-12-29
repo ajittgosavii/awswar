@@ -98,15 +98,35 @@ def get_session_id_from_url() -> Optional[str]:
 
 
 def clear_session_from_url():
-    """Clear session ID from URL."""
+    """Clear session ID from URL - preserves mode parameter."""
     try:
         if 'sid' in st.query_params:
             del st.query_params['sid']
     except Exception:
-        try:
-            st.query_params.clear()
-        except:
-            pass
+        # Don't clear all params - that would lose mode setting
+        pass
+
+
+def clear_oauth_params_from_url():
+    """Clear OAuth-related params from URL while preserving mode and session."""
+    try:
+        # Save params we want to keep
+        mode = st.query_params.get('mode')
+        sid = st.query_params.get('sid')
+        
+        # Clear OAuth params individually
+        oauth_params = ['code', 'error', 'error_description', 'state', 'session_state']
+        for param in oauth_params:
+            if param in st.query_params:
+                del st.query_params[param]
+        
+        # Restore mode if it was set
+        if mode:
+            st.query_params['mode'] = mode
+        if sid:
+            st.query_params['sid'] = sid
+    except Exception:
+        pass
 
 
 def check_and_restore_session() -> bool:
@@ -491,7 +511,7 @@ def render_login():
                             session_id = save_session_to_firebase(final_user_info)
                             
                             # Clear OAuth code from URL
-                            st.query_params.clear()
+                            clear_oauth_params_from_url()
                             
                             # Add session ID to URL for refresh persistence
                             if session_id:
@@ -505,17 +525,17 @@ def render_login():
                         st.error(f"❌ Database error: {str(e)}")
                         st.info("Please try logging in again")
                         if st.button("🔄 Try Again"):
-                            st.query_params.clear()
+                            clear_oauth_params_from_url()
                             st.rerun()
                 else:
                     st.error("❌ Could not retrieve user information")
                     if st.button("🔄 Try Again"):
-                        st.query_params.clear()
+                        clear_oauth_params_from_url()
                         st.rerun()
             else:
                 # Token exchange failed - error already displayed
                 if st.button("🔄 Try Again"):
-                    st.query_params.clear()
+                    clear_oauth_params_from_url()
                     st.rerun()
     
     elif 'error' in query_params:
@@ -528,7 +548,7 @@ def render_login():
         st.info(error_desc)
         
         if st.button("🔄 Try Again"):
-            st.query_params.clear()
+            clear_oauth_params_from_url()
             st.rerun()
     
     else:
