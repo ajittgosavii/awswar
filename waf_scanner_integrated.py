@@ -1022,9 +1022,14 @@ def scan_real_aws_account_enhanced(account, depth, pillars, region, status_text)
         total_services = len(services)
         status_text.markdown(f"🔍 **{account_name}** - Scanning {total_services} AWS services...")
         
-        # Scan each service
+        # Scan each service with individual error handling
         for idx, service in enumerate(services):
-            scan_service(session, service, region, result, status_text, account_name)
+            try:
+                scan_service(session, service, region, result, status_text, account_name)
+            except Exception as service_error:
+                # Log error but continue with other services
+                result['resources'][service] = {'error': str(service_error)[:200], 'count': 0}
+                status_text.markdown(f"⚠️ **{account_name}** - {service} scan failed: {str(service_error)[:50]}...")
 
         
         status_text.markdown(f"✅ **{account_name}** - Scan complete: {len(result['findings'])} findings from {len(result['resources'])} services")
@@ -1659,6 +1664,214 @@ def scan_securityhub_service(session, region, result, status_text, account_name)
         result['resources']['Security Hub'] = {'error': str(e)[:100]}
 
 
+# ============================================================================
+# EC2 AND S3 SERVICE SCANNERS (ADDED - WERE MISSING)
+# ============================================================================
+
+def scan_ec2_service(session, region, result, status_text, account_name):
+    """Scan EC2 instances for security issues"""
+    from botocore.exceptions import ClientError
+    
+    try:
+        status_text.markdown(f"🔍 **{account_name}** - Scanning EC2...")
+        ec2 = session.client('ec2', region_name=region)
+        
+        # Get all instances
+        instances = ec2.describe_instances()
+        instance_count = 0
+        findings = []
+        
+        for reservation in instances.get('Reservations', []):
+            for instance in reservation.get('Instances', []):
+                instance_count += 1
+                instance_id = instance.get('InstanceId', 'N/A')
+                state = instance.get('State', {}).get('Name', 'unknown')
+                
+                # Only check running instances
+                if state != 'running':
+                    continue
+                
+                # Check for public IP
+                if instance.get('PublicIpAddress'):
+                    findings.append({
+                        'title': 'EC2 Instance with Public IP',
+                        'severity': 'MEDIUM',
+                        'service': 'EC2',
+                        'resource': instance_id,
+                        'description': f'Instance {instance_id} has a public IP address ({instance["PublicIpAddress"]}) assigned'
+                    })
+                
+                # Check for IMDSv1 (less secure)
+                metadata_options = instance.get('MetadataOptions', {})
+                if metadata_options.get('HttpTokens') != 'required':
+                    findings.append({
+                        'title': 'EC2 Instance using IMDSv1',
+                        'severity': 'MEDIUM',
+                        'service': 'EC2',
+                        'resource': instance_id,
+                        'description': f'Instance {instance_id} allows IMDSv1 (HttpTokens not required). Recommend enforcing IMDSv2.'
+                    })
+                
+                # Check for unencrypted EBS root volume
+                for block_device in instance.get('BlockDeviceMappings', []):
+                    if block_device.get('Ebs'):
+                        volume_id = block_device['Ebs'].get('VolumeId')
+                        try:
+                            vol_response = ec2.describe_volumes(VolumeIds=[volume_id])
+                            for vol in vol_response.get('Volumes', []):
+                                if not vol.get('Encrypted', False):
+                                    findings.append({
+                                        'title': 'Unencrypted EBS Volume',
+                                        'severity': 'HIGH',
+                                        'service': 'EC2',
+                                        'resource': volume_id,
+                                        'description': f'EBS volume {volume_id} attached to {instance_id} is not encrypted'
+                                    })
+                        except ClientError:
+                            pass
+                
+                # Check for missing detailed monitoring
+                if instance.get('Monitoring', {}).get('State') != 'enabled':
+                    findings.append({
+                        'title': 'EC2 Detailed Monitoring Disabled',
+                        'severity': 'LOW',
+                        'service': 'EC2',
+                        'resource': instance_id,
+                        'description': f'Instance {instance_id} does not have detailed monitoring enabled'
+                    })
+        
+        # Check security groups for overly permissive rules
+        try:
+            security_groups = ec2.describe_security_groups()
+            for sg in security_groups.get('SecurityGroups', []):
+                sg_id = sg.get('GroupId', 'N/A')
+                for rule in sg.get('IpPermissions', []):
+                    for ip_range in rule.get('IpRanges', []):
+                        if ip_range.get('CidrIp') == '0.0.0.0/0':
+                            port = rule.get('FromPort', 'All')
+                            findings.append({
+                                'title': 'Security Group Open to Internet',
+                                'severity': 'HIGH' if port in [22, 3389, 3306, 5432] else 'MEDIUM',
+                                'service': 'EC2',
+                                'resource': sg_id,
+                                'description': f'Security group {sg_id} allows inbound traffic from 0.0.0.0/0 on port {port}'
+                            })
+        except ClientError:
+            pass
+        
+        result['resources']['EC2'] = {'count': instance_count, 'issues': findings}
+        result['findings'].extend(findings)
+        status_text.markdown(f"🔍 **{account_name}** - EC2: {instance_count} instances, {len(findings)} findings")
+        
+    except ClientError as e:
+        result['resources']['EC2'] = {'error': str(e), 'count': 0}
+    except Exception as e:
+        result['resources']['EC2'] = {'error': str(e), 'count': 0}
+
+
+def scan_s3_service(session, result, status_text, account_name):
+    """Scan S3 buckets for security issues"""
+    from botocore.exceptions import ClientError
+    
+    try:
+        status_text.markdown(f"🔍 **{account_name}** - Scanning S3...")
+        s3 = session.client('s3')
+        
+        # List all buckets
+        buckets = s3.list_buckets()
+        bucket_count = len(buckets.get('Buckets', []))
+        findings = []
+        
+        for bucket in buckets.get('Buckets', []):
+            bucket_name = bucket['Name']
+            
+            try:
+                # Check bucket encryption
+                try:
+                    s3.get_bucket_encryption(Bucket=bucket_name)
+                except ClientError as e:
+                    if 'ServerSideEncryptionConfigurationNotFoundError' in str(e):
+                        findings.append({
+                            'title': 'S3 Bucket Without Default Encryption',
+                            'severity': 'HIGH',
+                            'service': 'S3',
+                            'resource': bucket_name,
+                            'description': f'Bucket {bucket_name} does not have default encryption enabled'
+                        })
+                
+                # Check bucket versioning
+                try:
+                    versioning = s3.get_bucket_versioning(Bucket=bucket_name)
+                    if versioning.get('Status') != 'Enabled':
+                        findings.append({
+                            'title': 'S3 Bucket Without Versioning',
+                            'severity': 'MEDIUM',
+                            'service': 'S3',
+                            'resource': bucket_name,
+                            'description': f'Bucket {bucket_name} does not have versioning enabled'
+                        })
+                except ClientError:
+                    pass
+                
+                # Check public access block
+                try:
+                    public_access = s3.get_public_access_block(Bucket=bucket_name)
+                    config = public_access.get('PublicAccessBlockConfiguration', {})
+                    if not all([
+                        config.get('BlockPublicAcls'),
+                        config.get('IgnorePublicAcls'),
+                        config.get('BlockPublicPolicy'),
+                        config.get('RestrictPublicBuckets')
+                    ]):
+                        findings.append({
+                            'title': 'S3 Bucket Public Access Not Fully Blocked',
+                            'severity': 'HIGH',
+                            'service': 'S3',
+                            'resource': bucket_name,
+                            'description': f'Bucket {bucket_name} does not have all public access blocks enabled'
+                        })
+                except ClientError as e:
+                    if 'NoSuchPublicAccessBlockConfiguration' in str(e):
+                        findings.append({
+                            'title': 'S3 Bucket Missing Public Access Block',
+                            'severity': 'CRITICAL',
+                            'service': 'S3',
+                            'resource': bucket_name,
+                            'description': f'Bucket {bucket_name} has no public access block configuration'
+                        })
+                
+                # Check bucket logging
+                try:
+                    logging = s3.get_bucket_logging(Bucket=bucket_name)
+                    if not logging.get('LoggingEnabled'):
+                        findings.append({
+                            'title': 'S3 Bucket Logging Disabled',
+                            'severity': 'LOW',
+                            'service': 'S3',
+                            'resource': bucket_name,
+                            'description': f'Bucket {bucket_name} does not have access logging enabled'
+                        })
+                except ClientError:
+                    pass
+                    
+            except ClientError as e:
+                # Skip buckets we can't access (cross-region, etc.)
+                pass
+        
+        result['resources']['S3'] = {'count': bucket_count, 'issues': findings}
+        result['findings'].extend(findings)
+        status_text.markdown(f"🔍 **{account_name}** - S3: {bucket_count} buckets, {len(findings)} findings")
+        
+    except ClientError as e:
+        result['resources']['S3'] = {'error': str(e), 'count': 0}
+    except Exception as e:
+        result['resources']['S3'] = {'error': str(e), 'count': 0}
+
+
+# ============================================================================
+# END OF ADDED EC2/S3 SCANNERS
+# ============================================================================
+
 # Placeholder functions for remaining services (scan but don't do detailed checks yet)
 def scan_generic_service(session, region, result, status_text, account_name, service_name, client_name):
     """Generic scanner for services without detailed checks"""
@@ -2092,12 +2305,16 @@ def display_multi_account_results(results):
         st.error(f"Invalid results format: {type(results)}")
         return
     
+    # Filter out non-account entries like 'consolidated_pdf'
+    account_results = {k: v for k, v in results.items() 
+                       if k != 'consolidated_pdf' and isinstance(v, dict)}
+    
     # Overall summary
     total_findings = 0
     total_critical = 0
     total_high = 0
     
-    for account_id, data in results.items():
+    for account_id, data in account_results.items():
         if isinstance(data, dict):
             findings = data.get('findings', [])
         elif isinstance(data, list):
@@ -2112,7 +2329,7 @@ def display_multi_account_results(results):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Accounts Scanned", len(results))
+        st.metric("Accounts Scanned", len(account_results))
     with col2:
         st.metric("Total Findings", total_findings)
     with col3:
@@ -2133,13 +2350,13 @@ def display_multi_account_results(results):
             st.download_button(
                 label="📥 Download Multi-Account PDF Report",
                 data=results['consolidated_pdf'],
-                file_name=f"multi_account_waf_scan_{len(results)}_accounts.pdf",
+                file_name=f"multi_account_waf_scan_{len(account_results)}_accounts.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
         
         with col2:
-            st.info(f"📊 {len(results)} accounts combined")
+            st.info(f"📊 {len(account_results)} accounts combined")
     
     # Per-account PDFs
     account_pdfs = []
@@ -2210,23 +2427,24 @@ def display_multi_account_results(results):
             st.download_button(
                 label="📥 Download CSV",
                 data=output.getvalue(),
-                file_name=f"multi_account_scan_{len(results)}_accounts.csv",
+                file_name=f"multi_account_scan_{len(account_results)}_accounts.csv",
                 mime="text/csv",
                 use_container_width=True
             )
     
     st.markdown("---")
     
-    # Per-account results
+    # Per-account results - filter out non-account entries
     st.markdown("### 📋 Per-Account Details")
     
     for account_id, data in results.items():
-        if isinstance(data, dict):
-            findings = data.get('findings', [])
-        elif isinstance(data, list):
-            findings = data
-        else:
-            findings = []
+        # Skip non-account entries like consolidated_pdf
+        if account_id == 'consolidated_pdf':
+            continue
+        if not isinstance(data, dict):
+            continue
+            
+        findings = data.get('findings', [])
         
         with st.expander(f"📁 Account: {account_id} ({len(findings)} findings)"):
             if isinstance(data, dict) and 'waf_pillar_scores' in data:
