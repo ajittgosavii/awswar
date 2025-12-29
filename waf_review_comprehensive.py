@@ -1091,15 +1091,8 @@ class WAFReviewWorkflow:
         
         for account in connected_accounts:
             try:
-                # Create session
-                if account.get('auth_method') == 'assume_role':
-                    session = self._create_assume_role_session(account)
-                else:
-                    session = boto3.Session(
-                        aws_access_key_id=account.get('access_key'),
-                        aws_secret_access_key=account.get('secret_key'),
-                        region_name=account.get('region', 'us-east-1')
-                    )
+                # Create session using the same pattern as streamlit_app.py
+                session = self._create_account_session(account)
                 
                 if not session:
                     continue
@@ -1158,6 +1151,76 @@ class WAFReviewWorkflow:
         else:
             return 'Security'
     
+    def _create_account_session(self, account: dict):
+        """Create boto3 session for an account - matches streamlit_app.py pattern"""
+        try:
+            # Pattern 1: Organizations import with credentials sub-dict
+            if account.get('connection_type') == 'organizations':
+                return boto3.Session(
+                    aws_access_key_id=account['credentials']['access_key'],
+                    aws_secret_access_key=account['credentials']['secret_key'],
+                    region_name=account.get('region', 'us-east-1')
+                )
+            
+            # Pattern 2: AssumeRole authentication
+            elif account.get('auth_method') == 'assume_role':
+                # Check for hub credentials
+                if 'multi_hub_access_key' not in st.session_state or 'multi_hub_secret_key' not in st.session_state:
+                    st.error(f"❌ Hub credentials not configured. Please set them in Multi-Account → AssumeRole Setup (Step 1)")
+                    return None
+                
+                # Create base session with hub credentials
+                base_session = boto3.Session(
+                    aws_access_key_id=st.session_state.multi_hub_access_key,
+                    aws_secret_access_key=st.session_state.multi_hub_secret_key
+                )
+                
+                # Import and use the assume_role helper
+                try:
+                    from aws_connector import assume_role
+                except ImportError:
+                    st.error("❌ aws_connector module not available")
+                    return None
+                
+                # Assume the role
+                assumed_creds = assume_role(
+                    base_session,
+                    account['role_arn'],
+                    account.get('external_id'),
+                    session_name="WAFReviewScan"
+                )
+                
+                if not assumed_creds:
+                    st.error(f"❌ Failed to assume role: {account.get('role_arn')}")
+                    return None
+                
+                # Create session with assumed credentials
+                return boto3.Session(
+                    aws_access_key_id=assumed_creds.access_key_id,
+                    aws_secret_access_key=assumed_creds.secret_access_key,
+                    aws_session_token=assumed_creds.session_token,
+                    region_name=account.get('region', 'us-east-1')
+                )
+            
+            # Pattern 3: Direct manual credentials
+            else:
+                access_key = account.get('access_key')
+                secret_key = account.get('secret_key')
+                
+                if not access_key or not secret_key:
+                    st.warning(f"⚠️ No credentials for {account.get('name', 'account')}")
+                    return None
+                
+                return boto3.Session(
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                    region_name=account.get('region', 'us-east-1')
+                )
+                
+        except Exception as e:
+            st.error(f"❌ Session creation failed for {account.get('name', 'account')}: {str(e)}")
+            return None
+    
     def _scan_direct_api(self) -> List[Finding]:
         """Scan using direct AWS API calls - FIXED VERSION using AWSLandscapeScanner"""
         findings = []
@@ -1194,15 +1257,8 @@ class WAFReviewWorkflow:
             st.markdown(f"**Scanning {account_name}...** ({idx+1}/{total_accounts})")
             
             try:
-                # Create boto3 session for this account
-                if account.get('auth_method') == 'assume_role':
-                    session = self._create_assume_role_session(account)
-                else:
-                    session = boto3.Session(
-                        aws_access_key_id=account.get('access_key'),
-                        aws_secret_access_key=account.get('secret_key'),
-                        region_name=account.get('region', 'us-east-1')
-                    )
+                # Create boto3 session using the unified method
+                session = self._create_account_session(account)
                 
                 if not session:
                     st.warning(f"⚠️ Could not create session for {account_name}")
@@ -1212,11 +1268,12 @@ class WAFReviewWorkflow:
                 try:
                     sts = session.client('sts')
                     account_id = sts.get_caller_identity()['Account']
-                except:
+                except Exception as e:
                     account_id = account.get('account_id', 'unknown')
+                    st.warning(f"Could not get account ID: {str(e)}")
                 
                 # Initialize scanner with session
-                scanner = AWSLandscapeScanner(session=session, account_id=account_id)
+                scanner = AWSLandscapeScanner(session)
                 
                 # Run scan
                 regions = [account.get('region', 'us-east-1')]
@@ -1249,44 +1306,6 @@ class WAFReviewWorkflow:
                     st.code(traceback.format_exc())
         
         return findings
-    
-    def _create_assume_role_session(self, account: dict):
-        """Create a session using AssumeRole"""
-        try:
-            hub_access_key = st.session_state.get('multi_hub_access_key')
-            hub_secret_key = st.session_state.get('multi_hub_secret_key')
-            
-            if not hub_access_key or not hub_secret_key:
-                st.warning("Hub credentials not configured for AssumeRole")
-                return None
-            
-            base_session = boto3.Session(
-                aws_access_key_id=hub_access_key,
-                aws_secret_access_key=hub_secret_key
-            )
-            
-            sts = base_session.client('sts')
-            
-            assume_params = {
-                'RoleArn': account.get('role_arn'),
-                'RoleSessionName': 'WAFReviewScan'
-            }
-            
-            if account.get('external_id'):
-                assume_params['ExternalId'] = account.get('external_id')
-            
-            response = sts.assume_role(**assume_params)
-            
-            return boto3.Session(
-                aws_access_key_id=response['Credentials']['AccessKeyId'],
-                aws_secret_access_key=response['Credentials']['SecretAccessKey'],
-                aws_session_token=response['Credentials']['SessionToken'],
-                region_name=account.get('region', 'us-east-1')
-            )
-            
-        except Exception as e:
-            st.error(f"AssumeRole failed: {str(e)}")
-            return None
     
     def _render_findings_summary(self):
         """Render summary of findings by pillar"""
