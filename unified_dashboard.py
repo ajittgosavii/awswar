@@ -238,7 +238,40 @@ class DashboardDataAggregator:
         
         findings = []
         waf_scores = {}
+        compliance_scores = {}
         overall = 0
+        
+        # Helper to normalize framework names
+        def normalize_framework(fw):
+            fw_lower = fw.lower().replace('-', '').replace(' ', '').replace('.', '')
+            if 'soc2' in fw_lower or 'soc 2' in fw_lower.replace('', ' '):
+                return "SOC 2"
+            elif 'hipaa' in fw_lower:
+                return "HIPAA"
+            elif 'pci' in fw_lower:
+                return "PCI-DSS"
+            elif 'iso27' in fw_lower or 'iso 27' in fw_lower:
+                return "ISO 27001"
+            elif 'cis' in fw_lower:
+                return "CIS AWS"
+            elif 'gdpr' in fw_lower:
+                return "GDPR"
+            elif 'nist' in fw_lower:
+                return "NIST CSF"
+            elif 'fedramp' in fw_lower:
+                return "FedRAMP"
+            return fw
+        
+        # Initialize framework tracking
+        framework_findings = {
+            "SOC 2": {"critical": 0, "high": 0, "medium": 0},
+            "HIPAA": {"critical": 0, "high": 0, "medium": 0},
+            "PCI-DSS": {"critical": 0, "high": 0, "medium": 0},
+            "ISO 27001": {"critical": 0, "high": 0, "medium": 0},
+            "CIS AWS": {"critical": 0, "high": 0, "medium": 0},
+            "GDPR": {"critical": 0, "high": 0, "medium": 0},
+            "NIST CSF": {"critical": 0, "high": 0, "medium": 0},
+        }
         
         # PRIMARY SOURCE: waf_review_session (from WAF Review Comprehensive module)
         if 'waf_review_session' in st.session_state:
@@ -248,15 +281,33 @@ class DashboardDataAggregator:
             if hasattr(session, 'findings') and session.findings:
                 for f in session.findings:
                     # Convert Finding objects to dict format
+                    finding_dict = {}
                     if hasattr(f, 'severity'):
-                        findings.append({
+                        finding_dict = {
                             'severity': f.severity,
                             'title': getattr(f, 'title', ''),
                             'pillar': getattr(f, 'pillar', ''),
-                            'service': getattr(f, 'service', '')
-                        })
+                            'service': getattr(f, 'service', ''),
+                            'compliance_frameworks': getattr(f, 'compliance_frameworks', [])
+                        }
                     elif isinstance(f, dict):
-                        findings.append(f)
+                        finding_dict = f
+                    
+                    findings.append(finding_dict)
+                    
+                    # Track compliance frameworks from finding
+                    fw_list = finding_dict.get('compliance_frameworks', [])
+                    severity = finding_dict.get('severity', 'MEDIUM')
+                    
+                    for fw in fw_list:
+                        norm_fw = normalize_framework(fw)
+                        if norm_fw in framework_findings:
+                            if severity == "CRITICAL":
+                                framework_findings[norm_fw]["critical"] += 1
+                            elif severity == "HIGH":
+                                framework_findings[norm_fw]["high"] += 1
+                            else:
+                                framework_findings[norm_fw]["medium"] += 1
             
             # Get pillar scores from session
             if hasattr(session, 'pillar_scores') and session.pillar_scores:
@@ -321,6 +372,13 @@ class DashboardDataAggregator:
         if not waf_scores and findings:
             waf_scores = self._calculate_scores_from_findings(findings)
         
+        # Calculate compliance scores from framework findings
+        for fw, counts in framework_findings.items():
+            total = counts["critical"] + counts["high"] + counts["medium"]
+            if total > 0:
+                penalty = (counts["critical"] * 20) + (counts["high"] * 10) + (counts["medium"] * 5)
+                compliance_scores[fw] = max(0, min(100, 100 - penalty))
+        
         # Determine health
         if critical > 0:
             health = HealthStatus.CRITICAL
@@ -343,7 +401,8 @@ class DashboardDataAggregator:
             overall_score=overall,
             findings_count=len(findings),
             critical_count=critical,
-            high_count=high
+            high_count=high,
+            compliance_scores=compliance_scores
         )
     
     def _collect_architecture_data(self) -> ModuleStatus:
@@ -457,28 +516,121 @@ class DashboardDataAggregator:
         )
     
     def _collect_compliance_data(self) -> ModuleStatus:
-        """Collect Compliance module data"""
+        """Collect Compliance module data - FIXED to aggregate from all findings"""
         
         compliance_scores = {}
+        framework_findings = {}  # Track findings per framework
         
-        # Try to get from various sources
-        sources = [
-            'current_integrated_assessment',
-            'arch_compliance_scores',
-            'eks_compliance_scores'
+        # FRAMEWORKS TO TRACK
+        frameworks = [
+            "SOC 2 Type II", "SOC2", "SOC 2",
+            "HIPAA", 
+            "PCI-DSS", "PCI-DSS v4.0", "PCI DSS",
+            "ISO 27001", "ISO 27001:2022", "ISO27001",
+            "CIS AWS", "CIS Benchmarks", "CIS AWS Foundations",
+            "GDPR",
+            "NIST CSF", "NIST",
+            "FedRAMP"
         ]
         
-        for source in sources:
-            if source in st.session_state:
-                data = st.session_state[source]
-                if hasattr(data, 'compliance_status'):
-                    for f, s in data.compliance_status.items():
-                        f_name = f.value if hasattr(f, 'value') else str(f)
-                        compliance_scores[f_name] = self._extract_score(s)
-                elif isinstance(data, dict):
-                    for f, s in data.items():
-                        f_name = f.value if hasattr(f, 'value') else str(f)
-                        compliance_scores[f_name] = self._extract_score(s)
+        # Normalize framework names
+        def normalize_framework(fw):
+            fw_lower = fw.lower().replace('-', '').replace(' ', '').replace('.', '')
+            if 'soc2' in fw_lower or 'soc 2' in fw_lower.replace('', ' '):
+                return "SOC 2"
+            elif 'hipaa' in fw_lower:
+                return "HIPAA"
+            elif 'pci' in fw_lower:
+                return "PCI-DSS"
+            elif 'iso27' in fw_lower or 'iso 27' in fw_lower:
+                return "ISO 27001"
+            elif 'cis' in fw_lower:
+                return "CIS AWS"
+            elif 'gdpr' in fw_lower:
+                return "GDPR"
+            elif 'nist' in fw_lower:
+                return "NIST CSF"
+            elif 'fedramp' in fw_lower:
+                return "FedRAMP"
+            return fw
+        
+        # Initialize framework tracking
+        normalized_frameworks = ["SOC 2", "HIPAA", "PCI-DSS", "ISO 27001", "CIS AWS", "GDPR", "NIST CSF"]
+        for fw in normalized_frameworks:
+            framework_findings[fw] = {"total": 0, "critical": 0, "high": 0, "medium": 0}
+        
+        # SOURCE 1: WAF Review Session findings (PRIMARY)
+        if 'waf_review_session' in st.session_state:
+            session = st.session_state.waf_review_session
+            if hasattr(session, 'findings') and session.findings:
+                for finding in session.findings:
+                    # Get compliance frameworks from finding
+                    fw_list = []
+                    if hasattr(finding, 'compliance_frameworks'):
+                        fw_list = finding.compliance_frameworks or []
+                    elif isinstance(finding, dict):
+                        fw_list = finding.get('compliance_frameworks', [])
+                    
+                    severity = getattr(finding, 'severity', 'MEDIUM') if hasattr(finding, 'severity') else finding.get('severity', 'MEDIUM')
+                    
+                    for fw in fw_list:
+                        norm_fw = normalize_framework(fw)
+                        if norm_fw in framework_findings:
+                            framework_findings[norm_fw]["total"] += 1
+                            if severity == "CRITICAL":
+                                framework_findings[norm_fw]["critical"] += 1
+                            elif severity == "HIGH":
+                                framework_findings[norm_fw]["high"] += 1
+                            else:
+                                framework_findings[norm_fw]["medium"] += 1
+        
+        # SOURCE 2: last_findings session state
+        if 'last_findings' in st.session_state:
+            for finding in st.session_state.last_findings:
+                fw_list = finding.get('compliance_frameworks', []) if isinstance(finding, dict) else []
+                severity = finding.get('severity', 'MEDIUM') if isinstance(finding, dict) else 'MEDIUM'
+                
+                for fw in fw_list:
+                    norm_fw = normalize_framework(fw)
+                    if norm_fw in framework_findings:
+                        framework_findings[norm_fw]["total"] += 1
+                        if severity == "CRITICAL":
+                            framework_findings[norm_fw]["critical"] += 1
+                        elif severity == "HIGH":
+                            framework_findings[norm_fw]["high"] += 1
+        
+        # SOURCE 3: Architecture compliance scores (keep existing)
+        if 'arch_compliance_scores' in st.session_state:
+            scores = st.session_state.arch_compliance_scores
+            for f, s in scores.items():
+                f_name = f.value if hasattr(f, 'value') else str(f)
+                norm_fw = normalize_framework(f_name)
+                if norm_fw not in compliance_scores:
+                    compliance_scores[norm_fw] = self._extract_score(s)
+        
+        # SOURCE 4: EKS compliance scores (keep existing)
+        if 'eks_compliance_scores' in st.session_state:
+            scores = st.session_state.eks_compliance_scores
+            for f, s in scores.items():
+                f_name = f.value if hasattr(f, 'value') else str(f)
+                norm_fw = normalize_framework(f_name)
+                if norm_fw not in compliance_scores:
+                    compliance_scores[norm_fw] = self._extract_score(s)
+        
+        # Calculate compliance scores from findings
+        for fw, counts in framework_findings.items():
+            if counts["total"] > 0:
+                # Score = 100 - penalty for findings
+                # Critical: -20, High: -10, Medium: -5
+                penalty = (counts["critical"] * 20) + (counts["high"] * 10) + (counts["medium"] * 5)
+                score = max(0, min(100, 100 - penalty))
+                
+                # Only update if we don't have a score from arch/eks or findings-based is lower
+                if fw not in compliance_scores or score < compliance_scores[fw]:
+                    compliance_scores[fw] = score
+            elif fw not in compliance_scores:
+                # No findings for this framework = good compliance
+                compliance_scores[fw] = 85  # Default good score
         
         # Determine health based on lowest compliance score
         if compliance_scores:
@@ -608,12 +760,13 @@ class DashboardDataAggregator:
         return aggregated
     
     def get_priority_actions(self, statuses: Dict[ModuleType, ModuleStatus]) -> List[PriorityAction]:
-        """Generate priority action items from all modules"""
+        """Generate priority action items from all modules - FIXED to avoid redundancy"""
         
         actions = []
         
         # Critical findings from each module
         for module, status in statuses.items():
+            # Action for critical findings
             if status.critical_count > 0:
                 actions.append(PriorityAction(
                     id=f"action-{module.value}-critical",
@@ -624,16 +777,30 @@ class DashboardDataAggregator:
                     impact="Potential security breach or compliance violation",
                     action_required=f"Review and remediate critical findings in {module.value}"
                 ))
-            
-            if status.health == HealthStatus.CRITICAL:
+            # Only show "Module Health Critical" if health is critical but NOT due to critical findings
+            # This avoids redundant entries for WAF Review, Architecture, EKS
+            elif status.health == HealthStatus.CRITICAL:
+                # This catches Compliance module (health based on scores) and others
                 actions.append(PriorityAction(
                     id=f"action-{module.value}-health",
                     source_module=module,
                     severity="HIGH",
                     title=f"{module.value} Module Health Critical",
-                    description=f"Module health status is critical",
+                    description=f"Module health status is critical based on assessment scores",
                     impact="Reduced security posture",
                     action_required=f"Investigate and resolve issues in {module.value}"
+                ))
+            
+            # High findings as separate action
+            if status.high_count > 5:
+                actions.append(PriorityAction(
+                    id=f"action-{module.value}-high",
+                    source_module=module,
+                    severity="HIGH",
+                    title=f"{status.high_count} High-Priority Findings in {module.value}",
+                    description=f"Multiple high-severity issues detected",
+                    impact="Elevated security risk",
+                    action_required=f"Review and address high-priority findings in {module.value}"
                 ))
         
         # Sort by severity
