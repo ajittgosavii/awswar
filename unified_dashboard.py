@@ -289,6 +289,65 @@ class DashboardDataAggregator:
         compliance_scores = {}
         overall = 0
         
+        # Check if we're in Demo Mode
+        is_demo_mode = st.session_state.get('demo_mode', False)
+        
+        # If Demo Mode and no real data, return demo WAF data
+        if is_demo_mode and 'waf_review_session' not in st.session_state:
+            try:
+                from demo_mode_manager import DemoModeManager
+                demo_mgr = DemoModeManager()
+                demo_data = demo_mgr.get_demo_waf_findings()
+                
+                # Extract findings from demo data
+                all_findings = []
+                for pillar_name, pillar_data in demo_data.get('findings', {}).items():
+                    if isinstance(pillar_data, dict) and 'findings' in pillar_data:
+                        all_findings.extend(pillar_data['findings'])
+                
+                summary = demo_data.get('summary', {})
+                critical = summary.get('critical_count', 0)
+                high = summary.get('high_count', 0)
+                overall = summary.get('waf_score', 72)
+                
+                # Determine health
+                if critical > 0:
+                    health = HealthStatus.CRITICAL
+                elif high > 5:
+                    health = HealthStatus.WARNING
+                else:
+                    health = HealthStatus.HEALTHY
+                
+                # Convert demo WAF scores to pillar format
+                pillar_scores = demo_data.get('pillar_scores', {})
+                demo_pillar_map = {
+                    'security': WAFPillar.SECURITY,
+                    'reliability': WAFPillar.RELIABILITY,
+                    'performance': WAFPillar.PERFORMANCE_EFFICIENCY,
+                    'cost': WAFPillar.COST_OPTIMIZATION,
+                    'operational': WAFPillar.OPERATIONAL_EXCELLENCE,
+                    'sustainability': WAFPillar.SUSTAINABILITY,
+                }
+                
+                for key, score in pillar_scores.items():
+                    pillar = demo_pillar_map.get(key.lower())
+                    if pillar:
+                        waf_scores[pillar] = score
+                
+                return ModuleStatus(
+                    module=ModuleType.WAF_REVIEW,
+                    health=health,
+                    last_updated=datetime.now(),
+                    waf_scores=waf_scores,
+                    overall_score=overall,
+                    findings_count=len(all_findings),
+                    critical_count=critical,
+                    high_count=high,
+                    compliance_scores={}
+                )
+            except Exception as e:
+                pass  # Fall through to return unknown status
+        
         # Helper to normalize framework names
         def normalize_framework(fw):
             fw_lower = fw.lower().replace('-', '').replace(' ', '').replace('.', '')
@@ -1232,37 +1291,41 @@ class UnifiedDashboard:
         st.markdown("# 📊 Unified Security Dashboard")
         st.markdown("### Enterprise WAF Scanner - All Modules at a Glance")
         
-        # Data consistency check
-        waf_review_has_data = 'waf_review_session' in st.session_state and \
-                              hasattr(st.session_state.waf_review_session, 'findings') and \
-                              len(st.session_state.waf_review_session.findings) > 0
-        arch_has_data = 'arch_findings' in st.session_state and len(st.session_state.get('arch_findings', [])) > 0
-        eks_has_data = 'eks_findings' in st.session_state and len(st.session_state.get('eks_findings', [])) > 0
+        # Check if we're in Demo Mode
+        is_demo_mode = st.session_state.get('demo_mode', False)
         
-        # Show warning if data is inconsistent (old data from other modules but no WAF Review)
-        if (arch_has_data or eks_has_data) and not waf_review_has_data:
-            st.warning("""
-            ⚠️ **Stale Data Detected**: Dashboard is showing data from previous sessions (Architecture/EKS) 
-            but no current WAF Assessment data. This may result in inaccurate scores.
+        # Data consistency check (only in Live mode)
+        if not is_demo_mode:
+            waf_review_has_data = 'waf_review_session' in st.session_state and \
+                                  hasattr(st.session_state.waf_review_session, 'findings') and \
+                                  len(st.session_state.waf_review_session.findings) > 0
+            arch_has_data = 'arch_findings' in st.session_state and len(st.session_state.get('arch_findings', [])) > 0
+            eks_has_data = 'eks_findings' in st.session_state and len(st.session_state.get('eks_findings', [])) > 0
             
-            **Recommended**: Run a new WAF Assessment or clear dashboard data to start fresh.
-            """)
-            
-            col1, col2 = st.columns([1, 4])
-            with col1:
-                if st.button("🗑️ Clear Dashboard Data", type="secondary"):
-                    # Clear all dashboard-related session state
-                    keys_to_clear = [
-                        'arch_findings', 'arch_waf_scores', 'arch_compliance_scores',
-                        'eks_findings', 'eks_waf_scores', 'eks_compliance_scores',
-                        'last_findings', 'unified_assessment_results', 'last_scan',
-                        'multi_scan_results', 'dashboard_snapshots'
-                    ]
-                    for key in keys_to_clear:
-                        if key in st.session_state:
-                            del st.session_state[key]
-                    st.success("✅ Dashboard data cleared. Please run a new assessment.")
-                    st.rerun()
+            # Show warning if data is inconsistent (old data from other modules but no WAF Review)
+            if (arch_has_data or eks_has_data) and not waf_review_has_data:
+                st.warning("""
+                ⚠️ **Stale Data Detected**: Dashboard is showing data from previous sessions (Architecture/EKS) 
+                but no current WAF Assessment data. This may result in inaccurate scores.
+                
+                **Recommended**: Run a new WAF Assessment or clear dashboard data to start fresh.
+                """)
+                
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    if st.button("🗑️ Clear Dashboard Data", type="secondary"):
+                        # Clear all dashboard-related session state
+                        keys_to_clear = [
+                            'arch_findings', 'arch_waf_scores', 'arch_compliance_scores',
+                            'eks_findings', 'eks_waf_scores', 'eks_compliance_scores',
+                            'last_findings', 'unified_assessment_results', 'last_scan',
+                            'multi_scan_results', 'dashboard_snapshots', 'waf_review_session'
+                        ]
+                        for key in keys_to_clear:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        st.success("✅ Dashboard data cleared. Please run a new assessment.")
+                        st.rerun()
         
         # Initialize components
         aggregator = DashboardDataAggregator()
