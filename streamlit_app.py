@@ -3288,6 +3288,26 @@ def render_admin_panel_firebase():
 def render_main_content():
     """Render main content area with tabs"""
     
+    # Check for navigation request from Unified Assessment
+    if st.session_state.get('navigate_to'):
+        nav_target = st.session_state.get('navigate_to')
+        target_names = {
+            'waf_assessment': '⚡ WAF Assessment',
+            'remediation': '🔧 Remediation',
+            'ai_lens': '🧠 AI Lens',
+            'compliance': '🔒 Compliance'
+        }
+        target_tab = target_names.get(nav_target, nav_target)
+        
+        st.success(f"""
+        ✅ **Unified Assessment Complete!** Your assessment data has been saved.
+        
+        👉 **Please click on the "{target_tab}" tab above** to continue with detailed analysis and remediation.
+        """)
+        
+        # Clear the navigation flag
+        del st.session_state['navigate_to']
+    
     # Determine which tabs to show based on user role
     base_tabs = [
         "📊 Dashboard",           # NEW: Unified Security Dashboard
@@ -3357,13 +3377,99 @@ def render_main_content():
     # Tab 4: WAF Assessment
     with tabs[4]:
         try:
-            # Try comprehensive WAF Review first (6-step workflow)
-            if WAF_REVIEW_COMPREHENSIVE_AVAILABLE:
-                render_comprehensive_waf_review()
-            elif MODULE_STATUS.get('WAF Review'):
-                render_waf_review_tab()
+            # Check if we have results from Unified Assessment
+            if st.session_state.get('unified_assessment_results'):
+                unified_results = st.session_state.get('unified_assessment_results')
+                
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #1565C0 0%, #0D47A1 100%); 
+                            padding: 20px; border-radius: 10px; color: white; margin-bottom: 20px;">
+                    <h2>📊 WAF Assessment Results</h2>
+                    <p>Displaying results from your completed Unified Assessment</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Display summary metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Overall Score", f"{unified_results.get('overall_score', 0):.0f}/100")
+                with col2:
+                    st.metric("Initial Score", f"{unified_results.get('initial_score', 0):.0f}")
+                with col3:
+                    st.metric("Final Score", f"{unified_results.get('final_score', 0):.0f}")
+                with col4:
+                    st.metric("Improvement", f"+{unified_results.get('score_improvement', 0):.0f}")
+                
+                st.markdown("---")
+                
+                # Pillar scores
+                st.markdown("### 📈 Pillar Scores")
+                pillar_scores = unified_results.get('pillar_scores', {})
+                
+                if pillar_scores:
+                    pillar_cols = st.columns(len(pillar_scores) if len(pillar_scores) <= 6 else 3)
+                    for idx, (pillar, score_data) in enumerate(pillar_scores.items()):
+                        with pillar_cols[idx % len(pillar_cols)]:
+                            score = score_data.get('combined_score', 0) if isinstance(score_data, dict) else 0
+                            color = "#4CAF50" if score >= 80 else "#FF9800" if score >= 60 else "#F44336"
+                            st.markdown(f"""
+                            <div style="background: {color}20; padding: 15px; border-radius: 10px; 
+                                        border-left: 4px solid {color}; margin-bottom: 10px;">
+                                <strong>{pillar}</strong><br>
+                                <span style="font-size: 24px; color: {color};">{score:.0f}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+                
+                # Findings
+                findings = unified_results.get('findings', [])
+                st.markdown(f"### 🔍 Findings ({len(findings)} total)")
+                
+                if findings:
+                    # Group by severity
+                    severity_order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
+                    for severity in severity_order:
+                        sev_findings = [f for f in findings if (f.get('severity') if isinstance(f, dict) else getattr(f, 'severity', '')) == severity]
+                        if sev_findings:
+                            with st.expander(f"**{severity}** ({len(sev_findings)} findings)", expanded=(severity in ['CRITICAL', 'HIGH'])):
+                                for f in sev_findings[:10]:
+                                    title = f.get('title') if isinstance(f, dict) else getattr(f, 'title', 'Unknown')
+                                    desc = f.get('description') if isinstance(f, dict) else getattr(f, 'description', '')
+                                    st.markdown(f"- **{title}**")
+                                    if desc:
+                                        st.caption(desc[:200])
+                
+                st.markdown("---")
+                
+                # Action buttons
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("🔧 Go to Remediation", use_container_width=True):
+                        st.session_state['navigate_to'] = 'remediation'
+                        st.rerun()
+                with col2:
+                    if st.button("🔒 View Compliance Mapping", use_container_width=True):
+                        st.session_state['navigate_to'] = 'compliance'
+                        st.rerun()
+                with col3:
+                    if st.button("🤖 Get AI Insights", use_container_width=True):
+                        st.session_state['navigate_to'] = 'ai_lens'
+                        st.rerun()
+                
+                st.markdown("---")
+                
+                if st.button("🔄 Clear Results & Start New Assessment"):
+                    del st.session_state['unified_assessment_results']
+                    st.rerun()
             else:
-                st.error("WAF Review module not available")
+                # No unified results - show comprehensive WAF Review
+                if WAF_REVIEW_COMPREHENSIVE_AVAILABLE:
+                    render_comprehensive_waf_review()
+                elif MODULE_STATUS.get('WAF Review'):
+                    render_waf_review_tab()
+                else:
+                    st.error("WAF Review module not available")
         except Exception as e:
             st.error(f"Error loading WAF Assessment: {str(e)}")
             import traceback
