@@ -1921,21 +1921,19 @@ class WAFReviewWorkflow:
                     horizontal=True
                 )
                 
-                # Update response - create new if doesn't exist
-                if response:
-                    if new_response:
+                # Update response ONLY if it changed (prevents infinite rerun)
+                if new_response != current_response:
+                    if response:
                         response.response = new_response
-                    else:
-                        response.response = ""
-                elif new_response:
-                    # Create new response if user answers a question that wasn't tracked
-                    self.session.responses.append(QuestionResponse(
-                        question_id=q['id'],
-                        pillar=pillar.value,
-                        question_text=q['question'],
-                        response=new_response,
-                        auto_detected=False
-                    ))
+                    elif new_response:
+                        # Create new response if user answers a question that wasn't tracked
+                        self.session.responses.append(QuestionResponse(
+                            question_id=q['id'],
+                            pillar=pillar.value,
+                            question_text=q['question'],
+                            response=new_response,
+                            auto_detected=False
+                        ))
                 
                 # Best practices
                 if q.get('best_practices'):
