@@ -212,16 +212,64 @@ class DashboardDataAggregator:
         return getattr(finding, 'pillar', '')
     
     def _calculate_scores_from_findings(self, findings) -> Dict[WAFPillar, int]:
-        """Calculate WAF pillar scores based on findings severity"""
+        """Calculate WAF pillar scores based on findings severity - FIXED to handle missing pillar"""
         pillar_scores = {p: 100 for p in WAFPillar}  # Start at 100
+        
+        # Service to pillar mapping for findings without explicit pillar
+        service_pillar_map = {
+            'IAM': WAFPillar.SECURITY,
+            'S3': WAFPillar.SECURITY,
+            'EC2': WAFPillar.RELIABILITY,
+            'RDS': WAFPillar.RELIABILITY,
+            'VPC': WAFPillar.SECURITY,
+            'Lambda': WAFPillar.OPERATIONAL_EXCELLENCE,
+            'CloudWatch': WAFPillar.OPERATIONAL_EXCELLENCE,
+            'CloudTrail': WAFPillar.SECURITY,
+            'KMS': WAFPillar.SECURITY,
+            'ELB': WAFPillar.RELIABILITY,
+            'AutoScaling': WAFPillar.RELIABILITY,
+            'DynamoDB': WAFPillar.RELIABILITY,
+            'EKS': WAFPillar.OPERATIONAL_EXCELLENCE,
+            'ECS': WAFPillar.OPERATIONAL_EXCELLENCE,
+            'SNS': WAFPillar.OPERATIONAL_EXCELLENCE,
+            'SQS': WAFPillar.OPERATIONAL_EXCELLENCE,
+            'Secrets Manager': WAFPillar.SECURITY,
+            'Config': WAFPillar.OPERATIONAL_EXCELLENCE,
+            'GuardDuty': WAFPillar.SECURITY,
+            'Security Hub': WAFPillar.SECURITY,
+            'Cost': WAFPillar.COST_OPTIMIZATION,
+            'Budget': WAFPillar.COST_OPTIMIZATION,
+            'Backup': WAFPillar.RELIABILITY,
+        }
         
         for finding in findings:
             severity = self._get_severity(finding)
             pillar_str = self._get_pillar(finding)
             pillar = self._normalize_pillar_key(pillar_str)
             
-            if pillar and pillar in pillar_scores:
-                # Deduct points based on severity
+            # If no pillar, try to infer from service
+            if not pillar:
+                service = finding.get('service', '') if isinstance(finding, dict) else getattr(finding, 'service', '')
+                if service:
+                    pillar = service_pillar_map.get(service)
+            
+            # If still no pillar, distribute penalty across Security and Operational Excellence
+            if not pillar:
+                # Calculate penalty
+                if severity == 'CRITICAL':
+                    penalty = 8  # Split across 2 pillars
+                elif severity == 'HIGH':
+                    penalty = 5
+                elif severity == 'MEDIUM':
+                    penalty = 3
+                else:
+                    penalty = 1
+                
+                # Apply to Security and Operational Excellence (most common)
+                pillar_scores[WAFPillar.SECURITY] = max(0, pillar_scores[WAFPillar.SECURITY] - penalty)
+                pillar_scores[WAFPillar.OPERATIONAL_EXCELLENCE] = max(0, pillar_scores[WAFPillar.OPERATIONAL_EXCELLENCE] - penalty)
+            else:
+                # Deduct points based on severity for specific pillar
                 if severity == 'CRITICAL':
                     pillar_scores[pillar] = max(0, pillar_scores[pillar] - 15)
                 elif severity == 'HIGH':
@@ -701,7 +749,7 @@ class DashboardDataAggregator:
         )
     
     def get_aggregated_waf_scores(self, statuses: Dict[ModuleType, ModuleStatus]) -> Dict[WAFPillar, int]:
-        """Aggregate WAF scores across all modules"""
+        """Aggregate WAF scores across all modules - FIXED to include all assessed scores"""
         
         # Initialize with all pillars set to empty lists
         pillar_scores = {p: [] for p in WAFPillar}
@@ -720,7 +768,9 @@ class DashboardDataAggregator:
                     # Extract score value
                     score = self._extract_score(score_val)
                     
-                    if score > 0 and pillar in pillar_scores:
+                    # Include ALL scores from modules that have WAF scores (including 0)
+                    # This ensures modules with low scores don't get excluded
+                    if pillar in pillar_scores:
                         pillar_scores[pillar].append(score)
                         
             except Exception as e:
@@ -738,7 +788,7 @@ class DashboardDataAggregator:
         return aggregated
     
     def get_aggregated_compliance(self, statuses: Dict[ModuleType, ModuleStatus]) -> Dict[str, int]:
-        """Aggregate compliance scores across all modules"""
+        """Aggregate compliance scores across all modules - FIXED to include all scores"""
         
         framework_scores = {}
         
@@ -748,8 +798,8 @@ class DashboardDataAggregator:
             for framework, score in status.compliance_scores.items():
                 if framework not in framework_scores:
                     framework_scores[framework] = []
-                if score > 0:
-                    framework_scores[framework].append(score)
+                # Include ALL scores from modules that have compliance data (including 0)
+                framework_scores[framework].append(score)
         
         # Average scores per framework
         aggregated = {}
@@ -1134,6 +1184,38 @@ class UnifiedDashboard:
         
         st.markdown("# 📊 Unified Security Dashboard")
         st.markdown("### Enterprise WAF Scanner - All Modules at a Glance")
+        
+        # Data consistency check
+        waf_review_has_data = 'waf_review_session' in st.session_state and \
+                              hasattr(st.session_state.waf_review_session, 'findings') and \
+                              len(st.session_state.waf_review_session.findings) > 0
+        arch_has_data = 'arch_findings' in st.session_state and len(st.session_state.get('arch_findings', [])) > 0
+        eks_has_data = 'eks_findings' in st.session_state and len(st.session_state.get('eks_findings', [])) > 0
+        
+        # Show warning if data is inconsistent (old data from other modules but no WAF Review)
+        if (arch_has_data or eks_has_data) and not waf_review_has_data:
+            st.warning("""
+            ⚠️ **Stale Data Detected**: Dashboard is showing data from previous sessions (Architecture/EKS) 
+            but no current WAF Assessment data. This may result in inaccurate scores.
+            
+            **Recommended**: Run a new WAF Assessment or clear dashboard data to start fresh.
+            """)
+            
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                if st.button("🗑️ Clear Dashboard Data", type="secondary"):
+                    # Clear all dashboard-related session state
+                    keys_to_clear = [
+                        'arch_findings', 'arch_waf_scores', 'arch_compliance_scores',
+                        'eks_findings', 'eks_waf_scores', 'eks_compliance_scores',
+                        'last_findings', 'unified_assessment_results', 'last_scan',
+                        'multi_scan_results', 'dashboard_snapshots'
+                    ]
+                    for key in keys_to_clear:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    st.success("✅ Dashboard data cleared. Please run a new assessment.")
+                    st.rerun()
         
         # Initialize components
         aggregator = DashboardDataAggregator()
