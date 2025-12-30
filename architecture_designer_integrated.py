@@ -593,9 +593,10 @@ class ArchitectureDesignerIntegrated:
         if 'arch_config' not in st.session_state:
             st.session_state.arch_config = {}
         
-        # Create tabs
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        # Create tabs - Added Diagram Generator
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
             "🎯 Design", 
+            "📐 Diagram Generator",
             "📊 WAF Assessment", 
             "🔒 Compliance", 
             "🤖 AI Insights",
@@ -606,16 +607,300 @@ class ArchitectureDesignerIntegrated:
             ArchitectureDesignerIntegrated._render_design_tab()
         
         with tab2:
-            ArchitectureDesignerIntegrated._render_waf_tab()
+            ArchitectureDesignerIntegrated._render_diagram_tab()
         
         with tab3:
-            ArchitectureDesignerIntegrated._render_compliance_tab()
+            ArchitectureDesignerIntegrated._render_waf_tab()
         
         with tab4:
-            ArchitectureDesignerIntegrated._render_ai_tab()
+            ArchitectureDesignerIntegrated._render_compliance_tab()
         
         with tab5:
+            ArchitectureDesignerIntegrated._render_ai_tab()
+        
+        with tab6:
             ArchitectureDesignerIntegrated._render_export_tab()
+    
+    @staticmethod
+    def _render_diagram_tab():
+        """Render architecture diagram generator tab"""
+        
+        st.markdown("### 📐 Architecture Diagram Generator")
+        st.markdown("Generate professional AWS architecture diagrams based on your selected services.")
+        
+        # Check if services are selected
+        selected_services = st.session_state.get('arch_services', [])
+        config = st.session_state.get('arch_config', {})
+        
+        if not selected_services:
+            st.warning("⚠️ Please select services in the **Design** tab first to generate a diagram.")
+            st.info("💡 Go to the Design tab and select the AWS services for your architecture.")
+            return
+        
+        st.success(f"✅ {len(selected_services)} services selected: {', '.join(selected_services)}")
+        
+        # Diagram configuration
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Diagram Settings")
+            diagram_title = st.text_input(
+                "Diagram Title",
+                value=f"{config.get('workload_type', 'AWS')} Architecture",
+                key="diagram_title"
+            )
+            
+            diagram_style = st.selectbox(
+                "Diagram Style",
+                options=["Professional", "Simplified", "Detailed", "High-Level"],
+                index=0
+            )
+            
+            show_connections = st.checkbox("Show Service Connections", value=True)
+            show_data_flow = st.checkbox("Show Data Flow Arrows", value=True)
+        
+        with col2:
+            st.markdown("#### Layout Options")
+            layout_type = st.selectbox(
+                "Layout Type",
+                options=["Three-Tier", "Microservices", "Event-Driven", "Data Pipeline", "Custom"],
+                index=0
+            )
+            
+            include_vpc = st.checkbox("Include VPC Boundary", value=True)
+            include_azs = st.checkbox("Show Availability Zones", value=config.get('multi_az', True))
+            color_by_pillar = st.checkbox("Color by WAF Pillar", value=False)
+        
+        st.markdown("---")
+        
+        # Generate Diagram Button
+        if st.button("🎨 Generate Architecture Diagram", type="primary", use_container_width=True):
+            with st.spinner("Generating architecture diagram..."):
+                # Generate SVG diagram
+                svg_content = ArchitectureDesignerIntegrated._generate_architecture_svg(
+                    services=selected_services,
+                    config=config,
+                    title=diagram_title,
+                    style=diagram_style,
+                    layout=layout_type,
+                    show_connections=show_connections,
+                    show_data_flow=show_data_flow,
+                    include_vpc=include_vpc,
+                    include_azs=include_azs,
+                    color_by_pillar=color_by_pillar
+                )
+                
+                st.session_state['generated_diagram'] = svg_content
+                st.success("✅ Diagram generated successfully!")
+        
+        # Display generated diagram
+        if 'generated_diagram' in st.session_state:
+            st.markdown("### Generated Architecture Diagram")
+            st.markdown(st.session_state['generated_diagram'], unsafe_allow_html=True)
+            
+            # Download options
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.download_button(
+                    label="📥 Download SVG",
+                    data=st.session_state['generated_diagram'],
+                    file_name=f"architecture_diagram_{datetime.now().strftime('%Y%m%d_%H%M%S')}.svg",
+                    mime="image/svg+xml",
+                    use_container_width=True
+                )
+            
+            with col2:
+                # Convert to HTML for better viewing
+                html_content = f"""
+                <!DOCTYPE html>
+                <html>
+                <head><title>{diagram_title}</title></head>
+                <body style="margin:0;padding:20px;background:#f5f5f5;">
+                    <h1 style="text-align:center;">{diagram_title}</h1>
+                    {st.session_state['generated_diagram']}
+                </body>
+                </html>
+                """
+                st.download_button(
+                    label="📄 Download HTML",
+                    data=html_content,
+                    file_name=f"architecture_diagram_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+                    mime="text/html",
+                    use_container_width=True
+                )
+            
+            with col3:
+                if st.button("🔄 Regenerate", use_container_width=True):
+                    del st.session_state['generated_diagram']
+                    st.rerun()
+    
+    @staticmethod
+    def _generate_architecture_svg(
+        services: List[str],
+        config: Dict,
+        title: str,
+        style: str,
+        layout: str,
+        show_connections: bool,
+        show_data_flow: bool,
+        include_vpc: bool,
+        include_azs: bool,
+        color_by_pillar: bool
+    ) -> str:
+        """Generate SVG architecture diagram"""
+        
+        # Service category mapping with positions
+        service_categories = {
+            "Compute": {"services": ["EC2", "Lambda", "ECS", "EKS", "Fargate", "Batch"], "color": "#FF9900", "y": 200},
+            "Storage": {"services": ["S3", "EBS", "EFS", "FSx", "Glacier"], "color": "#3F8624", "y": 350},
+            "Database": {"services": ["RDS", "Aurora", "DynamoDB", "ElastiCache", "DocumentDB", "Neptune"], "color": "#3B48CC", "y": 350},
+            "Networking": {"services": ["VPC", "ALB", "NLB", "CloudFront", "Route53", "API Gateway", "Global Accelerator"], "color": "#8C4FFF", "y": 100},
+            "Security": {"services": ["KMS", "WAF", "Shield", "GuardDuty", "Cognito", "Secrets Manager", "Security Hub", "Inspector", "Macie"], "color": "#DD344C", "y": 500},
+            "Operations": {"services": ["CloudWatch", "CloudTrail", "Config", "Systems Manager", "CodePipeline", "CodeCommit"], "color": "#FF4F8B", "y": 500},
+            "Integration": {"services": ["SNS", "SQS", "EventBridge", "Step Functions"], "color": "#FF4F8B", "y": 280},
+        }
+        
+        # Determine which categories have services
+        active_categories = {}
+        for cat, data in service_categories.items():
+            cat_services = [s for s in services if s in data["services"]]
+            if cat_services:
+                active_categories[cat] = {"services": cat_services, "color": data["color"], "y": data["y"]}
+        
+        # SVG dimensions
+        width = 1000
+        height = 650
+        
+        # Build SVG
+        svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" style="max-width:100%;height:auto;">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.2"/>
+    </filter>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#232F3E"/>
+      <stop offset="100%" style="stop-color:#3B4A5C"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="{width}" height="{height}" fill="#FAFBFC"/>
+  
+  <!-- Header -->
+  <rect x="0" y="0" width="{width}" height="60" fill="url(#headerGrad)"/>
+  <text x="20" y="38" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="white">{title}</text>
+  <text x="{width-20}" y="38" font-family="Arial, sans-serif" font-size="12" fill="#888" text-anchor="end">Generated by AWS WAF Scanner</text>
+'''
+        
+        # Add VPC boundary if enabled
+        if include_vpc and "VPC" in services:
+            svg += f'''
+  <!-- VPC Boundary -->
+  <rect x="30" y="80" width="{width-60}" height="{height-110}" fill="none" stroke="#5B9BD5" stroke-width="2" stroke-dasharray="10,5" rx="10"/>
+  <text x="50" y="100" font-family="Arial, sans-serif" font-size="14" fill="#5B9BD5" font-weight="bold">VPC</text>
+'''
+        
+        # Add AZ indicators if enabled
+        if include_azs and config.get('multi_az', False):
+            az_width = (width - 100) / 2
+            svg += f'''
+  <!-- Availability Zones -->
+  <rect x="50" y="120" width="{az_width-10}" height="{height-170}" fill="#E8F4FD" stroke="#B8D4E8" rx="5" opacity="0.5"/>
+  <text x="60" y="140" font-family="Arial, sans-serif" font-size="11" fill="#5B9BD5">AZ-1</text>
+  <rect x="{50 + az_width + 10}" y="120" width="{az_width-10}" height="{height-170}" fill="#E8F4FD" stroke="#B8D4E8" rx="5" opacity="0.5"/>
+  <text x="{60 + az_width + 10}" y="140" font-family="Arial, sans-serif" font-size="11" fill="#5B9BD5">AZ-2</text>
+'''
+        
+        # Draw services by category
+        x_offset = 80
+        service_positions = {}
+        
+        for cat_name, cat_data in active_categories.items():
+            cat_services = cat_data["services"]
+            color = cat_data["color"]
+            base_y = cat_data["y"]
+            
+            # Category label
+            svg += f'''
+  <text x="{x_offset}" y="{base_y - 15}" font-family="Arial, sans-serif" font-size="12" fill="#666" font-weight="bold">{cat_name}</text>
+'''
+            
+            # Draw each service
+            for idx, svc in enumerate(cat_services):
+                svc_x = x_offset + (idx * 120)
+                svc_y = base_y
+                
+                service_positions[svc] = (svc_x + 40, svc_y + 25)
+                
+                # Service box
+                svg += f'''
+  <g filter="url(#shadow)">
+    <rect x="{svc_x}" y="{svc_y}" width="100" height="50" fill="white" stroke="{color}" stroke-width="2" rx="8"/>
+    <rect x="{svc_x}" y="{svc_y}" width="100" height="8" fill="{color}" rx="8" ry="0"/>
+    <rect x="{svc_x}" y="{svc_y + 4}" width="100" height="4" fill="{color}"/>
+    <text x="{svc_x + 50}" y="{svc_y + 35}" font-family="Arial, sans-serif" font-size="11" fill="#333" text-anchor="middle" font-weight="bold">{svc}</text>
+  </g>
+'''
+            
+            x_offset += len(cat_services) * 120 + 40
+            if x_offset > width - 150:
+                x_offset = 80
+        
+        # Draw connections if enabled
+        if show_connections and len(service_positions) > 1:
+            # Simple connection logic based on common patterns
+            connection_pairs = []
+            
+            # ALB/NLB -> Compute
+            if "ALB" in service_positions or "NLB" in service_positions:
+                lb = "ALB" if "ALB" in service_positions else "NLB"
+                for compute in ["EC2", "ECS", "EKS", "Lambda", "Fargate"]:
+                    if compute in service_positions:
+                        connection_pairs.append((lb, compute))
+            
+            # Compute -> Database
+            for compute in ["EC2", "ECS", "EKS", "Lambda"]:
+                if compute in service_positions:
+                    for db in ["RDS", "Aurora", "DynamoDB", "ElastiCache"]:
+                        if db in service_positions:
+                            connection_pairs.append((compute, db))
+                            break
+            
+            # CloudFront -> ALB
+            if "CloudFront" in service_positions and "ALB" in service_positions:
+                connection_pairs.append(("CloudFront", "ALB"))
+            
+            # API Gateway -> Lambda
+            if "API Gateway" in service_positions and "Lambda" in service_positions:
+                connection_pairs.append(("API Gateway", "Lambda"))
+            
+            # Draw connection lines
+            for src, dst in connection_pairs:
+                if src in service_positions and dst in service_positions:
+                    x1, y1 = service_positions[src]
+                    x2, y2 = service_positions[dst]
+                    
+                    # Arrow marker
+                    svg += f'''
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#879596"/>
+    </marker>
+  </defs>
+  <line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#879596" stroke-width="1.5" marker-end="url(#arrowhead)" opacity="0.6"/>
+'''
+        
+        # Legend
+        legend_y = height - 40
+        svg += f'''
+  <!-- Legend -->
+  <text x="30" y="{legend_y}" font-family="Arial, sans-serif" font-size="10" fill="#666">Services: {len(services)} | Scale: {config.get('scale', 'Medium')} | Multi-AZ: {'Yes' if config.get('multi_az') else 'No'}</text>
+'''
+        
+        svg += '</svg>'
+        
+        return svg
     
     @staticmethod
     def _render_design_tab():
