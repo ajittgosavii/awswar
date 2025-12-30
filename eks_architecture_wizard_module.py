@@ -2046,10 +2046,12 @@ class EKSModernizationModuleRevamped:
         st.markdown("## 🆕 Greenfield EKS Cluster Design")
         st.markdown("Design a new EKS cluster optimized for your requirements")
         
-        # Tabs for design workflow - CONSOLIDATED (no duplicate forms)
-        tab1, tab2, tab3, tab4 = st.tabs([
+        # Tabs for design workflow - ENHANCED with Diagram Generator and WAF Assessment
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
             "📝 Requirements & Config",
-            "🏗️ Architecture & Diagram",
+            "🏗️ Architecture Overview",
+            "📐 Diagram Generator",
+            "📊 WAF Assessment",
             "🔒 Security",
             "📦 Export"
         ])
@@ -2061,10 +2063,492 @@ class EKSModernizationModuleRevamped:
             EKSModernizationModuleRevamped._render_architecture_tab()
         
         with tab3:
-            EKSModernizationModuleRevamped._render_security_tab()
+            EKSModernizationModuleRevamped._render_diagram_generator_tab()
         
         with tab4:
+            EKSModernizationModuleRevamped._render_waf_assessment_tab()
+        
+        with tab5:
+            EKSModernizationModuleRevamped._render_security_tab()
+        
+        with tab6:
             EKSModernizationModuleRevamped._render_export_tab()
+    
+    @staticmethod
+    def _render_diagram_generator_tab():
+        """Dedicated diagram generator tab with multiple diagram types"""
+        st.markdown("### 📐 EKS Architecture Diagram Generator")
+        st.markdown("Generate professional architecture diagrams for your EKS cluster design.")
+        
+        config = st.session_state.get('eks_config', {})
+        
+        if not config.get('project_name'):
+            st.warning("⚠️ Please configure your cluster in the **Requirements & Config** tab first.")
+            return
+        
+        # Diagram options
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Diagram Type")
+            diagram_type = st.selectbox(
+                "Select Diagram Type",
+                options=[
+                    "📊 High-Level Design (HLD)",
+                    "📐 Low-Level Design (LLD)",
+                    "🌐 Network Architecture",
+                    "🔐 Security Architecture",
+                    "📈 Scaling Architecture",
+                    "🔄 CI/CD Pipeline"
+                ],
+                key="eks_diagram_type"
+            )
+            
+            include_details = st.checkbox("Include component details", value=True)
+            show_data_flow = st.checkbox("Show data flow arrows", value=True)
+        
+        with col2:
+            st.markdown("#### Style Options")
+            color_scheme = st.selectbox(
+                "Color Scheme",
+                options=["AWS Orange", "Kubernetes Blue", "Corporate Gray", "Custom"],
+                key="eks_color_scheme"
+            )
+            
+            layout_style = st.selectbox(
+                "Layout Style",
+                options=["Standard AWS", "Compact", "Detailed", "Presentation"],
+                key="eks_layout_style"
+            )
+            
+            export_format = st.selectbox(
+                "Export Format",
+                options=["SVG", "HTML", "PNG (via download)"],
+                key="eks_export_format"
+            )
+        
+        st.markdown("---")
+        
+        # Generate button
+        if st.button("🎨 Generate Diagram", type="primary", use_container_width=True):
+            with st.spinner("Generating EKS architecture diagram..."):
+                import streamlit.components.v1 as components
+                
+                if "High-Level" in diagram_type:
+                    diagram_html = EKSSVGDiagramGenerator.generate_cluster_diagram(config)
+                    st.session_state['eks_current_diagram'] = diagram_html
+                    st.session_state['eks_diagram_name'] = "HLD"
+                elif "Low-Level" in diagram_type:
+                    diagram_html = EKSSVGDiagramGenerator.generate_detailed_lld(config)
+                    st.session_state['eks_current_diagram'] = diagram_html
+                    st.session_state['eks_diagram_name'] = "LLD"
+                elif "Network" in diagram_type:
+                    diagram_html = EKSModernizationModuleRevamped._generate_network_diagram(config)
+                    st.session_state['eks_current_diagram'] = diagram_html
+                    st.session_state['eks_diagram_name'] = "Network"
+                elif "Security" in diagram_type:
+                    diagram_html = EKSModernizationModuleRevamped._generate_security_diagram(config)
+                    st.session_state['eks_current_diagram'] = diagram_html
+                    st.session_state['eks_diagram_name'] = "Security"
+                else:
+                    diagram_html = EKSSVGDiagramGenerator.generate_cluster_diagram(config)
+                    st.session_state['eks_current_diagram'] = diagram_html
+                    st.session_state['eks_diagram_name'] = "Architecture"
+                
+                st.success("✅ Diagram generated!")
+        
+        # Display current diagram
+        if 'eks_current_diagram' in st.session_state:
+            st.markdown(f"### {st.session_state.get('eks_diagram_name', 'Architecture')} Diagram")
+            
+            import streamlit.components.v1 as components
+            components.html(st.session_state['eks_current_diagram'], height=700, scrolling=True)
+            
+            # Download options
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.download_button(
+                    label="📥 Download HTML",
+                    data=st.session_state['eks_current_diagram'],
+                    file_name=f"{config.get('project_name', 'eks')}_{st.session_state.get('eks_diagram_name', 'diagram')}.html",
+                    mime="text/html",
+                    use_container_width=True
+                )
+            
+            with col2:
+                # Extract SVG from HTML for pure SVG download
+                svg_content = st.session_state['eks_current_diagram']
+                if '<svg' in svg_content:
+                    svg_start = svg_content.find('<svg')
+                    svg_end = svg_content.find('</svg>') + 6
+                    if svg_start != -1 and svg_end > svg_start:
+                        pure_svg = svg_content[svg_start:svg_end]
+                        st.download_button(
+                            label="📥 Download SVG",
+                            data=pure_svg,
+                            file_name=f"{config.get('project_name', 'eks')}_{st.session_state.get('eks_diagram_name', 'diagram')}.svg",
+                            mime="image/svg+xml",
+                            use_container_width=True
+                        )
+            
+            with col3:
+                if st.button("🔄 Clear & Regenerate", use_container_width=True):
+                    if 'eks_current_diagram' in st.session_state:
+                        del st.session_state['eks_current_diagram']
+                    st.rerun()
+    
+    @staticmethod
+    def _generate_network_diagram(config: Dict) -> str:
+        """Generate network-focused architecture diagram"""
+        project_name = config.get('project_name', 'eks-cluster')
+        region = config.get('region', 'us-east-1')
+        azs = config.get('availability_zones', ['us-east-1a', 'us-east-1b'])
+        
+        return f'''
+        <div style="font-family: Arial, sans-serif; padding: 20px; background: #f8f9fa;">
+            <svg viewBox="0 0 1000 600" style="max-width: 100%; height: auto;">
+                <!-- Background -->
+                <rect width="1000" height="600" fill="#FAFBFC"/>
+                
+                <!-- Title -->
+                <text x="500" y="35" text-anchor="middle" font-size="20" font-weight="bold" fill="#232F3E">{project_name} - Network Architecture</text>
+                
+                <!-- Internet -->
+                <rect x="400" y="60" width="200" height="40" fill="#FF9900" rx="5"/>
+                <text x="500" y="85" text-anchor="middle" fill="white" font-weight="bold">Internet</text>
+                
+                <!-- Route53 -->
+                <rect x="200" y="60" width="120" height="40" fill="#8C4FFF" rx="5"/>
+                <text x="260" y="85" text-anchor="middle" fill="white" font-size="12">Route 53</text>
+                
+                <!-- CloudFront -->
+                <rect x="680" y="60" width="120" height="40" fill="#8C4FFF" rx="5"/>
+                <text x="740" y="85" text-anchor="middle" fill="white" font-size="12">CloudFront</text>
+                
+                <!-- VPC Box -->
+                <rect x="50" y="120" width="900" height="450" fill="none" stroke="#5B9BD5" stroke-width="3" rx="10"/>
+                <text x="70" y="145" fill="#5B9BD5" font-weight="bold">VPC (10.0.0.0/16) - {region}</text>
+                
+                <!-- Public Subnets -->
+                <rect x="70" y="160" width="860" height="80" fill="#E8F4FD" stroke="#B8D4E8" rx="5"/>
+                <text x="90" y="180" fill="#5B9BD5" font-size="12">Public Subnets</text>
+                
+                <!-- NAT Gateways -->
+                {"".join([f'<rect x="{150 + i*300}" y="190" width="100" height="35" fill="#FF9900" rx="3"/><text x="{200 + i*300}" y="212" text-anchor="middle" fill="white" font-size="10">NAT Gateway</text>' for i in range(len(azs))])}
+                
+                <!-- ALB -->
+                <rect x="400" y="190" width="200" height="35" fill="#8C4FFF" rx="3"/>
+                <text x="500" y="212" text-anchor="middle" fill="white" font-size="11">Application Load Balancer</text>
+                
+                <!-- Private Subnets -->
+                <rect x="70" y="260" width="860" height="150" fill="#F5F5F5" stroke="#CCCCCC" rx="5"/>
+                <text x="90" y="280" fill="#666" font-size="12">Private Subnets (Worker Nodes)</text>
+                
+                <!-- EKS Cluster -->
+                <rect x="300" y="300" width="400" height="90" fill="white" stroke="#FF9900" stroke-width="2" rx="5"/>
+                <text x="500" y="325" text-anchor="middle" fill="#FF9900" font-weight="bold">EKS Cluster</text>
+                <text x="500" y="345" text-anchor="middle" fill="#666" font-size="11">Kubernetes Control Plane</text>
+                <text x="500" y="365" text-anchor="middle" fill="#666" font-size="10">Worker Nodes with Karpenter</text>
+                
+                <!-- Data Subnets -->
+                <rect x="70" y="430" width="860" height="120" fill="#FFF5E6" stroke="#FFCC80" rx="5"/>
+                <text x="90" y="450" fill="#E65100" font-size="12">Data Subnets (Databases)</text>
+                
+                <!-- RDS -->
+                <rect x="150" y="470" width="120" height="50" fill="#3B48CC" rx="3"/>
+                <text x="210" y="500" text-anchor="middle" fill="white" font-size="11">RDS</text>
+                
+                <!-- ElastiCache -->
+                <rect x="350" y="470" width="120" height="50" fill="#3B48CC" rx="3"/>
+                <text x="410" y="500" text-anchor="middle" fill="white" font-size="11">ElastiCache</text>
+                
+                <!-- S3 VPC Endpoint -->
+                <rect x="550" y="470" width="120" height="50" fill="#3F8624" rx="3"/>
+                <text x="610" y="500" text-anchor="middle" fill="white" font-size="11">S3 Endpoint</text>
+                
+                <!-- ECR VPC Endpoint -->
+                <rect x="750" y="470" width="120" height="50" fill="#FF9900" rx="3"/>
+                <text x="810" y="500" text-anchor="middle" fill="white" font-size="11">ECR Endpoint</text>
+                
+                <!-- Connection Lines -->
+                <line x1="500" y1="100" x2="500" y2="190" stroke="#879596" stroke-width="2" marker-end="url(#arrow)"/>
+                <line x1="500" y1="225" x2="500" y2="300" stroke="#879596" stroke-width="2" marker-end="url(#arrow)"/>
+                <line x1="500" y1="390" x2="210" y2="470" stroke="#879596" stroke-width="1.5"/>
+                <line x1="500" y1="390" x2="410" y2="470" stroke="#879596" stroke-width="1.5"/>
+                
+                <!-- Arrow Marker -->
+                <defs>
+                    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L9,3 z" fill="#879596"/>
+                    </marker>
+                </defs>
+            </svg>
+        </div>
+        '''
+    
+    @staticmethod
+    def _generate_security_diagram(config: Dict) -> str:
+        """Generate security-focused architecture diagram"""
+        project_name = config.get('project_name', 'eks-cluster')
+        
+        return f'''
+        <div style="font-family: Arial, sans-serif; padding: 20px; background: #f8f9fa;">
+            <svg viewBox="0 0 1000 650" style="max-width: 100%; height: auto;">
+                <!-- Background -->
+                <rect width="1000" height="650" fill="#FAFBFC"/>
+                
+                <!-- Title -->
+                <text x="500" y="35" text-anchor="middle" font-size="20" font-weight="bold" fill="#232F3E">{project_name} - Security Architecture</text>
+                
+                <!-- Perimeter Security -->
+                <rect x="50" y="60" width="900" height="80" fill="#FFEBEE" stroke="#DD344C" stroke-width="2" rx="5"/>
+                <text x="70" y="85" fill="#DD344C" font-weight="bold">Perimeter Security</text>
+                
+                <rect x="80" y="95" width="100" height="35" fill="#DD344C" rx="3"/>
+                <text x="130" y="117" text-anchor="middle" fill="white" font-size="10">WAF</text>
+                
+                <rect x="200" y="95" width="100" height="35" fill="#DD344C" rx="3"/>
+                <text x="250" y="117" text-anchor="middle" fill="white" font-size="10">Shield</text>
+                
+                <rect x="320" y="95" width="120" height="35" fill="#DD344C" rx="3"/>
+                <text x="380" y="117" text-anchor="middle" fill="white" font-size="10">CloudFront</text>
+                
+                <rect x="460" y="95" width="120" height="35" fill="#DD344C" rx="3"/>
+                <text x="520" y="117" text-anchor="middle" fill="white" font-size="10">GuardDuty</text>
+                
+                <!-- Network Security -->
+                <rect x="50" y="160" width="900" height="100" fill="#E3F2FD" stroke="#5B9BD5" stroke-width="2" rx="5"/>
+                <text x="70" y="185" fill="#5B9BD5" font-weight="bold">Network Security</text>
+                
+                <rect x="80" y="200" width="130" height="35" fill="#5B9BD5" rx="3"/>
+                <text x="145" y="222" text-anchor="middle" fill="white" font-size="10">Security Groups</text>
+                
+                <rect x="230" y="200" width="130" height="35" fill="#5B9BD5" rx="3"/>
+                <text x="295" y="222" text-anchor="middle" fill="white" font-size="10">Network ACLs</text>
+                
+                <rect x="380" y="200" width="130" height="35" fill="#5B9BD5" rx="3"/>
+                <text x="445" y="222" text-anchor="middle" fill="white" font-size="10">VPC Endpoints</text>
+                
+                <rect x="530" y="200" width="130" height="35" fill="#5B9BD5" rx="3"/>
+                <text x="595" y="222" text-anchor="middle" fill="white" font-size="10">Network Policies</text>
+                
+                <!-- Identity & Access -->
+                <rect x="50" y="280" width="900" height="100" fill="#E8F5E9" stroke="#4CAF50" stroke-width="2" rx="5"/>
+                <text x="70" y="305" fill="#4CAF50" font-weight="bold">Identity & Access Management</text>
+                
+                <rect x="80" y="320" width="100" height="35" fill="#4CAF50" rx="3"/>
+                <text x="130" y="342" text-anchor="middle" fill="white" font-size="10">IAM</text>
+                
+                <rect x="200" y="320" width="100" height="35" fill="#4CAF50" rx="3"/>
+                <text x="250" y="342" text-anchor="middle" fill="white" font-size="10">IRSA</text>
+                
+                <rect x="320" y="320" width="120" height="35" fill="#4CAF50" rx="3"/>
+                <text x="380" y="342" text-anchor="middle" fill="white" font-size="10">Pod Identity</text>
+                
+                <rect x="460" y="320" width="100" height="35" fill="#4CAF50" rx="3"/>
+                <text x="510" y="342" text-anchor="middle" fill="white" font-size="10">OIDC</text>
+                
+                <rect x="580" y="320" width="100" height="35" fill="#4CAF50" rx="3"/>
+                <text x="630" y="342" text-anchor="middle" fill="white" font-size="10">RBAC</text>
+                
+                <!-- Data Protection -->
+                <rect x="50" y="400" width="900" height="100" fill="#FFF3E0" stroke="#FF9800" stroke-width="2" rx="5"/>
+                <text x="70" y="425" fill="#FF9800" font-weight="bold">Data Protection</text>
+                
+                <rect x="80" y="440" width="100" height="35" fill="#FF9800" rx="3"/>
+                <text x="130" y="462" text-anchor="middle" fill="white" font-size="10">KMS</text>
+                
+                <rect x="200" y="440" width="130" height="35" fill="#FF9800" rx="3"/>
+                <text x="265" y="462" text-anchor="middle" fill="white" font-size="10">Secrets Manager</text>
+                
+                <rect x="350" y="440" width="100" height="35" fill="#FF9800" rx="3"/>
+                <text x="400" y="462" text-anchor="middle" fill="white" font-size="10">ACM</text>
+                
+                <rect x="470" y="440" width="130" height="35" fill="#FF9800" rx="3"/>
+                <text x="535" y="462" text-anchor="middle" fill="white" font-size="10">EBS Encryption</text>
+                
+                <!-- Monitoring & Logging -->
+                <rect x="50" y="520" width="900" height="100" fill="#F3E5F5" stroke="#9C27B0" stroke-width="2" rx="5"/>
+                <text x="70" y="545" fill="#9C27B0" font-weight="bold">Security Monitoring & Logging</text>
+                
+                <rect x="80" y="560" width="120" height="35" fill="#9C27B0" rx="3"/>
+                <text x="140" y="582" text-anchor="middle" fill="white" font-size="10">CloudTrail</text>
+                
+                <rect x="220" y="560" width="120" height="35" fill="#9C27B0" rx="3"/>
+                <text x="280" y="582" text-anchor="middle" fill="white" font-size="10">Security Hub</text>
+                
+                <rect x="360" y="560" width="120" height="35" fill="#9C27B0" rx="3"/>
+                <text x="420" y="582" text-anchor="middle" fill="white" font-size="10">Config</text>
+                
+                <rect x="500" y="560" width="120" height="35" fill="#9C27B0" rx="3"/>
+                <text x="560" y="582" text-anchor="middle" fill="white" font-size="10">Inspector</text>
+                
+                <rect x="640" y="560" width="120" height="35" fill="#9C27B0" rx="3"/>
+                <text x="700" y="582" text-anchor="middle" fill="white" font-size="10">Macie</text>
+            </svg>
+        </div>
+        '''
+    
+    @staticmethod
+    def _render_waf_assessment_tab():
+        """WAF Assessment tab for EKS architecture"""
+        st.markdown("### 📊 Well-Architected Framework Assessment")
+        st.markdown("Evaluate your EKS design against AWS WAF best practices.")
+        
+        config = st.session_state.get('eks_config', {})
+        
+        if not config.get('project_name'):
+            st.warning("⚠️ Please configure your cluster first in the **Requirements & Config** tab.")
+            return
+        
+        # WAF Pillar Scores based on config
+        pillar_scores = EKSModernizationModuleRevamped._calculate_waf_scores(config)
+        
+        # Overall score
+        overall_score = sum(pillar_scores.values()) / len(pillar_scores)
+        
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    padding: 20px; border-radius: 10px; text-align: center; color: white; margin-bottom: 20px;">
+            <h1 style="margin: 0; font-size: 48px;">{overall_score:.0f}</h1>
+            <p style="margin: 0;">Overall WAF Score</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Pillar scores
+        st.markdown("#### Pillar Scores")
+        
+        pillar_icons = {
+            "Security": "🔒",
+            "Reliability": "🛡️",
+            "Performance": "⚡",
+            "Cost Optimization": "💰",
+            "Operational Excellence": "⚙️",
+            "Sustainability": "🌱"
+        }
+        
+        cols = st.columns(6)
+        for idx, (pillar, score) in enumerate(pillar_scores.items()):
+            with cols[idx]:
+                icon = pillar_icons.get(pillar, "📊")
+                color = "#4CAF50" if score >= 80 else "#FF9800" if score >= 60 else "#F44336"
+                st.markdown(f"""
+                <div style="text-align: center; padding: 10px; background: white; border-radius: 8px; border: 2px solid {color};">
+                    <div style="font-size: 1.5rem;">{icon}</div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: {color};">{score}</div>
+                    <div style="font-size: 0.7rem; color: #666;">{pillar.split()[0]}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Recommendations
+        st.markdown("---")
+        st.markdown("#### 💡 Recommendations")
+        
+        recommendations = EKSModernizationModuleRevamped._get_waf_recommendations(config, pillar_scores)
+        
+        for rec in recommendations[:5]:
+            severity_color = {"HIGH": "#F44336", "MEDIUM": "#FF9800", "LOW": "#4CAF50"}.get(rec['severity'], "#666")
+            st.markdown(f"""
+            <div style="padding: 10px; border-left: 4px solid {severity_color}; background: #f8f9fa; margin-bottom: 10px; border-radius: 4px;">
+                <strong>{rec['pillar']}</strong>: {rec['recommendation']}
+                <br><small style="color: #666;">Impact: {rec['severity']}</small>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    @staticmethod
+    def _calculate_waf_scores(config: Dict) -> Dict[str, int]:
+        """Calculate WAF pillar scores based on EKS configuration"""
+        scores = {
+            "Security": 60,
+            "Reliability": 60,
+            "Performance": 60,
+            "Cost Optimization": 60,
+            "Operational Excellence": 60,
+            "Sustainability": 60
+        }
+        
+        # Security improvements
+        if config.get('compliance'):
+            scores["Security"] += 15
+        addons = config.get('addons', [])
+        if 'aws-guardduty-agent' in addons or 'guardduty' in str(addons).lower():
+            scores["Security"] += 10
+        
+        # Reliability improvements
+        azs = config.get('availability_zones', [])
+        if len(azs) >= 3:
+            scores["Reliability"] += 20
+        elif len(azs) >= 2:
+            scores["Reliability"] += 10
+        
+        # Performance improvements
+        node_groups = config.get('node_groups', [])
+        if node_groups:
+            scores["Performance"] += 15
+        
+        # Cost improvements
+        if any(ng.get('capacity_type') == 'SPOT' for ng in node_groups):
+            scores["Cost Optimization"] += 15
+        if config.get('right_sizing', False):
+            scores["Cost Optimization"] += 10
+        
+        # Operations improvements
+        if 'cloudwatch' in str(addons).lower() or 'amazon-cloudwatch-observability' in addons:
+            scores["Operational Excellence"] += 15
+        
+        # Cap scores at 100
+        return {k: min(100, v) for k, v in scores.items()}
+    
+    @staticmethod
+    def _get_waf_recommendations(config: Dict, scores: Dict[str, int]) -> List[Dict]:
+        """Get WAF recommendations based on scores"""
+        recommendations = []
+        
+        if scores.get("Security", 0) < 80:
+            recommendations.append({
+                "pillar": "Security",
+                "recommendation": "Enable GuardDuty EKS Runtime Protection for threat detection",
+                "severity": "HIGH"
+            })
+            recommendations.append({
+                "pillar": "Security",
+                "recommendation": "Implement Pod Security Standards (Restricted profile)",
+                "severity": "HIGH"
+            })
+        
+        if scores.get("Reliability", 0) < 80:
+            recommendations.append({
+                "pillar": "Reliability",
+                "recommendation": "Deploy across 3+ Availability Zones for high availability",
+                "severity": "HIGH"
+            })
+            recommendations.append({
+                "pillar": "Reliability",
+                "recommendation": "Enable Cluster Autoscaler or Karpenter for automatic scaling",
+                "severity": "MEDIUM"
+            })
+        
+        if scores.get("Cost Optimization", 0) < 80:
+            recommendations.append({
+                "pillar": "Cost Optimization",
+                "recommendation": "Use Spot instances for non-critical workloads (up to 90% savings)",
+                "severity": "MEDIUM"
+            })
+            recommendations.append({
+                "pillar": "Cost Optimization",
+                "recommendation": "Enable Karpenter for right-sizing and consolidation",
+                "severity": "MEDIUM"
+            })
+        
+        if scores.get("Operational Excellence", 0) < 80:
+            recommendations.append({
+                "pillar": "Operational Excellence",
+                "recommendation": "Enable CloudWatch Container Insights for observability",
+                "severity": "MEDIUM"
+            })
+        
+        return recommendations
     
     @staticmethod
     def _render_requirements_tab():
