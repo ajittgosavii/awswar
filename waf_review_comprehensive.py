@@ -59,18 +59,6 @@ except ImportError:
     RemediationAction = None
     RemediationStatus = None
 
-# Import paginated questionnaire wizard for better UX with 200+ questions
-try:
-    from waf_questionnaire_wizard import (
-        WAFQuestionnaireWizard,
-        render_paginated_questionnaire,
-        QuestionResponse as WizardQuestionResponse
-    )
-    WIZARD_AVAILABLE = True
-except ImportError:
-    WIZARD_AVAILABLE = False
-    print("Paginated questionnaire wizard not available - using legacy mode")
-
 # ============================================================================
 # CONSTANTS & ENUMS
 # ============================================================================
@@ -1659,33 +1647,13 @@ class WAFReviewWorkflow:
         return pending_by_pillar
     
     def _render_questionnaire_phase(self):
-        """
-        Render WAF questionnaire phase
-        Uses paginated wizard for better UX with 200+ questions
-        """
+        """Render WAF questionnaire phase"""
         
         st.markdown("## 📝 Step 3: WAF Questionnaire")
-        
-        # Mode toggle - only show if wizard is available
-        use_wizard = st.session_state.get('use_paginated_questionnaire', True)
-        
-        col_header, col_toggle = st.columns([3, 1])
-        with col_header:
-            st.markdown("""
-            Answer questions about your workload to complete the assessment.
-            Questions that can be auto-detected from scan results are pre-filled.
-            """)
-        
-        with col_toggle:
-            if WIZARD_AVAILABLE:
-                new_mode = st.toggle(
-                    "📄 One per page",
-                    value=use_wizard,
-                    help="Show one question per page (recommended for 200+ questions)"
-                )
-                if new_mode != use_wizard:
-                    st.session_state.use_paginated_questionnaire = new_mode
-                    st.rerun()
+        st.markdown("""
+        Answer questions about your workload to complete the assessment. 
+        Questions that can be auto-detected from scan results are pre-filled.
+        """)
         
         # Check for saved progress
         has_saved, saved_info = self.has_saved_progress()
@@ -1709,53 +1677,6 @@ class WAFReviewWorkflow:
         # Auto-detect answers from findings (if no responses yet)
         if not self.session.responses:
             self._auto_detect_answers()
-        
-        # Render based on mode
-        if WIZARD_AVAILABLE and use_wizard:
-            self._render_questionnaire_wizard()
-        else:
-            self._render_questionnaire_legacy()
-    
-    def _render_questionnaire_wizard(self):
-        """Render paginated questionnaire wizard - one question per page"""
-        
-        # Convert WAF_QUESTIONS to wizard format
-        questions_for_wizard = {}
-        for pillar in WAFPillar:
-            questions_for_wizard[pillar] = WAF_QUESTIONS.get(pillar, [])
-        
-        # Define callbacks
-        def on_save(responses):
-            """Called when user saves progress in wizard"""
-            self.session.responses = responses
-            if self.save_progress():
-                st.toast("✅ Progress saved!", icon="💾")
-        
-        def on_complete(responses):
-            """Called when questionnaire is completed via wizard"""
-            self.session.responses = responses
-            self.session.questionnaire_completed = True
-            self.session.current_phase = ReviewPhase.SCORING
-            self.session.updated_at = datetime.now()
-            self.save_progress()
-            st.rerun()
-        
-        # Render the paginated wizard
-        render_paginated_questionnaire(
-            questions=questions_for_wizard,
-            responses=self.session.responses,
-            on_save=on_save,
-            on_complete=on_complete
-        )
-        
-        # Back button (separate from wizard navigation)
-        st.markdown("---")
-        if st.button("⬅️ Back to Scan Results", use_container_width=False):
-            self.session.current_phase = ReviewPhase.SCANNING
-            st.rerun()
-    
-    def _render_questionnaire_legacy(self):
-        """Render legacy questionnaire - all questions at once (original method)"""
         
         # Show progress - count correctly
         total_questions = sum(len(q) for q in WAF_QUESTIONS.values())

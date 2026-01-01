@@ -30,30 +30,6 @@ import streamlit as st
 import sys
 from datetime import datetime
 
-# ============================================================================
-# PERFORMANCE OPTIMIZATIONS - Import first for fastest startup
-# ============================================================================
-try:
-    from performance_optimizations import (
-        initialize_performance_optimizations,
-        setup_lazy_loaders,
-        cache_scan_result,
-        get_client_manager,
-        PerformanceMonitor,
-        get_app_state,
-        ScanResultCache
-    )
-    PERF_OPTIMIZATIONS_AVAILABLE = True
-    # Initialize optimizations
-    _perf_context = initialize_performance_optimizations()
-    LAZY_LOADERS = _perf_context['loaders']
-    PERF_MONITOR = _perf_context['monitor']
-except ImportError as e:
-    PERF_OPTIMIZATIONS_AVAILABLE = False
-    LAZY_LOADERS = {}
-    PERF_MONITOR = None
-    print(f"Performance optimizations not available: {e}")
-
 # Import unified workflow with error handling
 try:
     from waf_unified_workflow import render_unified_waf_workflow
