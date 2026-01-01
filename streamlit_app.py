@@ -912,10 +912,52 @@ def render_single_account_connector():
         with col1:
             if st.button("💾 Save & Connect", type="primary", use_container_width=True):
                 if aws_access_key and aws_secret_key:
+                    # Save credentials
                     st.session_state.aws_access_key = aws_access_key
                     st.session_state.aws_secret_key = aws_secret_key
                     st.session_state.aws_region = aws_region
-                    st.success("✅ Credentials saved!")
+                    st.session_state.account_name = account_name or "Primary Account"
+                    
+                    # Try to get account ID and add to connected_accounts
+                    try:
+                        import boto3
+                        session = boto3.Session(
+                            aws_access_key_id=aws_access_key,
+                            aws_secret_access_key=aws_secret_key,
+                            region_name=aws_region
+                        )
+                        sts = session.client('sts')
+                        identity = sts.get_caller_identity()
+                        account_id = identity['Account']
+                        
+                        # Create account info
+                        account_info = {
+                            'account_id': account_id,
+                            'account_name': account_name or f'Account-{account_id[-4:]}',
+                            'name': account_name or f'Account-{account_id[-4:]}',
+                            'region': aws_region,
+                            'connection_type': 'direct',
+                            'status': 'connected'
+                        }
+                        
+                        # Add to connected_accounts if not already there
+                        if 'connected_accounts' not in st.session_state:
+                            st.session_state.connected_accounts = []
+                        
+                        # Remove any existing entry for this account
+                        st.session_state.connected_accounts = [
+                            acc for acc in st.session_state.connected_accounts 
+                            if acc.get('account_id') != account_id
+                        ]
+                        
+                        # Add as first account
+                        st.session_state.connected_accounts.insert(0, account_info)
+                        
+                        st.success(f"✅ Connected to Account: {account_id}")
+                    except Exception as e:
+                        st.success("✅ Credentials saved!")
+                        st.warning(f"Could not verify account: {str(e)}")
+                    
                     st.rerun()
                 else:
                     st.error("❌ Provide both Access Key and Secret Key")

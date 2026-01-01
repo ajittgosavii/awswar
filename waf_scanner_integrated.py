@@ -229,12 +229,35 @@ def render_multi_account_scanner_enhanced():
     Keeps original functionality + adds AI features
     """
     import streamlit as st
+    from aws_connector import get_aws_session
     
     st.markdown("### 🏢 Multi-Account WAF Scan")
     st.info("🤖 **AI-Enhanced**: Results will include AI analysis, WAF pillar mapping, and consolidated PDF reports")
     
     # Check connected accounts
     connected_accounts = st.session_state.get('connected_accounts', [])
+    
+    # ALSO check for single account connection via AWS credentials
+    try:
+        session = get_aws_session()
+        if session:
+            sts = session.client('sts')
+            identity = sts.get_caller_identity()
+            single_account_id = identity['Account']
+            
+            # Add single account to list if not already there
+            if not any(acc.get('account_id') == single_account_id for acc in connected_accounts):
+                single_account_info = {
+                    'account_id': single_account_id,
+                    'account_name': st.session_state.get('account_name', f'Account-{single_account_id[-4:]}'),
+                    'name': st.session_state.get('account_name', f'Account-{single_account_id[-4:]}'),
+                    'region': st.session_state.get('aws_region', 'us-east-1'),
+                    'connection_type': 'direct'
+                }
+                connected_accounts = connected_accounts.copy()
+                connected_accounts.insert(0, single_account_info)
+    except Exception:
+        pass  # No single account connection
     
     if not connected_accounts:
         st.warning("⚠️ No accounts connected. Go to AWS Connector tab to add accounts.")

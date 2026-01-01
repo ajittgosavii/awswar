@@ -1071,6 +1071,33 @@ class WAFReviewWorkflow:
         # Check if accounts are already connected from main app
         connected_accounts = st.session_state.get('connected_accounts', [])
         
+        # ALSO check for single account connection via AWS credentials
+        single_account_connected = False
+        single_account_info = None
+        
+        try:
+            from aws_connector import get_aws_session
+            session = get_aws_session()
+            if session:
+                sts = session.client('sts')
+                identity = sts.get_caller_identity()
+                single_account_id = identity['Account']
+                single_account_info = {
+                    'account_id': single_account_id,
+                    'account_name': st.session_state.get('account_name', f'Account-{single_account_id[-4:]}'),
+                    'name': st.session_state.get('account_name', f'Account-{single_account_id[-4:]}'),
+                    'region': st.session_state.get('aws_region', 'us-east-1'),
+                    'connection_type': 'direct'
+                }
+                single_account_connected = True
+                
+                # Add to connected_accounts if not already there
+                if not any(acc.get('account_id') == single_account_id for acc in connected_accounts):
+                    connected_accounts = connected_accounts.copy()
+                    connected_accounts.insert(0, single_account_info)
+        except Exception as e:
+            pass  # No single account connected
+        
         col1, col2 = st.columns(2)
         
         with col1:
@@ -1731,21 +1758,55 @@ class WAFReviewWorkflow:
         
         st.markdown("---")
         
-        # Build pillar tab labels with pending counts
-        pillar_tab_labels = []
+        # Initialize pillar selection in session state if not exists
+        if 'current_waf_pillar' not in st.session_state:
+            st.session_state.current_waf_pillar = WAFPillar.OPERATIONAL_EXCELLENCE.value
+        
+        # Build pillar selector with pending counts
+        pillar_options = []
+        pillar_labels = {}
         for p in WAFPillar:
             pillar_pending = pending_by_pillar.get(p.value, [])
             if pillar_pending:
-                pillar_tab_labels.append(f"{PILLAR_ICONS[p]} {p.value} ⚠️({len(pillar_pending)})")
+                label = f"{PILLAR_ICONS[p]} {p.value} ⚠️({len(pillar_pending)})"
             else:
-                pillar_tab_labels.append(f"{PILLAR_ICONS[p]} {p.value} ✅")
+                label = f"{PILLAR_ICONS[p]} {p.value} ✅"
+            pillar_options.append(p.value)
+            pillar_labels[p.value] = label
         
-        # Render questions by pillar
-        pillar_tabs = st.tabs(pillar_tab_labels)
-        
+        # Pillar selector using columns with buttons (preserves state on rerun)
+        st.markdown("##### Select Pillar:")
+        pillar_cols = st.columns(6)
         for idx, pillar in enumerate(WAFPillar):
-            with pillar_tabs[idx]:
-                self._render_pillar_questions(pillar, show_pending_only=show_pending_only)
+            with pillar_cols[idx]:
+                pillar_pending = pending_by_pillar.get(pillar.value, [])
+                is_selected = st.session_state.current_waf_pillar == pillar.value
+                
+                # Create button label
+                if pillar_pending:
+                    btn_label = f"{PILLAR_ICONS[pillar]} ({len(pillar_pending)})"
+                else:
+                    btn_label = f"{PILLAR_ICONS[pillar]} ✅"
+                
+                # Style based on selection
+                btn_type = "primary" if is_selected else "secondary"
+                
+                if st.button(
+                    btn_label, 
+                    key=f"pillar_btn_{pillar.value}",
+                    type=btn_type,
+                    use_container_width=True,
+                    help=pillar.value
+                ):
+                    st.session_state.current_waf_pillar = pillar.value
+                    st.rerun()
+        
+        # Show current pillar name
+        current_pillar_enum = next((p for p in WAFPillar if p.value == st.session_state.current_waf_pillar), WAFPillar.OPERATIONAL_EXCELLENCE)
+        st.markdown(f"### {PILLAR_ICONS[current_pillar_enum]} {current_pillar_enum.value}")
+        
+        # Render questions for selected pillar only
+        self._render_pillar_questions(current_pillar_enum, show_pending_only=show_pending_only)
         
         st.markdown("---")
         
