@@ -116,6 +116,29 @@ except (ImportError, KeyError) as e:
     AI_LENS_AVAILABLE = False
     print(f"AI Lens module not available: {e}")
 
+# Import Enhanced AI Lens module (with auto-detection and AI recommendations)
+try:
+    from ai_lens_enhanced import EnhancedAILensModule, render_enhanced_ai_lens
+    ENHANCED_AI_LENS_AVAILABLE = True
+except (ImportError, KeyError) as e:
+    ENHANCED_AI_LENS_AVAILABLE = False
+    print(f"Enhanced AI Lens module not available: {e}")
+
+# Import React Parity Enhancements (AI Recommendations, Security Hub, Anomaly Detection)
+try:
+    from react_parity_enhancements import (
+        WAFAIRecommendationsEngine,
+        render_waf_ai_recommendations,
+        SecurityHubIntegration,
+        render_assessment_mode_selection,
+        render_finops_anomaly_dashboard,
+        render_remediation_export_options
+    )
+    REACT_PARITY_AVAILABLE = True
+except (ImportError, KeyError) as e:
+    REACT_PARITY_AVAILABLE = False
+    print(f"React Parity Enhancements not available: {e}")
+
 # Import demo mode manager
 from demo_mode_manager import (
     get_demo_manager, 
@@ -3639,11 +3662,31 @@ def render_main_content():
                 st.code(traceback.format_exc())
     
     # ========================================================================
-    # TAB 7: AI LENS (Unchanged)
+    # TAB 7: AI LENS (Enhanced with Auto-Detection and AI Recommendations)
     # ========================================================================
     with tabs[7]:
         try:
-            if AI_LENS_AVAILABLE:
+            # Check if enhanced module is available
+            if ENHANCED_AI_LENS_AVAILABLE:
+                # Mode selector
+                ai_lens_mode = st.radio(
+                    "AI Lens Version",
+                    ["🚀 Enhanced (Auto-Detection + AI)", "📋 Classic (Manual Questions)"],
+                    horizontal=True,
+                    key="ai_lens_version_selector",
+                    help="Enhanced mode auto-detects AI/ML services and provides Claude AI recommendations"
+                )
+                
+                st.divider()
+                
+                if "Enhanced" in ai_lens_mode:
+                    render_enhanced_ai_lens()
+                else:
+                    if AI_LENS_AVAILABLE:
+                        render_ai_lens_tab()
+                    else:
+                        st.warning("Classic AI Lens module not available")
+            elif AI_LENS_AVAILABLE:
                 render_ai_lens_tab()
             else:
                 st.markdown("""

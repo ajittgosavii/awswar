@@ -128,3 +128,5 @@ flake8>=6.0.0                     # Linter
 
 # v6.0.0 Enterprise Integration Dependencies
 reportlab>=4.0.0  # PDF generation for executive reports
+sqlalchemy>=2.0.0  # Database ORM for auth_database (optional)
+toml>=0.10.2  # TOML config file parsing
