@@ -1,2766 +1,3385 @@
 """
-AWS Well-Architected Framework Review Module - Enterprise Edition
-Complete production-grade implementation with 200+ questions
+Comprehensive Well-Architected Framework Review Module
+======================================================
+Complete end-to-end WAF review workflow:
+1. Automated AWS Scan (Direct API / Security Hub)
+2. Manual WAF Questionnaire (for gaps)
+3. Consolidated Scoring across 6 pillars
+4. AI-Powered Remediation with CloudFormation/Terraform
+5. Re-scan to verify fixes
+6. Updated scores with before/after comparison
 
-This module is designed to be the de facto standard for AWS WAF assessments.
-
-Features:
-- 200+ questions across all 6 pillars
-- AI-powered recommendations using Claude API
-- Automated AWS scanning integration
-- Compliance framework mapping
-- Executive and technical reporting
-- Action item management with prioritization
-- Continuous improvement tracking
-- Industry benchmarking
-- Evidence collection and management
-
-RECENT UPDATES (Dec 2024):
-- Quick Scan moved to WAF Scanner tab (now AI-enhanced with better features)
-- WAF Scanner now has: AI analysis, PDF reports, multiple scan modes
-- This module now focuses on comprehensive assessments with 200+ questions
+Version: 1.3.0 - Integrated real remediation engine with CloudFormation deployment
+Author: Enterprise WAF Scanner Team
 """
 
-from __future__ import annotations
-
 import streamlit as st
+import json
+import boto3
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from enum import Enum
-import json
-import uuid
 import hashlib
+import time
+from io import BytesIO
 
-# Import existing modules for integration
+# Import Firebase for questionnaire persistence
 try:
-    from aws_connector import get_aws_session, test_aws_connection
-    from landscape_scanner import (
-        AWSLandscapeScanner, 
-        Finding as ScannerFinding,
-        LandscapeAssessment,
-        generate_demo_assessment
+    from auth_database_firebase import get_database_manager
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    FIREBASE_AVAILABLE = False
+    def get_database_manager():
+        return None
+
+# Import complete 195-question database
+try:
+    from waf_questions_complete import WAF_QUESTIONS_COMPLETE, WAFPillar as WAFPillarComplete
+    USE_COMPLETE_QUESTIONS = True
+except ImportError:
+    USE_COMPLETE_QUESTIONS = False
+    WAFPillarComplete = None
+
+# Import real remediation engine for CloudFormation deployment
+try:
+    from remediation_engine_integrated import (
+        RemediationEngine,
+        RemediationAction,
+        RemediationStatus,
+        RiskLevel,
+        DeploymentMethod,
+        CloudFormationDeployer,
+        CLIExecutor
     )
-    from compliance_module import COMPLIANCE_FRAMEWORKS
-    AWS_INTEGRATION = True
+    REMEDIATION_ENGINE_AVAILABLE = True
 except ImportError:
-    AWS_INTEGRATION = False
-
-try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
+    REMEDIATION_ENGINE_AVAILABLE = False
+    RemediationEngine = None
+    RemediationAction = None
+    RemediationStatus = None
 
 # ============================================================================
-# AUTO-DETECTION ENGINE - Maps AWS Scan Results to WAF Questions
+# CONSTANTS & ENUMS
 # ============================================================================
 
-class WAFAutoDetector:
-    """
-    Maps AWS scan findings to WAF questions and auto-fills answers.
-    This is the integration layer between AWS Scanner and WAF Review.
-    """
-    
-    @staticmethod
-    def detect_answers(scan_results: Dict, questions: List[Question]) -> Dict[str, Dict]:
-        """
-        Auto-detect answers for WAF questions based on scan results.
-        
-        Returns dict of question_id -> {
-            'choice_index': int,
-            'confidence': int (0-100),
-            'evidence': List[str],
-            'detected_at': datetime,
-            'auto_detected': True
-        }
-        """
-        auto_filled = {}
-        
-        if not scan_results:
-            return auto_filled
-        
-        # Get findings from scan
-        findings = scan_results.get('findings', [])
-        resources = scan_results.get('resources', {})
-        
-        # Security Questions Auto-Detection
-        auto_filled.update(WAFAutoDetector._detect_security_answers(findings, resources))
-        
-        # Reliability Questions Auto-Detection
-        auto_filled.update(WAFAutoDetector._detect_reliability_answers(findings, resources))
-        
-        # Operational Excellence Questions Auto-Detection
-        auto_filled.update(WAFAutoDetector._detect_operations_answers(findings, resources))
-        
-        # Performance Questions Auto-Detection
-        auto_filled.update(WAFAutoDetector._detect_performance_answers(findings, resources))
-        
-        # Cost Optimization Questions Auto-Detection
-        auto_filled.update(WAFAutoDetector._detect_cost_answers(findings, resources))
-        
-        # Sustainability Questions Auto-Detection
-        auto_filled.update(WAFAutoDetector._detect_sustainability_answers(findings, resources))
-        
-        return auto_filled
-    
-    @staticmethod
-    def _detect_security_answers(findings: List, resources: Dict) -> Dict:
-        """Detect answers for Security pillar questions"""
-        detected = {}
-        
-        # IAM Questions
-        iam_findings = [f for f in findings if 'iam' in f.get('service', '').lower()]
-        if iam_findings:
-            # SEC-IAM-001: IAM policies and roles
-            high_risk_iam = [f for f in iam_findings if f.get('severity') in ['HIGH', 'CRITICAL']]
-            if len(high_risk_iam) == 0:
-                detected['SEC-IAM-001'] = {
-                    'choice_index': 0,  # Option A
-                    'confidence': 90,
-                    'evidence': ['IAM policies follow least privilege', 'No high-risk findings'],
-                    'auto_detected': True
-                }
-            elif len(high_risk_iam) < 3:
-                detected['SEC-IAM-001'] = {
-                    'choice_index': 1,  # Option B
-                    'confidence': 85,
-                    'evidence': [f"Found {len(high_risk_iam)} IAM issues to address"],
-                    'auto_detected': True
-                }
-        
-        # Encryption Questions
-        encryption_findings = [f for f in findings if 'encrypt' in str(f).lower()]
-        s3_buckets = resources.get('s3_buckets', [])
-        if s3_buckets:
-            # SEC-DATA-001: Data encryption at rest
-            unencrypted = [b for b in s3_buckets if not b.get('encryption_enabled')]
-            if len(unencrypted) == 0:
-                detected['SEC-DATA-001'] = {
-                    'choice_index': 0,
-                    'confidence': 95,
-                    'evidence': [f'All {len(s3_buckets)} S3 buckets encrypted'],
-                    'auto_detected': True
-                }
-            elif len(unencrypted) < len(s3_buckets) * 0.2:  # <20% unencrypted
-                detected['SEC-DATA-001'] = {
-                    'choice_index': 1,
-                    'confidence': 80,
-                    'evidence': [f'{len(unencrypted)}/{len(s3_buckets)} buckets need encryption'],
-                    'auto_detected': True
-                }
-        
-        # Security Groups
-        security_groups = resources.get('security_groups', [])
-        if security_groups:
-            # SEC-INFRA-001: Network access controls
-            open_sgs = [sg for sg in security_groups if WAFAutoDetector._is_overly_permissive(sg)]
-            if len(open_sgs) == 0:
-                detected['SEC-INFRA-001'] = {
-                    'choice_index': 0,
-                    'confidence': 90,
-                    'evidence': [f'All {len(security_groups)} security groups properly configured'],
-                    'auto_detected': True
-                }
-            elif len(open_sgs) < len(security_groups) * 0.1:
-                detected['SEC-INFRA-001'] = {
-                    'choice_index': 1,
-                    'confidence': 75,
-                    'evidence': [f'{len(open_sgs)} security groups need tightening'],
-                    'auto_detected': True
-                }
-        
-        # GuardDuty
-        if resources.get('guardduty_enabled'):
-            detected['SEC-DET-001'] = {
-                'choice_index': 0,
-                'confidence': 100,
-                'evidence': ['GuardDuty enabled for threat detection'],
-                'auto_detected': True
-            }
-        elif resources.get('cloudtrail_enabled'):
-            detected['SEC-DET-001'] = {
-                'choice_index': 1,
-                'confidence': 85,
-                'evidence': ['CloudTrail enabled but GuardDuty not enabled'],
-                'auto_detected': True
-            }
-        
-        return detected
-    
-    @staticmethod
-    def _detect_reliability_answers(findings: List, resources: Dict) -> Dict:
-        """Detect answers for Reliability pillar questions"""
-        detected = {}
-        
-        # Multi-AZ Deployments
-        rds_instances = resources.get('rds_instances', [])
-        if rds_instances:
-            # REL-ARCH-001: Database high availability
-            multi_az = [db for db in rds_instances if db.get('multi_az')]
-            if len(multi_az) == len(rds_instances):
-                detected['REL-ARCH-001'] = {
-                    'choice_index': 0,
-                    'confidence': 95,
-                    'evidence': [f'All {len(rds_instances)} databases deployed Multi-AZ'],
-                    'auto_detected': True
-                }
-            elif len(multi_az) > 0:
-                detected['REL-ARCH-001'] = {
-                    'choice_index': 1,
-                    'confidence': 80,
-                    'evidence': [f'{len(multi_az)}/{len(rds_instances)} databases Multi-AZ'],
-                    'auto_detected': True
-                }
-        
-        # Backup Configuration
-        backup_vaults = resources.get('backup_vaults', [])
-        if backup_vaults or resources.get('backup_plans'):
-            # REL-FAIL-004: Backup strategy
-            detected['REL-FAIL-004'] = {
-                'choice_index': 0,
-                'confidence': 90,
-                'evidence': [f'AWS Backup configured with {len(backup_vaults)} vaults'],
-                'auto_detected': True
-            }
-        
-        # Auto Scaling
-        asg_groups = resources.get('autoscaling_groups', [])
-        if asg_groups:
-            # REL-ARCH-002: Auto scaling implementation
-            configured_asgs = [asg for asg in asg_groups if asg.get('desired_capacity')]
-            if len(configured_asgs) == len(asg_groups):
-                detected['REL-ARCH-002'] = {
-                    'choice_index': 0,
-                    'confidence': 85,
-                    'evidence': [f'{len(asg_groups)} Auto Scaling groups configured'],
-                    'auto_detected': True
-                }
-        
-        return detected
-    
-    @staticmethod
-    def _detect_operations_answers(findings: List, resources: Dict) -> Dict:
-        """Detect answers for Operational Excellence questions"""
-        detected = {}
-        
-        # CloudWatch Alarms
-        alarms = resources.get('cloudwatch_alarms', [])
-        if alarms:
-            # OPS-OPER-001: Monitoring and observability
-            active_alarms = [a for a in alarms if a.get('state_value') != 'INSUFFICIENT_DATA']
-            if len(active_alarms) >= 20:  # Good coverage
-                detected['OPS-OPER-001'] = {
-                    'choice_index': 0,
-                    'confidence': 85,
-                    'evidence': [f'{len(active_alarms)} CloudWatch alarms configured'],
-                    'auto_detected': True
-                }
-            elif len(active_alarms) >= 5:
-                detected['OPS-OPER-001'] = {
-                    'choice_index': 1,
-                    'confidence': 75,
-                    'evidence': [f'{len(active_alarms)} alarms - consider adding more'],
-                    'auto_detected': True
-                }
-        
-        # CloudTrail
-        if resources.get('cloudtrail_enabled'):
-            # OPS-PREP-002: Event logging
-            detected['OPS-PREP-002'] = {
-                'choice_index': 0,
-                'confidence': 95,
-                'evidence': ['CloudTrail enabled for audit logging'],
-                'auto_detected': True
-            }
-        
-        # Systems Manager
-        ssm_managed = resources.get('ssm_managed_instances', [])
-        ec2_instances = resources.get('ec2_instances', [])
-        if ssm_managed and ec2_instances:
-            # OPS-PREP-003: Infrastructure as code and automation
-            coverage = len(ssm_managed) / len(ec2_instances) * 100
-            if coverage >= 90:
-                detected['OPS-PREP-003'] = {
-                    'choice_index': 0,
-                    'confidence': 90,
-                    'evidence': [f'{coverage:.0f}% instances managed by Systems Manager'],
-                    'auto_detected': True
-                }
-            elif coverage >= 50:
-                detected['OPS-PREP-003'] = {
-                    'choice_index': 1,
-                    'confidence': 75,
-                    'evidence': [f'{coverage:.0f}% coverage - increase SSM adoption'],
-                    'auto_detected': True
-                }
-        
-        return detected
-    
-    @staticmethod
-    def _detect_performance_answers(findings: List, resources: Dict) -> Dict:
-        """Detect answers for Performance Efficiency questions"""
-        detected = {}
-        
-        # Instance Types and Sizing
-        ec2_instances = resources.get('ec2_instances', [])
-        if ec2_instances:
-            # PERF-SEL-001: Compute selection
-            current_gen = [i for i in ec2_instances if WAFAutoDetector._is_current_generation(i)]
-            if len(current_gen) == len(ec2_instances):
-                detected['PERF-SEL-001'] = {
-                    'choice_index': 0,
-                    'confidence': 90,
-                    'evidence': [f'All {len(ec2_instances)} instances using current generation'],
-                    'auto_detected': True
-                }
-            elif len(current_gen) > len(ec2_instances) * 0.7:
-                detected['PERF-SEL-001'] = {
-                    'choice_index': 1,
-                    'confidence': 80,
-                    'evidence': [f'{len(current_gen)}/{len(ec2_instances)} using current gen'],
-                    'auto_detected': True
-                }
-        
-        # CloudFront
-        if resources.get('cloudfront_distributions'):
-            # PERF-TRADE-001: CDN usage
-            distributions = resources.get('cloudfront_distributions', [])
-            detected['PERF-TRADE-001'] = {
-                'choice_index': 0,
-                'confidence': 85,
-                'evidence': [f'CloudFront CDN configured with {len(distributions)} distributions'],
-                'auto_detected': True
-            }
-        
-        return detected
-    
-    @staticmethod
-    def _detect_cost_answers(findings: List, resources: Dict) -> Dict:
-        """Detect answers for Cost Optimization questions"""
-        detected = {}
-        
-        # Reserved Instances / Savings Plans
-        if resources.get('reserved_instances') or resources.get('savings_plans'):
-            # COST-RES-001: Commitment discounts
-            ri_count = len(resources.get('reserved_instances', []))
-            sp_count = len(resources.get('savings_plans', []))
-            if ri_count + sp_count > 0:
-                detected['COST-RES-001'] = {
-                    'choice_index': 0,
-                    'confidence': 90,
-                    'evidence': [f'{ri_count} RIs, {sp_count} Savings Plans active'],
-                    'auto_detected': True
-                }
-        
-        # S3 Storage Classes
-        s3_buckets = resources.get('s3_buckets', [])
-        if s3_buckets:
-            # COST-RES-002: Storage optimization
-            lifecycle_enabled = [b for b in s3_buckets if b.get('lifecycle_rules')]
-            if len(lifecycle_enabled) > len(s3_buckets) * 0.8:
-                detected['COST-RES-002'] = {
-                    'choice_index': 0,
-                    'confidence': 85,
-                    'evidence': [f'{len(lifecycle_enabled)}/{len(s3_buckets)} buckets use lifecycle policies'],
-                    'auto_detected': True
-                }
-        
-        # Right Sizing
-        cost_findings = [f for f in findings if 'cost' in str(f).lower() or 'unused' in str(f).lower()]
-        if len(cost_findings) == 0:
-            # COST-RES-003: Right-sizing
-            detected['COST-RES-003'] = {
-                'choice_index': 0,
-                'confidence': 80,
-                'evidence': ['No unused or underutilized resources detected'],
-                'auto_detected': True
-            }
-        
-        return detected
-    
-    @staticmethod
-    def _detect_sustainability_answers(findings: List, resources: Dict) -> Dict:
-        """Detect answers for Sustainability questions"""
-        detected = {}
-        
-        # Region Selection
-        regions_used = resources.get('regions', [])
-        if regions_used:
-            # SUS-REG-001: Low-carbon regions
-            low_carbon = ['us-west-2', 'eu-west-1', 'eu-north-1', 'ca-central-1']
-            using_low_carbon = any(r in low_carbon for r in regions_used)
-            if using_low_carbon:
-                detected['SUS-REG-001'] = {
-                    'choice_index': 0,
-                    'confidence': 85,
-                    'evidence': [f'Using low-carbon regions: {", ".join(regions_used)}'],
-                    'auto_detected': True
-                }
-        
-        return detected
-    
-    @staticmethod
-    def _is_overly_permissive(security_group: Dict) -> bool:
-        """Check if security group is overly permissive"""
-        rules = security_group.get('ip_permissions', [])
-        for rule in rules:
-            ip_ranges = rule.get('ip_ranges', [])
-            for ip_range in ip_ranges:
-                if ip_range.get('cidr_ip') == '0.0.0.0/0':
-                    return True
-        return False
-    
-    @staticmethod
-    def _is_current_generation(instance: Dict) -> bool:
-        """Check if EC2 instance is current generation"""
-        instance_type = instance.get('instance_type', '')
-        # Current gen: t3, m5, c5, r5, etc.
-        current_gen_families = ['t3', 't4', 'm5', 'm6', 'c5', 'c6', 'r5', 'r6', 'a1']
-        return any(instance_type.startswith(family) for family in current_gen_families)
-    
-    @staticmethod
-    def get_detection_summary(auto_detected: Dict) -> Dict:
-        """Get summary statistics of auto-detection"""
-        if not auto_detected:
-            return {
-                'total_detected': 0,
-                'high_confidence': 0,
-                'medium_confidence': 0,
-                'low_confidence': 0,
-                'coverage_percentage': 0
-            }
-        
-        high_conf = len([d for d in auto_detected.values() if d['confidence'] >= 85])
-        med_conf = len([d for d in auto_detected.values() if 70 <= d['confidence'] < 85])
-        low_conf = len([d for d in auto_detected.values() if d['confidence'] < 70])
-        
-        return {
-            'total_detected': len(auto_detected),
-            'high_confidence': high_conf,
-            'medium_confidence': med_conf,
-            'low_confidence': low_conf,
-            'coverage_percentage': (len(auto_detected) / 205) * 100
-        }
+class ReviewPhase(Enum):
+    """Phases of the WAF Review workflow"""
+    SETUP = "setup"
+    SCANNING = "scanning"
+    QUESTIONNAIRE = "questionnaire"
+    SCORING = "scoring"
+    REMEDIATION = "remediation"
+    RESCAN = "rescan"
+    COMPLETE = "complete"
 
-# ============================================================================
-# CORE DATA MODELS
-# ============================================================================
-
-class Pillar(Enum):
-    """Six pillars of the AWS Well-Architected Framework"""
+class WAFPillar(Enum):
+    """AWS Well-Architected Framework Pillars"""
     OPERATIONAL_EXCELLENCE = "Operational Excellence"
     SECURITY = "Security"
     RELIABILITY = "Reliability"
     PERFORMANCE_EFFICIENCY = "Performance Efficiency"
     COST_OPTIMIZATION = "Cost Optimization"
     SUSTAINABILITY = "Sustainability"
-    
-    @property
-    def icon(self):
-        icons = {
-            "Operational Excellence": "⚙️",
-            "Security": "🔒",
-            "Reliability": "🛡️",
-            "Performance Efficiency": "⚡",
-            "Cost Optimization": "💰",
-            "Sustainability": "🌱"
-        }
-        return icons[self.value]
-    
-    @property
-    def color(self):
-        colors = {
-            "Operational Excellence": "#FF9900",
-            "Security": "#EC7211",
-            "Reliability": "#146EB4",
-            "Performance Efficiency": "#9D5025",
-            "Cost Optimization": "#527FFF",
-            "Sustainability": "#3F8624"
-        }
-        return colors[self.value]
 
-class RiskLevel(Enum):
-    """Risk levels for findings"""
-    NONE = ("None", "✅", "#28a745")
-    LOW = ("Low", "ℹ️", "#17a2b8")
-    MEDIUM = ("Medium", "⚠️", "#ffc107")
-    HIGH = ("High", "🔴", "#dc3545")
-    CRITICAL = ("Critical", "🚨", "#8b0000")
-    
-    @property
-    def label(self):
-        return self.value[0]
-    
-    @property
-    def icon(self):
-        return self.value[1]
-    
-    @property
-    def color(self):
-        return self.value[2]
+PILLAR_ICONS = {
+    WAFPillar.OPERATIONAL_EXCELLENCE: "⚙️",
+    WAFPillar.SECURITY: "🔒",
+    WAFPillar.RELIABILITY: "🛡️",
+    WAFPillar.PERFORMANCE_EFFICIENCY: "⚡",
+    WAFPillar.COST_OPTIMIZATION: "💰",
+    WAFPillar.SUSTAINABILITY: "🌱"
+}
 
-class AssessmentType(Enum):
-    """Type of WAF assessment"""
-    QUICK = ("Quick Assessment", "30-45 minutes", "30 key questions")
-    STANDARD = ("Standard Assessment", "2-3 hours", "100 essential questions")
-    COMPREHENSIVE = ("Comprehensive Review", "1-2 days", "200+ questions + automated scan")
-    CONTINUOUS = ("Continuous Monitoring", "Ongoing", "Automated with periodic reviews")
+PILLAR_COLORS = {
+    WAFPillar.OPERATIONAL_EXCELLENCE: "#FF6B6B",
+    WAFPillar.SECURITY: "#4ECDC4",
+    WAFPillar.RELIABILITY: "#45B7D1",
+    WAFPillar.PERFORMANCE_EFFICIENCY: "#96CEB4",
+    WAFPillar.COST_OPTIMIZATION: "#FFEAA7",
+    WAFPillar.SUSTAINABILITY: "#81C784"
+}
+
+# ============================================================================
+# DATA MODELS
+# ============================================================================
 
 @dataclass
-class Choice:
-    """Answer choice for a question"""
-    id: str
-    text: str
-    risk_level: RiskLevel
-    points: int  # 0-100, higher is better
-    guidance: str = ""
-    evidence_required: List[str] = field(default_factory=list)
-    auto_detectable: bool = False
-
-@dataclass
-class Question:
-    """Assessment question with metadata"""
-    id: str
-    pillar: Pillar
-    category: str
-    text: str
-    description: str
-    why_important: str
-    best_practices: List[str]
-    choices: List[Choice]
-    help_link: str
-    aws_services: List[str] = field(default_factory=list)
-    compliance_mappings: Dict[str, List[str]] = field(default_factory=dict)
-    automated_check: Optional[str] = None
-    required_for: List[str] = field(default_factory=list)
-    maturity_level: int = 1  # 1=Foundation, 2=Intermediate, 3=Advanced
-    tags: List[str] = field(default_factory=list)
-
-@dataclass
-class Response:
-    """User's response to a question"""
-    question_id: str
-    choice_id: str
-    notes: str = ""
-    evidence_urls: List[str] = field(default_factory=list)
-    evidence_files: List[str] = field(default_factory=list)
-    automated_evidence: Dict[str, Any] = field(default_factory=dict)
-    responded_by: str = ""
-    responded_at: datetime = field(default_factory=datetime.now)
-    verified: bool = False
-    verified_by: str = ""
-    verified_at: Optional[datetime] = None
-
-@dataclass
-class ActionItem:
-    """Remediation action item"""
+class Finding:
+    """Security/compliance finding from scan"""
     id: str
     title: str
     description: str
-    pillar: Pillar
-    risk_level: RiskLevel
-    affected_resources: List[str]
-    recommendation: str
-    implementation_steps: List[str]
-    aws_services_used: List[str]
-    estimated_effort: str
-    estimated_cost: str
-    priority: int  # 1-5
-    assigned_to: str = ""
-    status: str = "Open"
-    due_date: Optional[datetime] = None
-    completion_date: Optional[datetime] = None
-    notes: str = ""
-    related_questions: List[str] = field(default_factory=list)
-    compliance_impact: List[str] = field(default_factory=list)
-    progress: int = 0  # 0-100%
+    severity: str  # CRITICAL, HIGH, MEDIUM, LOW
+    pillar: str
+    service: str
+    resource: str
+    account_id: str
+    region: str = "us-east-1"
+    recommendation: str = ""
+    remediation_available: bool = False
+    auto_remediatable: bool = False
+    status: str = "open"  # open, remediated, accepted_risk
 
 @dataclass
-class WAFAssessment:
-    """Complete Well-Architected Framework Assessment"""
-    # Identification
-    id: str
-    assessment_type: AssessmentType
-    version: str = "2.0"
-    
-    # Organization info
-    organization_name: str = ""
-    workload_name: str = ""
-    workload_description: str = ""
-    environment: str = "Production"
-    industry: str = "Technology"
-    aws_account_ids: List[str] = field(default_factory=list)
-    regions: List[str] = field(default_factory=list)
-    
-    # Team
-    owner: str = ""
-    reviewers: List[str] = field(default_factory=list)
-    stakeholders: List[str] = field(default_factory=list)
-    
-    # Timing
-    created_at: datetime = field(default_factory=datetime.now)
-    updated_at: datetime = field(default_factory=datetime.now)
-    completed_at: Optional[datetime] = None
-    review_date: Optional[datetime] = None
-    next_review_date: Optional[datetime] = None
-    
-    # Assessment data
-    responses: Dict[str, Response] = field(default_factory=dict)
-    action_items: List[ActionItem] = field(default_factory=list)
-    
-    # Scoring
-    overall_score: float = 0.0
-    pillar_scores: Dict[str, float] = field(default_factory=dict)
-    risk_summary: Dict[str, int] = field(default_factory=dict)
-    
-    # Progress
+class QuestionResponse:
+    """Response to a WAF questionnaire question"""
+    question_id: str
+    pillar: str
+    question_text: str
+    response: str  # yes, no, partial, not_applicable
+    auto_detected: bool = False
+    confidence: float = 0.0
+    evidence: List[str] = field(default_factory=list)
+    notes: str = ""
+
+@dataclass
+class PillarScore:
+    """Score for a single WAF pillar"""
+    pillar: WAFPillar
+    scan_score: float = 0.0  # From automated scan (0-100)
+    questionnaire_score: float = 0.0  # From manual questionnaire (0-100)
+    combined_score: float = 0.0  # Weighted combination
+    findings_count: int = 0
+    critical_count: int = 0
+    high_count: int = 0
     questions_answered: int = 0
     questions_total: int = 0
-    completion_percentage: float = 0.0
+    improvement_areas: List[str] = field(default_factory=list)
+
+@dataclass
+class RemediationItem:
+    """Item to be remediated"""
+    finding_id: str
+    finding_title: str
+    severity: str
+    pillar: str
+    service: str
+    resource: str
+    account_id: str
+    cloudformation: str = ""
+    terraform: str = ""
+    aws_cli: List[str] = field(default_factory=list)
+    status: str = "pending"  # pending, approved, deployed, failed, rolled_back
+    approved_by: str = ""
+    approved_at: str = ""
+    deployed_at: str = ""
+    stack_name: str = ""
+    stack_id: str = ""
+
+@dataclass
+class WAFReviewSession:
+    """Complete WAF Review session state"""
+    # Session info
+    session_id: str
+    created_at: datetime
+    updated_at: datetime
+    current_phase: ReviewPhase = ReviewPhase.SETUP
     
-    # Automated scanning
-    landscape_scan_id: Optional[str] = None
-    automated_findings: List[Dict] = field(default_factory=list)
+    # Account configuration
+    accounts: List[Dict] = field(default_factory=list)
+    scan_source: str = "direct"  # direct, security_hub, import
+    regions: List[str] = field(default_factory=lambda: ["us-east-1"])
+    
+    # Scan results
+    scan_completed: bool = False
     scan_timestamp: Optional[datetime] = None
+    findings: List[Finding] = field(default_factory=list)
+    resources_scanned: int = 0
+    services_scanned: int = 0
     
-    # AI Analysis
-    ai_recommendations: Dict[str, Any] = field(default_factory=dict)
-    ai_summary: str = ""
-    ai_executive_summary: str = ""
-    ai_analysis_timestamp: Optional[datetime] = None
+    # Questionnaire
+    questionnaire_completed: bool = False
+    responses: List[QuestionResponse] = field(default_factory=list)
+    auto_detected_count: int = 0
+    manual_required_count: int = 0
     
-    # Historical comparison
-    previous_assessment_id: Optional[str] = None
-    improvement_score: float = 0.0
-    improvements_made: List[str] = field(default_factory=list)
+    # Scores
+    pillar_scores: Dict[str, PillarScore] = field(default_factory=dict)
+    overall_score: float = 0.0
+    initial_score: float = 0.0  # Before remediation
     
-    # Benchmarking
-    industry_benchmark_score: float = 0.0
-    peer_comparison_percentile: int = 0
+    # Remediation
+    remediation_items: List[RemediationItem] = field(default_factory=list)
+    remediation_deployed: int = 0
+    remediation_pending: int = 0
     
-    # Metadata
-    tags: List[str] = field(default_factory=list)
-    notes: str = ""
-    
-    def calculate_score(self, questions: List[Question]) -> float:
-        """Calculate overall assessment score"""
-        if not self.responses:
-            return 0.0
-        
-        total_points = 0
-        max_points = 0
-        
-        for question in questions:
-            if question.id in self.responses:
-                response = self.responses[question.id]
-                choice = next((c for c in question.choices if c.id == response.choice_id), None)
-                if choice:
-                    total_points += choice.points
-            max_points += 100
-        
-        return (total_points / max_points * 100) if max_points > 0 else 0.0
-    
-    def calculate_pillar_score(self, pillar: Pillar, questions: List[Question]) -> float:
-        """Calculate score for specific pillar"""
-        pillar_questions = [q for q in questions if q.pillar == pillar]
-        if not pillar_questions:
-            return 0.0
-        
-        total_points = 0
-        max_points = 0
-        
-        for question in pillar_questions:
-            if question.id in self.responses:
-                response = self.responses[question.id]
-                choice = next((c for c in question.choices if c.id == response.choice_id), None)
-                if choice:
-                    total_points += choice.points
-            max_points += 100
-        
-        return (total_points / max_points * 100) if max_points > 0 else 0.0
-    
-    def get_risk_items_by_level(self, level: RiskLevel) -> List[ActionItem]:
-        """Get action items by risk level"""
-        return [item for item in self.action_items if item.risk_level == level]
-    
-    def get_high_priority_items(self) -> List[ActionItem]:
-        """Get high priority action items"""
-        high_risk = self.get_risk_items_by_level(RiskLevel.HIGH)
-        critical_risk = self.get_risk_items_by_level(RiskLevel.CRITICAL)
-        return sorted(critical_risk + high_risk, key=lambda x: x.priority)
-    
-    def get_quick_wins(self) -> List[ActionItem]:
-        """Get quick win opportunities"""
-        quick_efforts = ["minutes", "1 hour", "2 hours", "half day"]
-        return [item for item in self.action_items
-                if any(effort in item.estimated_effort.lower() for effort in quick_efforts)
-                and item.risk_level in [RiskLevel.HIGH, RiskLevel.MEDIUM]
-                and item.status != "Completed"][:10]
-    
-    def export_summary(self) -> Dict:
-        """Export summary for reporting"""
-        return {
-            'id': self.id,
-            'workload': self.workload_name,
-            'organization': self.organization_name,
-            'environment': self.environment,
-            'overall_score': round(self.overall_score, 1),
-            'completion': round(self.completion_percentage, 1),
-            'pillar_scores': {k: round(v, 1) for k, v in self.pillar_scores.items()},
-            'high_risk_count': len(self.get_risk_items_by_level(RiskLevel.HIGH)),
-            'critical_risk_count': len(self.get_risk_items_by_level(RiskLevel.CRITICAL)),
-            'quick_wins': len(self.get_quick_wins()),
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat()
+    # Re-scan
+    rescan_completed: bool = False
+    rescan_timestamp: Optional[datetime] = None
+    final_score: float = 0.0
+    score_improvement: float = 0.0
+
+# ============================================================================
+# WAF QUESTIONNAIRE DEFINITIONS - 195+ Questions
+# ============================================================================
+
+# Use complete 195-question database if available, otherwise use fallback
+if USE_COMPLETE_QUESTIONS:
+    # Convert keys from waf_questions_complete's WAFPillar to our local WAFPillar
+    # This is needed because Python enums with same values are different objects
+    WAF_QUESTIONS = {}
+    for pillar in WAFPillar:
+        # Find matching key in WAF_QUESTIONS_COMPLETE by value
+        for key in WAF_QUESTIONS_COMPLETE.keys():
+            if key.value == pillar.value:
+                WAF_QUESTIONS[pillar] = WAF_QUESTIONS_COMPLETE[key]
+                break
+else:
+    # Fallback: Basic 43-question set (if waf_questions_complete.py not found)
+    WAF_QUESTIONS = {
+        WAFPillar.SECURITY: [
+            {
+                "id": "SEC-01",
+                "question": "How do you securely operate your workload?",
+                "description": "Operating workloads securely includes establishing security practices, detecting security events, and protecting against unauthorized access.",
+                "scan_detectable": True,
+            "detection_services": ["IAM", "CloudTrail", "GuardDuty", "Security Hub"],
+            "best_practices": [
+                "Separate workloads using accounts",
+                "Secure AWS account root user",
+                "Enforce MFA for human identities",
+                "Keep credentials and secrets secure"
+            ]
+        },
+        {
+            "id": "SEC-02",
+            "question": "How do you manage identities for people and machines?",
+            "description": "Strong identity foundation ensures only authorized identities access resources.",
+            "scan_detectable": True,
+            "detection_services": ["IAM", "Organizations", "SSO"],
+            "best_practices": [
+                "Use IAM Identity Center for workforce identities",
+                "Use IAM roles for applications",
+                "Implement least privilege access",
+                "Regularly review and remove unused permissions"
+            ]
+        },
+        {
+            "id": "SEC-03",
+            "question": "How do you manage permissions for people and machines?",
+            "description": "Manage permissions to control access to AWS and your workload.",
+            "scan_detectable": True,
+            "detection_services": ["IAM", "IAM Access Analyzer"],
+            "best_practices": [
+                "Define access requirements",
+                "Grant least privilege access",
+                "Establish emergency access process",
+                "Reduce permissions continuously"
+            ]
+        },
+        {
+            "id": "SEC-04",
+            "question": "How do you detect and investigate security events?",
+            "description": "Capture and analyze events from logs and metrics to gain visibility.",
+            "scan_detectable": True,
+            "detection_services": ["CloudTrail", "CloudWatch", "GuardDuty", "Security Hub"],
+            "best_practices": [
+                "Configure service and application logging",
+                "Analyze logs, findings, and metrics centrally",
+                "Automate response to events",
+                "Implement actionable security events"
+            ]
+        },
+        {
+            "id": "SEC-05",
+            "question": "How do you protect your network resources?",
+            "description": "Workloads require multiple layers of defense to protect from attacks.",
+            "scan_detectable": True,
+            "detection_services": ["VPC", "WAF", "Shield", "Network Firewall"],
+            "best_practices": [
+                "Create network layers",
+                "Control traffic at all layers",
+                "Automate network protection",
+                "Implement inspection and protection"
+            ]
+        },
+        {
+            "id": "SEC-06",
+            "question": "How do you protect your compute resources?",
+            "description": "Compute resources require multiple layers of defense.",
+            "scan_detectable": True,
+            "detection_services": ["EC2", "Lambda", "ECS", "Inspector"],
+            "best_practices": [
+                "Perform vulnerability management",
+                "Reduce attack surface",
+                "Implement managed services",
+                "Automate compute protection"
+            ]
+        },
+        {
+            "id": "SEC-07",
+            "question": "How do you classify your data?",
+            "description": "Classification provides a way to categorize data based on criticality.",
+            "scan_detectable": False,
+            "detection_services": ["Macie"],
+            "best_practices": [
+                "Identify data within your workload",
+                "Define data protection controls",
+                "Automate identification and classification",
+                "Define data lifecycle management"
+            ]
+        },
+        {
+            "id": "SEC-08",
+            "question": "How do you protect your data at rest?",
+            "description": "Protect data at rest by implementing encryption and access controls.",
+            "scan_detectable": True,
+            "detection_services": ["S3", "RDS", "EBS", "KMS"],
+            "best_practices": [
+                "Implement secure key management",
+                "Enforce encryption at rest",
+                "Automate data at rest protection",
+                "Enforce access control"
+            ]
+        },
+        {
+            "id": "SEC-09",
+            "question": "How do you protect your data in transit?",
+            "description": "Protect data in transit by implementing encryption.",
+            "scan_detectable": True,
+            "detection_services": ["ELB", "CloudFront", "ACM"],
+            "best_practices": [
+                "Implement secure key and certificate management",
+                "Enforce encryption in transit",
+                "Automate detection of unintended data access",
+                "Authenticate network communications"
+            ]
+        },
+        {
+            "id": "SEC-10",
+            "question": "How do you anticipate, respond to, and recover from incidents?",
+            "description": "Preparation is critical to timely investigation and response.",
+            "scan_detectable": False,
+            "detection_services": [],
+            "best_practices": [
+                "Identify key personnel and external resources",
+                "Develop incident management plans",
+                "Prepare forensic capabilities",
+                "Automate containment capability"
+            ]
         }
-
-# ============================================================================
-# COMPLETE QUESTION DATABASE - ALL 6 PILLARS (200+ QUESTIONS)
-# ============================================================================
-
-def get_complete_waf_questions() -> List[Question]:
-    """
-    Complete AWS Well-Architected Framework Question Database - ALL 205 QUESTIONS
-    
-    Comprehensive coverage across all 6 pillars:
-    - Operational Excellence: 40 questions (Organization, Prepare, Operate, Evolve)
-    - Security: 50 questions (IAM, Detection, Infrastructure, Data Protection, Incident Response)
-    - Reliability: 40 questions (Foundations, Architecture, Change, Failure Management)
-    - Performance Efficiency: 30 questions (Selection, Review, Monitoring, Tradeoffs)
-    - Cost Optimization: 30 questions (FinOps, Awareness, Resources, Demand, Optimization)
-    - Sustainability: 15 questions (Region, User, Software, Data, Hardware, Development)
-    
-    Each question includes:
-    - Multiple-choice answers with risk-based scoring (0-100 points)
-    - Best practices and guidance
-    - AWS service mappings
-    - Compliance framework mappings
-    - Help documentation links
-    - Auto-detection capabilities where applicable
-    """
-    
-    questions = []
-    
-    # Helper function to generate questions efficiently
-    def add_questions(prefix, pillar, category_base, count, start=1):
-        """Generate questions for a category"""
-        for i in range(start, start + count):
-            q_num = f"{i:03d}"
-            q_id = f"{prefix}-{q_num}"
-            
-            questions.append(Question(
-                id=q_id,
-                pillar=pillar,
-                category=f"{category_base} - Area {i}",
-                text=f"How do you implement {category_base.lower()} best practices (Area {i})?",
-                description=f"Implement comprehensive {category_base.lower()} practices to ensure workload excellence. This covers specific aspects of {category_base.lower()} that are critical for your architecture.",
-                why_important=f"{category_base} is essential for workload success. This area specifically addresses key aspects that impact reliability, security, performance, cost, and sustainability.",
-                best_practices=[
-                    f"Implement {category_base.lower()} controls and policies",
-                    f"Use automation to enforce {category_base.lower()} standards",
-                    f"Monitor and measure {category_base.lower()} effectiveness",
-                    f"Conduct regular reviews and improvements of {category_base.lower()}"
-                ],
-                choices=[
-                    Choice(
-                        id=f"{q_id}-A",
-                        text=f"Comprehensive {category_base.lower()} implementation with full automation, continuous monitoring, documented procedures, and regular reviews",
-                        risk_level=RiskLevel.NONE,
-                        points=100,
-                        guidance="Excellent! Your implementation follows AWS best practices. Continue to monitor, measure, and improve."
-                    ),
-                    Choice(
-                        id=f"{q_id}-B",
-                        text=f"Good {category_base.lower()} practices in place with some automation, basic monitoring, and documented procedures",
-                        risk_level=RiskLevel.LOW,
-                        points=70,
-                        guidance="Good foundation. Focus on increasing automation, enhancing monitoring, and establishing regular review cycles."
-                    ),
-                    Choice(
-                        id=f"{q_id}-C",
-                        text=f"Basic {category_base.lower()} implementation with manual processes, limited monitoring, and inconsistent application",
-                        risk_level=RiskLevel.MEDIUM,
-                        points=40,
-                        guidance="Document your practices, implement automated controls, establish monitoring, and create a review schedule."
-                    ),
-                    Choice(
-                        id=f"{q_id}-D",
-                        text=f"No formal {category_base.lower()} process, ad-hoc approach, or unaware of requirements",
-                        risk_level=RiskLevel.HIGH,
-                        points=0,
-                        guidance=f"CRITICAL: Immediately implement {category_base.lower()} controls. This is a significant risk to your workload."
-                    )
-                ],
-                help_link=f"https://docs.aws.amazon.com/wellarchitected/latest/framework/{pillar.value.lower().replace(' ', '-')}.html",
-                aws_services=["CloudWatch", "CloudTrail", "Config", "Systems Manager"],
-                compliance_mappings={
-                    "iso27001": ["A.12.1", "A.18.1"],
-                    "soc2": ["CC7.1", "CC7.2"],
-                    "pci_dss": ["12.1"],
-                    "hipaa": ["164.308"]
-                },
-                automated_check=f"aws_config_{category_base.lower().replace(' ', '_')}" if (i % 3 == 0) else None,
-                maturity_level=2 if i > count//2 else 1,
-                tags=[category_base.lower().replace(" ", "-"), prefix.lower().split("-")[0]]
-            ))
-    
-    # ========================================================================
-    # OPERATIONAL EXCELLENCE - 40 Questions
-    # ========================================================================
-    add_questions("OPS-ORG", Pillar.OPERATIONAL_EXCELLENCE, "Organization", 8)
-    add_questions("OPS-PREP", Pillar.OPERATIONAL_EXCELLENCE, "Prepare", 12)
-    add_questions("OPS-OPER", Pillar.OPERATIONAL_EXCELLENCE, "Operate", 12)
-    add_questions("OPS-EVOLVE", Pillar.OPERATIONAL_EXCELLENCE, "Evolve", 8)
-    
-    # ========================================================================
-    # SECURITY - 50 Questions
-    # ========================================================================
-    add_questions("SEC-IAM", Pillar.SECURITY, "Identity & Access Management", 10)
-    add_questions("SEC-DET", Pillar.SECURITY, "Detection", 10)
-    add_questions("SEC-INFRA", Pillar.SECURITY, "Infrastructure Protection", 10)
-    add_questions("SEC-DATA", Pillar.SECURITY, "Data Protection", 15)
-    add_questions("SEC-IR", Pillar.SECURITY, "Incident Response", 5)
-    
-    # ========================================================================
-    # RELIABILITY - 40 Questions
-    # ========================================================================
-    add_questions("REL-FOUND", Pillar.RELIABILITY, "Foundations", 10)
-    add_questions("REL-ARCH", Pillar.RELIABILITY, "Workload Architecture", 12)
-    add_questions("REL-CHANGE", Pillar.RELIABILITY, "Change Management", 10)
-    add_questions("REL-FAIL", Pillar.RELIABILITY, "Failure Management", 8)
-    
-    # ========================================================================
-    # PERFORMANCE EFFICIENCY - 30 Questions
-    # ========================================================================
-    add_questions("PERF-SEL", Pillar.PERFORMANCE_EFFICIENCY, "Selection", 10)
-    add_questions("PERF-REV", Pillar.PERFORMANCE_EFFICIENCY, "Review", 8)
-    add_questions("PERF-MON", Pillar.PERFORMANCE_EFFICIENCY, "Monitoring", 8)
-    add_questions("PERF-TRADE", Pillar.PERFORMANCE_EFFICIENCY, "Tradeoffs", 4)
-    
-    # ========================================================================
-    # COST OPTIMIZATION - 30 Questions
-    # ========================================================================
-    add_questions("COST-CFM", Pillar.COST_OPTIMIZATION, "Cloud Financial Management", 6)
-    add_questions("COST-AWARE", Pillar.COST_OPTIMIZATION, "Expenditure Awareness", 8)
-    add_questions("COST-RES", Pillar.COST_OPTIMIZATION, "Cost-Effective Resources", 10)
-    add_questions("COST-DEMAND", Pillar.COST_OPTIMIZATION, "Manage Demand", 3)
-    add_questions("COST-OPT", Pillar.COST_OPTIMIZATION, "Optimize Over Time", 3)
-    
-    # ========================================================================
-    # SUSTAINABILITY - 15 Questions
-    # ========================================================================
-    add_questions("SUS-REG", Pillar.SUSTAINABILITY, "Region Selection", 3)
-    add_questions("SUS-USER", Pillar.SUSTAINABILITY, "User Behavior", 3)
-    add_questions("SUS-SOFT", Pillar.SUSTAINABILITY, "Software & Architecture", 3)
-    add_questions("SUS-DATA", Pillar.SUSTAINABILITY, "Data", 3)
-    add_questions("SUS-HARD", Pillar.SUSTAINABILITY, "Hardware & Services", 2)
-    add_questions("SUS-DEV", Pillar.SUSTAINABILITY, "Development", 1)
-    
-    return questions
-
-# ============================================================================
-# MAIN RENDERING FUNCTION
-# ============================================================================
-
-def run_aws_scan(assessment: Dict):
-    """Run AWS scan and auto-detect WAF answers"""
-    with st.spinner("🔍 Scanning AWS environment... This may take 1-2 minutes"):
-        try:
-            if AWS_INTEGRATION:
-                # Get AWS session from session state
-                session = st.session_state.get('aws_session')
-                
-                if not session:
-                    st.error("❌ AWS session not found. Please connect to AWS in the AWS Connector tab first.")
-                    st.info("💡 Using demo data instead")
-                    scan_results = generate_demo_scan_results()
-                else:
-                    # Try real AWS scan with valid session
-                    scanner = AWSLandscapeScanner(session)
-                    # Get default regions or use specified regions
-                    regions = st.session_state.get('aws_regions', ['us-east-1'])
-                    
-                    # Run scan with progress callback
-                    landscape_assessment = scanner.run_scan(regions)
-                    
-                    # Convert LandscapeAssessment to dict format expected by WAF module
-                    scan_results = {
-                        'findings': [
-                            {
-                                'service': f.source_service.lower(),  # Fixed: source_service not service
-                                'severity': f.severity,
-                                'message': f.description,  # Fixed: description not message
-                                'recommendation': f.recommendation,
-                                'pillar': f.pillar,
-                                'title': f.title,
-                                'affected_resources': f.affected_resources
-                            } for f in landscape_assessment.findings
-                        ],
-                        'resources': {
-                            'regions': landscape_assessment.regions_scanned,
-                            # ResourceInventory has counts (ints), not actual resource lists
-                            # Provide empty lists to maintain compatibility
-                            's3_buckets': [],
-                            'ec2_instances': [],
-                            'rds_instances': [],
-                            'lambda_functions': [],
-                            'dynamodb_tables': [],
-                            'iam_users': [],
-                            'iam_roles': [],
-                            'kms_keys': [],
-                            'security_groups': [],
-                            'vpcs': [],
-                            'eks_clusters': [],
-                            'guardduty_enabled': True,
-                            'cloudtrail_enabled': True,
-                            # Include counts as metadata
-                            '_counts': {
-                                's3_buckets': landscape_assessment.inventory.s3_buckets,
-                                'ec2_instances': landscape_assessment.inventory.ec2_instances,
-                                'rds_instances': landscape_assessment.inventory.rds_instances,
-                                'lambda_functions': landscape_assessment.inventory.lambda_functions,
-                                'dynamodb_tables': landscape_assessment.inventory.dynamodb_tables,
-                                'iam_users': landscape_assessment.inventory.iam_users,
-                                'iam_roles': landscape_assessment.inventory.iam_roles,
-                                'kms_keys': landscape_assessment.inventory.kms_keys,
-                                'vpcs': landscape_assessment.inventory.vpcs,
-                                'eks_clusters': landscape_assessment.inventory.eks_clusters,
-                            }
-                        },
-                        'overall_score': landscape_assessment.overall_score,
-                        'overall_risk': landscape_assessment.overall_risk,
-                        'pillar_scores': {k: v.__dict__ for k, v in landscape_assessment.pillar_scores.items()},
-                        'scan_duration': landscape_assessment.scan_duration_seconds,
-                        'timestamp': landscape_assessment.timestamp.isoformat()
-                    }
-            else:
-                # Use demo data
-                scan_results = generate_demo_scan_results()
-            
-            # Auto-detect answers
-            questions = get_complete_waf_questions()
-            auto_detected = WAFAutoDetector.detect_answers(scan_results, questions)
-            
-            # Update assessment
-            assessment['scan_results'] = scan_results
-            assessment['auto_detected'] = auto_detected
-            assessment['scan_completed_at'] = datetime.now().isoformat()
-            assessment['updated_at'] = datetime.now().isoformat()
-            
-            st.success(f"✅ Scan complete! Auto-detected {len(auto_detected)} questions.")
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"Scan failed: {str(e)}")
-            st.warning("Using demo data instead...")
-            
-            # Fallback to demo
-            scan_results = generate_demo_scan_results()
-            questions = get_complete_waf_questions()
-            auto_detected = WAFAutoDetector.detect_answers(scan_results, questions)
-            
-            assessment['scan_results'] = scan_results
-            assessment['auto_detected'] = auto_detected
-            assessment['scan_completed_at'] = datetime.now().isoformat()
-            assessment['updated_at'] = datetime.now().isoformat()
-            
-            st.rerun()
-
-def generate_demo_scan_results() -> Dict:
-    """Generate demo scan results for testing"""
-    return {
-        'findings': [
-            {'service': 'iam', 'severity': 'LOW', 'message': 'IAM policy follows best practices'},
-            {'service': 's3', 'severity': 'MEDIUM', 'message': '2 buckets without encryption'},
-        ],
-        'resources': {
-            'regions': ['us-east-1', 'us-west-2'],
-            's3_buckets': [
-                {'name': 'prod-data', 'encryption_enabled': True, 'lifecycle_rules': True},
-                {'name': 'dev-data', 'encryption_enabled': False, 'lifecycle_rules': False},
-            ],
-            'ec2_instances': [
-                {'instance_id': 'i-123', 'instance_type': 't3.medium', 'state': 'running'},
-                {'instance_id': 'i-456', 'instance_type': 'm5.large', 'state': 'running'},
-            ],
-            'rds_instances': [
-                {'db_identifier': 'prod-db', 'multi_az': True, 'encrypted': True},
-            ],
-            'security_groups': [
-                {'group_id': 'sg-123', 'ip_permissions': []},
-                {'group_id': 'sg-456', 'ip_permissions': [{'cidr_ip': '10.0.0.0/8'}]},
-            ],
-            'cloudwatch_alarms': [
-                {'alarm_name': 'cpu-high', 'state_value': 'OK'},
-                {'alarm_name': 'disk-full', 'state_value': 'OK'},
-            ],
-            'autoscaling_groups': [
-                {'name': 'web-asg', 'desired_capacity': 3, 'min_size': 2, 'max_size': 10},
-            ],
-            'guardduty_enabled': True,
-            'cloudtrail_enabled': True,
-            'backup_vaults': ['default'],
-            'backup_plans': ['daily-backup'],
-            'cloudfront_distributions': [{'id': 'E123', 'domain': 'cdn.example.com'}],
-            'reserved_instances': [{'id': 'ri-123', 'type': 'm5.large'}],
-            'savings_plans': [],
-            'ssm_managed_instances': ['i-123', 'i-456'],
+    ],
+    WAFPillar.RELIABILITY: [
+        {
+            "id": "REL-01",
+            "question": "How do you manage service quotas and constraints?",
+            "description": "Manage service quotas and constraints to prevent unexpected failures.",
+            "scan_detectable": True,
+            "detection_services": ["Service Quotas", "Trusted Advisor"],
+            "best_practices": [
+                "Aware of service quotas and constraints",
+                "Manage service quotas across accounts and regions",
+                "Accommodate fixed service quotas and constraints",
+                "Monitor and manage quotas"
+            ]
+        },
+        {
+            "id": "REL-02",
+            "question": "How do you plan your network topology?",
+            "description": "Plan network topology to support connectivity and redundancy.",
+            "scan_detectable": True,
+            "detection_services": ["VPC", "Direct Connect", "Transit Gateway"],
+            "best_practices": [
+                "Use highly available network connectivity",
+                "Provision redundant connectivity between networks",
+                "Ensure IP subnet allocation accounts for expansion",
+                "Prefer hub-and-spoke topologies"
+            ]
+        },
+        {
+            "id": "REL-03",
+            "question": "How do you design your workload service architecture?",
+            "description": "Design distributed systems to prevent failures and improve recovery.",
+            "scan_detectable": False,
+            "detection_services": [],
+            "best_practices": [
+                "Choose how to segment your workload",
+                "Build services focused on specific business domains",
+                "Provide service contracts per API"
+            ]
+        },
+        {
+            "id": "REL-04",
+            "question": "How do you design interactions to prevent failures?",
+            "description": "Distributed systems must be designed to handle failures gracefully.",
+            "scan_detectable": False,
+            "detection_services": [],
+            "best_practices": [
+                "Identify which kind of distributed system is required",
+                "Implement loosely coupled dependencies",
+                "Make all responses idempotent",
+                "Do constant work"
+            ]
+        },
+        {
+            "id": "REL-05",
+            "question": "How do you design interactions to mitigate or withstand failures?",
+            "description": "Implement patterns to handle failures when they occur.",
+            "scan_detectable": True,
+            "detection_services": ["ELB", "Auto Scaling", "Route 53"],
+            "best_practices": [
+                "Implement graceful degradation",
+                "Throttle requests",
+                "Control and limit retry calls",
+                "Fail fast and limit queues"
+            ]
+        },
+        {
+            "id": "REL-06",
+            "question": "How do you monitor workload resources?",
+            "description": "Monitor and alert on metrics to detect issues before impact.",
+            "scan_detectable": True,
+            "detection_services": ["CloudWatch", "X-Ray", "CloudTrail"],
+            "best_practices": [
+                "Monitor all components for the workload",
+                "Define and calculate metrics",
+                "Send notifications based on KPIs",
+                "Automate responses based on metrics"
+            ]
+        },
+        {
+            "id": "REL-07",
+            "question": "How do you design your workload to adapt to changes in demand?",
+            "description": "Scale resources to maintain availability during demand changes.",
+            "scan_detectable": True,
+            "detection_services": ["Auto Scaling", "ECS", "Lambda"],
+            "best_practices": [
+                "Use automation when obtaining or scaling resources",
+                "Obtain resources upon detection of impairment",
+                "Obtain resources upon detection of demand",
+                "Load test your workload"
+            ]
+        },
+        {
+            "id": "REL-08",
+            "question": "How do you implement change?",
+            "description": "Controlled changes are necessary but require careful management.",
+            "scan_detectable": True,
+            "detection_services": ["CloudFormation", "Config", "Systems Manager"],
+            "best_practices": [
+                "Use runbooks for standard activities",
+                "Integrate functional testing in deployment",
+                "Integrate resiliency testing in deployment",
+                "Deploy using immutable infrastructure"
+            ]
+        },
+        {
+            "id": "REL-09",
+            "question": "How do you back up data?",
+            "description": "Back up data, applications, and configuration to recover from failures.",
+            "scan_detectable": True,
+            "detection_services": ["Backup", "S3", "RDS", "EBS"],
+            "best_practices": [
+                "Identify and back up all data that needs to be backed up",
+                "Secure and encrypt backups",
+                "Perform data backup automatically",
+                "Perform periodic recovery of the data"
+            ]
+        },
+        {
+            "id": "REL-10",
+            "question": "How do you use fault isolation to protect your workload?",
+            "description": "Fault isolation boundaries limit the blast radius of failures.",
+            "scan_detectable": True,
+            "detection_services": ["Multi-AZ", "Route 53", "Global Accelerator"],
+            "best_practices": [
+                "Deploy the workload to multiple locations",
+                "Automate recovery for components constrained to a single location",
+                "Use bulkhead architectures to limit scope of impact"
+            ]
         }
-    }
+    ],
+    WAFPillar.OPERATIONAL_EXCELLENCE: [
+        {
+            "id": "OPS-01",
+            "question": "How do you determine what your priorities are?",
+            "description": "Understanding business priorities helps focus operational efforts.",
+            "scan_detectable": False,
+            "detection_services": [],
+            "best_practices": [
+                "Evaluate external customer needs",
+                "Evaluate internal customer needs",
+                "Evaluate governance requirements",
+                "Evaluate compliance requirements"
+            ]
+        },
+        {
+            "id": "OPS-02",
+            "question": "How do you structure your organization to support your business outcomes?",
+            "description": "Teams must have clear ownership and understanding of their roles.",
+            "scan_detectable": False,
+            "detection_services": [],
+            "best_practices": [
+                "Resources have identified owners",
+                "Processes and procedures have identified owners",
+                "Operations activities have identified owners responsible",
+                "Team members know what they are responsible for"
+            ]
+        },
+        {
+            "id": "OPS-03",
+            "question": "How does your organizational culture support your business outcomes?",
+            "description": "Culture should support experimentation, learning, and improvement.",
+            "scan_detectable": False,
+            "detection_services": [],
+            "best_practices": [
+                "Executive Sponsorship",
+                "Team members are empowered to take action",
+                "Escalation is encouraged",
+                "Communications are timely, clear, and actionable"
+            ]
+        },
+        {
+            "id": "OPS-04",
+            "question": "How do you design your workload so that you can understand its state?",
+            "description": "Design workloads with observability features for operational visibility.",
+            "scan_detectable": True,
+            "detection_services": ["CloudWatch", "X-Ray", "CloudTrail"],
+            "best_practices": [
+                "Implement application telemetry",
+                "Implement and configure workload telemetry",
+                "Implement user activity telemetry",
+                "Implement dependency telemetry"
+            ]
+        },
+        {
+            "id": "OPS-05",
+            "question": "How do you reduce defects, ease remediation, and improve flow into production?",
+            "description": "Adopt approaches that improve flow of changes and reduce defects.",
+            "scan_detectable": True,
+            "detection_services": ["CodePipeline", "CodeBuild", "CodeDeploy"],
+            "best_practices": [
+                "Use version control",
+                "Test and validate changes",
+                "Use configuration management systems",
+                "Use build and deployment management systems"
+            ]
+        }
+    ],
+    WAFPillar.PERFORMANCE_EFFICIENCY: [
+        {
+            "id": "PERF-01",
+            "question": "How do you select the best performing architecture?",
+            "description": "Use data-driven approach to select high-performance architecture.",
+            "scan_detectable": False,
+            "detection_services": [],
+            "best_practices": [
+                "Understand the available services and resources",
+                "Define a process for architectural choices",
+                "Factor cost requirements into decisions",
+                "Use policies or reference architectures"
+            ]
+        },
+        {
+            "id": "PERF-02",
+            "question": "How do you select your compute solution?",
+            "description": "Select compute for your workload to improve performance.",
+            "scan_detectable": True,
+            "detection_services": ["EC2", "Lambda", "ECS", "Fargate"],
+            "best_practices": [
+                "Evaluate the available compute options",
+                "Understand the available compute configuration options",
+                "Collect compute-related metrics",
+                "Determine required configuration by right-sizing"
+            ]
+        },
+        {
+            "id": "PERF-03",
+            "question": "How do you select your storage solution?",
+            "description": "Select storage for your workload to improve performance.",
+            "scan_detectable": True,
+            "detection_services": ["S3", "EBS", "EFS", "FSx"],
+            "best_practices": [
+                "Understand storage characteristics and requirements",
+                "Evaluate available configuration options",
+                "Make decisions based on access patterns and metrics"
+            ]
+        },
+        {
+            "id": "PERF-04",
+            "question": "How do you select your database solution?",
+            "description": "Select database for your workload to improve performance.",
+            "scan_detectable": True,
+            "detection_services": ["RDS", "DynamoDB", "ElastiCache", "Redshift"],
+            "best_practices": [
+                "Understand data characteristics",
+                "Evaluate the available options",
+                "Collect and record database performance metrics",
+                "Choose data storage based on access patterns"
+            ]
+        },
+        {
+            "id": "PERF-05",
+            "question": "How do you configure your networking solution?",
+            "description": "Configure networking for your workload to improve performance.",
+            "scan_detectable": True,
+            "detection_services": ["VPC", "CloudFront", "Global Accelerator", "Direct Connect"],
+            "best_practices": [
+                "Understand how networking impacts performance",
+                "Evaluate available networking features",
+                "Choose appropriately sized dedicated connectivity",
+                "Leverage load balancing and encryption offloading"
+            ]
+        }
+    ],
+    WAFPillar.COST_OPTIMIZATION: [
+        {
+            "id": "COST-01",
+            "question": "How do you implement cloud financial management?",
+            "description": "Implementing financial management helps achieve cost optimization.",
+            "scan_detectable": False,
+            "detection_services": ["Cost Explorer", "Budgets"],
+            "best_practices": [
+                "Establish a cost optimization function",
+                "Establish a partnership between finance and technology",
+                "Establish cloud budgets and forecasts",
+                "Implement cost awareness in organizational processes"
+            ]
+        },
+        {
+            "id": "COST-02",
+            "question": "How do you govern usage?",
+            "description": "Establish policies and mechanisms to control costs.",
+            "scan_detectable": True,
+            "detection_services": ["Organizations", "Service Control Policies", "Budgets"],
+            "best_practices": [
+                "Develop policies based on your organization requirements",
+                "Implement goals and targets",
+                "Implement an account structure",
+                "Implement groups and roles"
+            ]
+        },
+        {
+            "id": "COST-03",
+            "question": "How do you monitor usage and cost?",
+            "description": "Monitor cost and usage to achieve cost optimization.",
+            "scan_detectable": True,
+            "detection_services": ["Cost Explorer", "Cost and Usage Reports", "Budgets"],
+            "best_practices": [
+                "Configure detailed information sources",
+                "Identify cost attribution categories",
+                "Establish organization metrics",
+                "Configure billing and cost management tools"
+            ]
+        },
+        {
+            "id": "COST-04",
+            "question": "How do you decommission resources?",
+            "description": "Implement change control and remove unused resources.",
+            "scan_detectable": True,
+            "detection_services": ["Trusted Advisor", "Cost Explorer", "Config"],
+            "best_practices": [
+                "Track resources over their life time",
+                "Implement a decommissioning process",
+                "Decommission resources automatically",
+                "Enforce data retention policies"
+            ]
+        },
+        {
+            "id": "COST-05",
+            "question": "How do you evaluate cost when you select services?",
+            "description": "Consider cost when selecting AWS services.",
+            "scan_detectable": False,
+            "detection_services": [],
+            "best_practices": [
+                "Identify organization requirements for cost",
+                "Analyze all components of this workload",
+                "Perform a thorough analysis of each component",
+                "Select software with cost-effective licensing"
+            ]
+        },
+        {
+            "id": "COST-06",
+            "question": "How do you meet cost targets when you select resource type, size, and number?",
+            "description": "Right-size resources for cost optimization.",
+            "scan_detectable": True,
+            "detection_services": ["Compute Optimizer", "Trusted Advisor", "Cost Explorer"],
+            "best_practices": [
+                "Perform cost modeling",
+                "Select resource type and size based on data",
+                "Select resource type and size automatically based on metrics"
+            ]
+        },
+        {
+            "id": "COST-07",
+            "question": "How do you use pricing models to reduce cost?",
+            "description": "Use pricing models to reduce cost.",
+            "scan_detectable": True,
+            "detection_services": ["Cost Explorer", "Reserved Instances", "Savings Plans"],
+            "best_practices": [
+                "Perform pricing model analysis",
+                "Implement regions based on cost",
+                "Select third-party agreements with cost-efficient terms",
+                "Implement pricing models for all components of this workload"
+            ]
+        },
+        {
+            "id": "COST-08",
+            "question": "How do you plan for data transfer charges?",
+            "description": "Plan and monitor data transfer to reduce costs.",
+            "scan_detectable": True,
+            "detection_services": ["Cost Explorer", "VPC Flow Logs"],
+            "best_practices": [
+                "Perform data transfer modeling",
+                "Select components to optimize data transfer cost",
+                "Implement services to reduce data transfer costs"
+            ]
+        }
+    ],
+    WAFPillar.SUSTAINABILITY: [
+        {
+            "id": "SUS-01",
+            "question": "How do you select Regions to support your sustainability goals?",
+            "description": "Choose Regions close to users and with lower carbon intensity.",
+            "scan_detectable": False,
+            "detection_services": [],
+            "best_practices": [
+                "Choose Regions near Amazon renewable energy projects",
+                "Choose Regions with lower carbon intensity"
+            ]
+        },
+        {
+            "id": "SUS-02",
+            "question": "How do you take advantage of user behavior patterns to support your sustainability goals?",
+            "description": "Align resources provisioned with customer demand.",
+            "scan_detectable": True,
+            "detection_services": ["CloudWatch", "Auto Scaling"],
+            "best_practices": [
+                "Analyze workload demand patterns",
+                "Optimize geographic placement of workloads based on demand",
+                "Scale infrastructure to continuously match demand"
+            ]
+        },
+        {
+            "id": "SUS-03",
+            "question": "How do you take advantage of software and architecture patterns to support your sustainability goals?",
+            "description": "Implement patterns to minimize resources needed.",
+            "scan_detectable": True,
+            "detection_services": ["Lambda", "Fargate", "S3"],
+            "best_practices": [
+                "Optimize software and architecture for asynchronous and scheduled jobs",
+                "Remove or refactor workload components with low utilization",
+                "Optimize areas of code that consume the most resources"
+            ]
+        },
+        {
+            "id": "SUS-04",
+            "question": "How do you take advantage of data access and usage patterns to support your sustainability goals?",
+            "description": "Implement data management practices to reduce resources needed.",
+            "scan_detectable": True,
+            "detection_services": ["S3", "EBS", "RDS"],
+            "best_practices": [
+                "Implement a data classification policy",
+                "Use technologies that support data access and storage patterns",
+                "Use lifecycle policies to delete unnecessary data"
+            ]
+        },
+        {
+            "id": "SUS-05",
+            "question": "How do your hardware management and usage practices support your sustainability goals?",
+            "description": "Use managed services and efficient hardware.",
+            "scan_detectable": True,
+            "detection_services": ["EC2", "Graviton", "Compute Optimizer"],
+            "best_practices": [
+                "Use efficient hardware for your workload",
+                "Use managed services",
+                "Optimize your use of hardware-based compute accelerators"
+            ]
+        }
+    ]
+}
 
 # ============================================================================
-# TAB RENDERING FUNCTIONS
+# MAIN WORKFLOW ENGINE
 # ============================================================================
 
-def render_waf_review_tab():
-    """
-    Main rendering function for the WAF Assessment Hub.
-    This consolidates: AWS Scanner + WAF Review + WAF Results into one integrated experience.
-    """
-    st.markdown("""
-    <div style="background: linear-gradient(135deg, #FF9900 0%, #EC7211 100%); 
-                padding: 2rem; border-radius: 12px; margin-bottom: 2rem;">
-        <h2 style="color: white; margin: 0;">🏗️ AWS Well-Architected Assessment Hub</h2>
-        <p style="color: white; opacity: 0.9; margin: 0.5rem 0 0 0;">
-            Complete WAF assessments with AI assistance, automated scanning, and comprehensive reporting
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+class WAFReviewWorkflow:
+    """Main workflow engine for comprehensive WAF review"""
     
-    # Initialize session state
-    if 'waf_assessments' not in st.session_state:
-        st.session_state.waf_assessments = {}
+    def __init__(self):
+        self.session_key = "waf_review_session"
+        self._initialize_session()
+    
+    def _initialize_session(self):
+        """Initialize or restore session state"""
+        if self.session_key not in st.session_state:
+            st.session_state[self.session_key] = WAFReviewSession(
+                session_id=hashlib.md5(str(datetime.now()).encode()).hexdigest()[:12],
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+    
+    @property
+    def session(self) -> WAFReviewSession:
+        return st.session_state[self.session_key]
+    
+    def _get_user_id(self) -> Optional[str]:
+        """Get current user ID for Firebase storage"""
+        user_info = st.session_state.get('user_info', {})
+        return user_info.get('id') or user_info.get('email', 'anonymous')
+    
+    def save_progress(self) -> bool:
+        """Save questionnaire progress to Firebase"""
+        if not FIREBASE_AVAILABLE:
+            st.warning("⚠️ Firebase not available - progress saved locally only")
+            return False
         
-        # LOAD ASSESSMENTS FROM FIREBASE
         try:
-            from firebase_database_helper import list_user_assessments
+            db = get_database_manager()
+            if not db or not db.db_ref:
+                st.warning("⚠️ Database connection not available")
+                return False
             
-            # Check if Firebase is initialized
-            if st.session_state.get('firebase_initialized', False):
-                # Load all user's assessments from Firebase
-                success, message, assessments_list = list_user_assessments()
-                
-                if success and assessments_list:
-                    # Convert list to dict keyed by assessment_id
-                    firebase_assessments = {}
-                    for assessment in assessments_list:
-                        assessment_id = assessment.get('assessment_id') or assessment.get('id')
-                        if assessment_id:
-                            firebase_assessments[assessment_id] = assessment
-                    
-                    st.session_state.waf_assessments = firebase_assessments
-                    
-                    # Show success message
-                    if len(firebase_assessments) > 0:
-                        st.toast(f"✅ Loaded {len(firebase_assessments)} assessment(s) from Firebase")
-        except Exception as e:
-            # If Firebase not available, just use empty dict
-            st.session_state.waf_assessments = {}
-    
-    if 'current_waf_assessment_id' not in st.session_state:
-        st.session_state.current_waf_assessment_id = None
-    
-    # Main Hub Navigation
-    current_assessment_id = st.session_state.current_waf_assessment_id
-    
-    # Hub-level tabs (main sections of the hub)
-    # NOTE: Quick Scan removed - now available in WAF Scanner tab as a scan mode
-    hub_tabs = st.tabs([
-        "📋 My Assessments",
-        "📊 Analytics & Trends",
-        "📋 Compliance View"
-    ])
-    
-    with hub_tabs[0]:
-        # My Assessments section - shows list or active assessment
-        if not current_assessment_id or current_assessment_id not in st.session_state.waf_assessments:
-            render_assessments_list()
-        else:
-            render_assessment_workspace()
-    
-    with hub_tabs[1]:
-        # Analytics & Trends - compare assessments over time
-        render_analytics_dashboard()
-    
-    with hub_tabs[2]:
-        # Compliance View - integrated compliance from WAF data
-        render_compliance_view()
-
-def render_assessments_list():
-    """Render the list of all assessments with creation option"""
-    
-    # Info banner about Quick Scan moving to WAF Scanner
-    st.info("""
-    💡 **Looking for Quick Scan?** It's now in the **🔍 WAF Scanner** tab with enhanced features:
-    - AI-powered analysis
-    - Professional PDF reports
-    - Multiple scan modes (Quick/Standard/Comprehensive)
-    - Complete WAF framework mapping
-    """)
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("### 📋 Your WAF Assessments")
-        
-        assessments = st.session_state.waf_assessments
-        
-        if not assessments:
-            st.info("👋 No assessments yet. Create your first comprehensive WAF assessment with AI assistance and automated scanning!")
-        else:
-            # Sort by updated date
-            sorted_assessments = sorted(
-                assessments.items(),
-                key=lambda x: x[1].get('updated_at', ''),
-                reverse=True
-            )
+            user_id = self._get_user_id()
+            if not user_id:
+                st.warning("⚠️ Please log in to save progress")
+                return False
             
-            for assessment_id, assessment in sorted_assessments:
-                with st.container():
-                    col_a, col_b, col_c, col_d = st.columns([4, 1, 1, 1])
-                    
-                    with col_a:
-                        status_icon = "✅" if assessment.get('status') == 'completed' else "🔄"
-                        st.markdown(f"{status_icon} **{assessment.get('name', 'Unnamed Assessment')}**")
-                        
-                        # Show key metrics
-                        progress = assessment.get('progress', 0)
-                        score = assessment.get('overall_score', 0)
-                        auto_detected = len(assessment.get('auto_detected', {}))
-                        
-                        metric_text = f"Progress: {progress}%"
-                        if score > 0:
-                            metric_text += f" | Score: {score:.0f}/100"
-                        if auto_detected > 0:
-                            metric_text += f" | ✅ {auto_detected} auto-detected"
-                        
-                        st.caption(f"Created: {assessment.get('created_at', 'Unknown')[:10]} | {metric_text}")
-                    
-                    with col_b:
-                        if st.button("📖 Open", key=f"open_{assessment_id}", use_container_width=True):
-                            st.session_state.current_waf_assessment_id = assessment_id
-                            st.rerun()
-                    
-                    with col_c:
-                        if assessment.get('status') == 'completed' or assessment.get('progress', 0) >= 80:
-                            if st.button("📄 Report", key=f"report_{assessment_id}", use_container_width=True):
-                                st.session_state.current_waf_assessment_id = assessment_id
-                                st.session_state.show_report = True
-                                st.rerun()
-                    
-                    with col_d:
-                        if st.button("🗑️", key=f"delete_{assessment_id}", help="Delete assessment"):
-                            if st.session_state.get(f'confirm_delete_{assessment_id}', False):
-                                del st.session_state.waf_assessments[assessment_id]
-                                st.session_state.pop(f'confirm_delete_{assessment_id}', None)
-                                st.success("Deleted!")
-                                st.rerun()
-                            else:
-                                st.session_state[f'confirm_delete_{assessment_id}'] = True
-                                st.warning("Click again to confirm deletion")
-                    
-                    st.divider()
-    
-    with col2:
-        st.markdown("### ➕ Create New Assessment")
-        
-        with st.form("main_new_assessment_form"):
-            st.caption("Create a comprehensive WAF assessment with AI assistance and automated scanning")
-            
-            assessment_name = st.text_input(
-                "Assessment Name *",
-                placeholder="e.g., Production Workload Q4 2024"
-            )
-            
-            workload_name = st.text_input(
-                "Workload Name *",
-                placeholder="e.g., E-commerce Platform"
-            )
-            
-            col_type, col_env = st.columns(2)
-            with col_type:
-                assessment_type = st.selectbox(
-                    "Type",
-                    ["Quick (30 min)", "Standard (2 hours)", "Comprehensive (1 day)"]
-                )
-            
-            with col_env:
-                environment = st.selectbox(
-                    "Environment",
-                    ["Production", "Staging", "Development", "DR"]
-                )
-            
-            aws_account = st.text_input(
-                "AWS Account ID",
-                placeholder="123456789012"
-            )
-            
-            # Smart Scanning option
-            st.markdown("---")
-            st.markdown("**🔍 Smart Features**")
-            
-            col_scan, col_ai = st.columns(2)
-            with col_scan:
-                enable_scanning = st.checkbox(
-                    "Auto-scan AWS",
-                    value=True,
-                    help="Automatically scan and pre-fill 60-80 answers"
-                )
-            
-            with col_ai:
-                enable_ai = st.checkbox(
-                    "AI assistance",
-                    value=True,
-                    help="Get AI explanations for all questions"
-                )
-            
-            if enable_scanning:
-                st.success("✅ Will auto-detect 60-80 questions (~30-40%)")
-            if enable_ai:
-                st.success("✅ AI will explain all questions")
-            
-            submitted = st.form_submit_button("🚀 Create Assessment", use_container_width=True, type="primary")
-            
-            if submitted:
-                if not assessment_name or not workload_name:
-                    st.error("Please provide assessment and workload names")
-                else:
-                    # Create new assessment
-                    assessment_id = str(uuid.uuid4())
-                    
-                    new_assessment = {
-                        'assessment_id': assessment_id,  # Added for Firebase compatibility
-                        'id': assessment_id,
-                        'name': assessment_name,
-                        'workload_name': workload_name,
-                        'type': assessment_type,
-                        'environment': environment,
-                        'aws_account': aws_account,
-                        'created_at': datetime.now().isoformat(),
-                        'updated_at': datetime.now().isoformat(),
-                        'progress': 0,
-                        'overall_score': 0,
-                        'responses': {},
-                        'scores': {},
-                        'action_items': [],
-                        'status': 'in_progress',
-                        'enable_scanning': enable_scanning,
-                        'enable_ai': enable_ai,
-                        'scan_results': None,
-                        'auto_detected': {}
-                    }
-                    
-                    # Save to session state
-                    st.session_state.waf_assessments[assessment_id] = new_assessment
-                    st.session_state.current_waf_assessment_id = assessment_id
-                    
-                    # SAVE TO FIREBASE
-                    try:
-                        from firebase_database_helper import save_assessment_to_firebase
-                        
-                        if st.session_state.get('firebase_initialized', False):
-                            success, message = save_assessment_to_firebase(assessment_id, new_assessment)
-                            if success:
-                                st.success(f"✅ Created: {assessment_name} (Saved to Firebase)")
-                            else:
-                                st.success(f"✅ Created: {assessment_name} (Local only - Firebase: {message})")
-                        else:
-                            st.success(f"✅ Created: {assessment_name} (Local only)")
-                            st.info("💡 Enable Firebase to persist assessments across sessions")
-                    except:
-                        st.success(f"✅ Created: {assessment_name} (Local only)")
-                    
-                    # If scanning enabled, trigger scan on next screen
-                    if enable_scanning:
-                        st.session_state.trigger_scan = True
-                    
-                    st.rerun()
-
-def render_quick_scan():
-    """Standalone AWS scanning without creating full assessment"""
-    st.markdown("### 🔍 Quick AWS Scan")
-    st.info("Quickly scan your AWS environment for security, compliance, and cost findings without creating a full assessment.")
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("**What gets scanned:**")
-        scan_items = [
-            "🔒 Security: IAM, Encryption, Security Groups, GuardDuty",
-            "🛡️ Reliability: Multi-AZ, Backups, Auto-scaling",
-            "⚙️ Operations: CloudWatch, Logs, Systems Manager",
-            "⚡ Performance: Instance types, CloudFront",
-            "💰 Cost: Reserved Instances, Storage optimization",
-            "🌱 Sustainability: Region carbon footprint"
-        ]
-        for item in scan_items:
-            st.caption(item)
-    
-    with col2:
-        aws_account = st.text_input("AWS Account (optional)", placeholder="123456789012")
-        region = st.selectbox("Primary Region", ["us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"])
-        
-        if st.button("🔍 Run Quick Scan", use_container_width=True, type="primary"):
-            run_standalone_scan(aws_account, region)
-    
-    # Show last scan results if available
-    if 'last_quick_scan' in st.session_state:
-        st.markdown("---")
-        st.markdown("### 📊 Last Scan Results")
-        
-        scan_data = st.session_state.last_quick_scan
-        
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        with col_m1:
-            st.metric("Security Findings", scan_data.get('security_count', 0))
-        with col_m2:
-            st.metric("Reliability Issues", scan_data.get('reliability_count', 0))
-        with col_m3:
-            st.metric("Cost Opportunities", scan_data.get('cost_count', 0))
-        with col_m4:
-            st.metric("Resources Scanned", scan_data.get('resource_count', 0))
-        
-        # Detailed findings
-        with st.expander("📋 View Detailed Findings"):
-            findings = scan_data.get('findings', [])
-            if findings:
-                for finding in findings[:20]:  # Show first 20
-                    severity = finding.get('severity', 'INFO')
-                    severity_icon = "🔴" if severity == "CRITICAL" else "🟠" if severity == "HIGH" else "🟡" if severity == "MEDIUM" else "ℹ️"
-                    st.markdown(f"{severity_icon} **{finding.get('title', 'Finding')}**")
-                    st.caption(finding.get('message', ''))
-                    st.divider()
-            else:
-                st.info("No significant findings detected. Great job! 🎉")
-        
-        # Option to create full assessment from scan
-        if st.button("📝 Create Full Assessment from This Scan", type="secondary"):
-            # Create assessment with scan data pre-loaded
-            assessment_id = str(uuid.uuid4())
-            new_assessment = {
-                'id': assessment_id,
-                'name': f"Assessment from Quick Scan {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                'workload_name': f"Account {aws_account or 'Unknown'}",
-                'type': "Standard (2 hours)",
-                'environment': "Production",
-                'aws_account': aws_account or '',
-                'created_at': datetime.now().isoformat(),
+            # Prepare data for saving
+            progress_data = {
+                'session_id': self.session.session_id,
                 'updated_at': datetime.now().isoformat(),
-                'progress': 0,
-                'responses': {},
-                'scores': {},
-                'action_items': [],
-                'status': 'in_progress',
-                'enable_scanning': True,
-                'enable_ai': True,
-                'scan_results': scan_data.get('scan_results'),
-                'auto_detected': scan_data.get('auto_detected', {})
-            }
-            
-            st.session_state.waf_assessments[assessment_id] = new_assessment
-            st.session_state.current_waf_assessment_id = assessment_id
-            st.success("✅ Assessment created with scan data!")
-            st.rerun()
-
-def run_standalone_scan(aws_account: str, region: str):
-    """Run a standalone scan without assessment"""
-    with st.spinner("🔍 Scanning AWS environment..."):
-        try:
-            if AWS_INTEGRATION:
-                # Get AWS session from session state
-                session = st.session_state.get('aws_session')
-                
-                if not session:
-                    st.error("❌ AWS session not found. Please connect to AWS in the AWS Connector tab first.")
-                    st.info("💡 Using demo data instead")
-                    scan_results = generate_demo_scan_results()
-                else:
-                    # Try real AWS scan with valid session
-                    scanner = AWSLandscapeScanner(session)
-                    # Use provided region or default
-                    regions = [region] if region else ['us-east-1']
-                    
-                    # Run scan
-                    landscape_assessment = scanner.run_scan(regions)
-                    
-                    # Convert LandscapeAssessment to dict format
-                    scan_results = {
-                        'findings': [
-                            {
-                                'service': f.source_service.lower(),  # Fixed: source_service not service
-                                'severity': f.severity,
-                                'message': f.description,  # Fixed: description not message
-                                'recommendation': f.recommendation,
-                                'pillar': f.pillar,
-                                'title': f.title,
-                                'affected_resources': f.affected_resources
-                            } for f in landscape_assessment.findings
-                        ],
-                        'resources': {
-                            'regions': landscape_assessment.regions_scanned,
-                            # ResourceInventory has counts (ints), not actual resource lists
-                            # Provide empty lists to maintain compatibility
-                            's3_buckets': [],
-                            'ec2_instances': [],
-                            'rds_instances': [],
-                            'lambda_functions': [],
-                            'dynamodb_tables': [],
-                            'iam_users': [],
-                            'iam_roles': [],
-                            'kms_keys': [],
-                            'vpcs': [],
-                            'eks_clusters': [],
-                            # Include counts as metadata
-                            '_counts': {
-                                's3_buckets': landscape_assessment.inventory.s3_buckets,
-                                'ec2_instances': landscape_assessment.inventory.ec2_instances,
-                                'rds_instances': landscape_assessment.inventory.rds_instances,
-                                'lambda_functions': landscape_assessment.inventory.lambda_functions,
-                                'dynamodb_tables': landscape_assessment.inventory.dynamodb_tables,
-                                'iam_users': landscape_assessment.inventory.iam_users,
-                                'iam_roles': landscape_assessment.inventory.iam_roles,
-                                'kms_keys': landscape_assessment.inventory.kms_keys,
-                                'vpcs': landscape_assessment.inventory.vpcs,
-                                'eks_clusters': landscape_assessment.inventory.eks_clusters,
-                            }
-                        },
-                        'overall_score': landscape_assessment.overall_score,
-                        'overall_risk': landscape_assessment.overall_risk,
+                'current_phase': self.session.current_phase.value,
+                'scan_completed': self.session.scan_completed,
+                'questionnaire_completed': self.session.questionnaire_completed,
+                'responses': [
+                    {
+                        'question_id': r.question_id,
+                        'pillar': r.pillar,
+                        'response': r.response,
+                        'auto_detected': r.auto_detected,
+                        'confidence': r.confidence,
+                        'notes': r.notes
                     }
-            else:
-                scan_results = generate_demo_scan_results()
-            
-            # Auto-detect for summary
-            questions = get_complete_waf_questions()
-            auto_detected = WAFAutoDetector.detect_answers(scan_results, questions)
-            
-            # Count findings by severity
-            findings = scan_results.get('findings', [])
-            security_count = len([f for f in findings if 'security' in f.get('service', '').lower()])
-            reliability_count = len([f for f in findings if any(x in f.get('message', '').lower() for x in ['backup', 'multi-az', 'availability'])])
-            cost_count = len([f for f in findings if 'cost' in f.get('message', '').lower() or 'unused' in f.get('message', '').lower()])
-            resource_count = sum(len(v) if isinstance(v, list) else 1 for v in scan_results.get('resources', {}).values())
-            
-            st.session_state.last_quick_scan = {
-                'scan_results': scan_results,
-                'auto_detected': auto_detected,
-                'findings': findings,
-                'security_count': security_count,
-                'reliability_count': reliability_count,
-                'cost_count': cost_count,
-                'resource_count': resource_count,
-                'scanned_at': datetime.now().isoformat()
+                    for r in self.session.responses
+                ],
+                'accounts': self.session.accounts,
+                'overall_score': self.session.overall_score,
+                'pillar_scores': {
+                    k: {
+                        'scan_score': v.scan_score,
+                        'questionnaire_score': v.questionnaire_score,
+                        'combined_score': v.combined_score,
+                        'findings_count': v.findings_count
+                    }
+                    for k, v in self.session.pillar_scores.items()
+                } if self.session.pillar_scores else {}
             }
             
-            st.success(f"✅ Scan complete! Found {len(findings)} findings across {resource_count} resources.")
-            st.rerun()
+            # Save to Firebase under user's progress
+            db.db_ref.child('waf_progress').child(user_id).set(progress_data)
+            return True
             
         except Exception as e:
-            st.error(f"Scan failed: {str(e)}")
-
-def render_analytics_dashboard():
-    """Show analytics and trends across assessments"""
-    st.markdown("### 📈 Analytics & Trends")
+            st.error(f"❌ Error saving progress: {str(e)}")
+            return False
     
-    assessments = st.session_state.waf_assessments
-    
-    if not assessments or len(assessments) < 2:
-        st.info("📊 Create at least 2 assessments to see trends and comparisons.")
+    def load_progress(self) -> bool:
+        """Load saved questionnaire progress from Firebase"""
+        if not FIREBASE_AVAILABLE:
+            return False
         
-        if len(assessments) == 1:
-            st.markdown("**Your current assessment:**")
-            assessment = list(assessments.values())[0]
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Progress", f"{assessment.get('progress', 0)}%")
-            with col2:
-                st.metric("Score", f"{assessment.get('overall_score', 0):.0f}/100")
-            with col3:
-                st.metric("Auto-detected", len(assessment.get('auto_detected', {})))
+        try:
+            db = get_database_manager()
+            if not db or not db.db_ref:
+                return False
+            
+            user_id = self._get_user_id()
+            if not user_id:
+                return False
+            
+            # Load from Firebase
+            progress_data = db.db_ref.child('waf_progress').child(user_id).get()
+            
+            if not progress_data:
+                return False
+            
+            # Restore responses
+            saved_responses = progress_data.get('responses', [])
+            if saved_responses:
+                self.session.responses = []
+                for r in saved_responses:
+                    self.session.responses.append(QuestionResponse(
+                        question_id=r.get('question_id', ''),
+                        pillar=r.get('pillar', ''),
+                        question_text='',  # Will be filled from questions database
+                        response=r.get('response', ''),
+                        auto_detected=r.get('auto_detected', False),
+                        confidence=r.get('confidence', 0.0),
+                        notes=r.get('notes', '')
+                    ))
+            
+            # Restore other state
+            phase_value = progress_data.get('current_phase', 'setup')
+            for phase in ReviewPhase:
+                if phase.value == phase_value:
+                    self.session.current_phase = phase
+                    break
+            
+            self.session.scan_completed = progress_data.get('scan_completed', False)
+            self.session.questionnaire_completed = progress_data.get('questionnaire_completed', False)
+            self.session.accounts = progress_data.get('accounts', [])
+            self.session.overall_score = progress_data.get('overall_score', 0.0)
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error loading progress: {e}")
+            return False
+    
+    def has_saved_progress(self) -> Tuple[bool, Optional[str]]:
+        """Check if user has saved progress"""
+        if not FIREBASE_AVAILABLE:
+            return False, None
         
-        return
+        try:
+            db = get_database_manager()
+            if not db or not db.db_ref:
+                return False, None
+            
+            user_id = self._get_user_id()
+            if not user_id:
+                return False, None
+            
+            progress_data = db.db_ref.child('waf_progress').child(user_id).get()
+            
+            if progress_data:
+                updated_at = progress_data.get('updated_at', '')
+                responses_count = len(progress_data.get('responses', []))
+                answered = len([r for r in progress_data.get('responses', []) if r.get('response')])
+                return True, f"Last saved: {updated_at[:16]} ({answered} answers)"
+            
+            return False, None
+            
+        except Exception:
+            return False, None
     
-    # Calculate trends
-    completed = [a for a in assessments.values() if a.get('status') == 'completed' or a.get('progress', 0) >= 80]
-    
-    st.markdown("### 📊 Overview")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Assessments", len(assessments))
-    with col2:
-        st.metric("Completed", len(completed))
-    with col3:
-        avg_score = sum(a.get('overall_score', 0) for a in completed) / len(completed) if completed else 0
-        st.metric("Average Score", f"{avg_score:.0f}/100")
-    with col4:
-        avg_auto = sum(len(a.get('auto_detected', {})) for a in assessments.values()) / len(assessments)
-        st.metric("Avg Auto-detected", f"{avg_auto:.0f}")
-    
-    # Score trends
-    if completed:
-        st.markdown("### 📈 Score Trends")
-        st.line_chart({a['name']: a.get('overall_score', 0) for a in completed})
-    
-    # Pillar comparison
-    st.markdown("### 🎯 Pillar Scores Comparison")
-    st.info("Select assessments to compare pillar scores (coming soon)")
-    
-    # Top action items
-    st.markdown("### 🚨 Most Common Action Items")
-    all_action_items = []
-    for a in assessments.values():
-        all_action_items.extend(a.get('action_items', []))
-    
-    if all_action_items:
-        st.info(f"Total action items across all assessments: {len(all_action_items)}")
-    else:
-        st.caption("No action items yet. Complete assessments to see recommendations.")
-
-def render_compliance_view():
-    """
-    Integrated compliance view - shows compliance status from WAF assessments
-    This replaces the separate Compliance tab by integrating with WAF data
-    """
-    st.markdown("### 📋 Compliance Dashboard")
-    st.info("**Built-in Compliance** - Automatic compliance mapping from your WAF assessments")
-    
-    assessments = st.session_state.waf_assessments
-    
-    if not assessments:
-        st.warning("📊 No assessments yet. Create a WAF assessment to see compliance status.")
+    def clear_saved_progress(self) -> bool:
+        """Clear saved progress from Firebase"""
+        if not FIREBASE_AVAILABLE:
+            return False
         
-        st.markdown("### 🎯 Supported Compliance Frameworks")
+        try:
+            db = get_database_manager()
+            if not db or not db.db_ref:
+                return False
+            
+            user_id = self._get_user_id()
+            if not user_id:
+                return False
+            
+            db.db_ref.child('waf_progress').child(user_id).delete()
+            return True
+            
+        except Exception:
+            return False
+    
+    def render(self):
+        """Render the complete WAF Review workflow"""
+        
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%); 
+                    padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+            <h1 style="color: white; margin: 0;">🏗️ Well-Architected Framework Review</h1>
+            <p style="color: #bbdefb; margin-top: 10px;">
+                Complete end-to-end assessment: Scan → Questionnaire → Score → Remediate → Verify
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Progress indicator
+        self._render_progress_tracker()
+        
+        st.markdown("---")
+        
+        # Render current phase
+        phase = self.session.current_phase
+        
+        if phase == ReviewPhase.SETUP:
+            self._render_setup_phase()
+        elif phase == ReviewPhase.SCANNING:
+            self._render_scanning_phase()
+        elif phase == ReviewPhase.QUESTIONNAIRE:
+            self._render_questionnaire_phase()
+        elif phase == ReviewPhase.SCORING:
+            self._render_scoring_phase()
+        elif phase == ReviewPhase.REMEDIATION:
+            self._render_remediation_phase()
+        elif phase == ReviewPhase.RESCAN:
+            self._render_rescan_phase()
+        elif phase == ReviewPhase.COMPLETE:
+            self._render_complete_phase()
+    
+    def _render_progress_tracker(self):
+        """Render visual progress tracker"""
+        phases = [
+            ("Setup", ReviewPhase.SETUP, "🔧"),
+            ("Scan", ReviewPhase.SCANNING, "🔍"),
+            ("Questionnaire", ReviewPhase.QUESTIONNAIRE, "📝"),
+            ("Score", ReviewPhase.SCORING, "📊"),
+            ("Remediate", ReviewPhase.REMEDIATION, "🔨"),
+            ("Verify", ReviewPhase.RESCAN, "✅"),
+            ("Complete", ReviewPhase.COMPLETE, "🎉")
+        ]
+        
+        # Use .value comparison for safe enum matching
+        current_phase_value = self.session.current_phase.value if hasattr(self.session.current_phase, 'value') else str(self.session.current_phase)
+        phase_values = [p[1].value for p in phases]
+        
+        try:
+            current_idx = phase_values.index(current_phase_value)
+        except ValueError:
+            # Default to SETUP if phase not found
+            current_idx = 0
+        
+        cols = st.columns(len(phases))
+        for idx, (name, phase, icon) in enumerate(phases):
+            with cols[idx]:
+                if idx < current_idx:
+                    st.markdown(f"""
+                    <div style="text-align: center; padding: 10px; background: #4CAF50; 
+                                border-radius: 10px; color: white;">
+                        {icon}<br><small>✓ {name}</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif idx == current_idx:
+                    st.markdown(f"""
+                    <div style="text-align: center; padding: 10px; background: #2196F3; 
+                                border-radius: 10px; color: white; border: 2px solid #1565C0;">
+                        {icon}<br><small><b>{name}</b></small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style="text-align: center; padding: 10px; background: #E0E0E0; 
+                                border-radius: 10px; color: #757575;">
+                        {icon}<br><small>{name}</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+    # ========================================================================
+    # PHASE 1: SETUP
+    # ========================================================================
+    
+    def _render_setup_phase(self):
+        """Render setup phase - configure accounts and scan source"""
+        
+        st.markdown("## 🔧 Step 1: Setup")
+        st.markdown("Configure your AWS accounts and select the scan source.")
+        
+        # Check if accounts are already connected from main app
+        connected_accounts = st.session_state.get('connected_accounts', [])
+        
+        # ALSO check for single account connection via AWS credentials
+        single_account_connected = False
+        single_account_info = None
+        
+        try:
+            from aws_connector import get_aws_session
+            session = get_aws_session()
+            if session:
+                sts = session.client('sts')
+                identity = sts.get_caller_identity()
+                single_account_id = identity['Account']
+                single_account_info = {
+                    'account_id': single_account_id,
+                    'account_name': st.session_state.get('account_name', f'Account-{single_account_id[-4:]}'),
+                    'name': st.session_state.get('account_name', f'Account-{single_account_id[-4:]}'),
+                    'region': st.session_state.get('aws_region', 'us-east-1'),
+                    'connection_type': 'direct'
+                }
+                single_account_connected = True
+                
+                # Add to connected_accounts if not already there
+                if not any(acc.get('account_id') == single_account_id for acc in connected_accounts):
+                    connected_accounts = connected_accounts.copy()
+                    connected_accounts.insert(0, single_account_info)
+        except Exception as e:
+            pass  # No single account connected
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("""
-            **Security & Privacy:**
-            - 🔒 ISO 27001 (Information Security)
-            - 🛡️ SOC 2 (Service Organization Control)
-            - 💳 PCI DSS (Payment Card Industry)
-            - 🏥 HIPAA (Healthcare)
-            """)
+            st.markdown("### 📡 Scan Source")
+            scan_source = st.radio(
+                "How should we gather findings?",
+                ["Direct API Scan", "Security Hub Integration", "Import from CSV"],
+                help="Direct scan queries AWS APIs. Security Hub aggregates findings from multiple services."
+            )
+            
+            self.session.scan_source = {
+                "Direct API Scan": "direct",
+                "Security Hub Integration": "security_hub",
+                "Import from CSV": "import"
+            }[scan_source]
         
         with col2:
-            st.markdown("""
-            **Industry-Specific:**
-            - 🏦 FedRAMP (Federal)
-            - 🌍 GDPR (Data Privacy)
-            - 🇪🇺 NIS2 (EU Cybersecurity)
-            - 🔐 NIST CSF (Cybersecurity Framework)
-            """)
-        
-        return
-    
-    # Compliance mapping data structure
-    COMPLIANCE_FRAMEWORKS = {
-        "ISO 27001": {
-            "icon": "🔒",
-            "color": "#1976D2",
-            "controls": [
-                ("A.8.1", "Asset Management"),
-                ("A.9.1", "Access Control"),
-                ("A.12.1", "Operations Security"),
-                ("A.13.1", "Communications Security"),
-                ("A.14.1", "System Acquisition"),
-                ("A.18.1", "Compliance")
+            st.markdown("### 🌍 Regions")
+            all_regions = [
+                "us-east-1", "us-east-2", "us-west-1", "us-west-2",
+                "eu-west-1", "eu-west-2", "eu-central-1",
+                "ap-southeast-1", "ap-southeast-2", "ap-northeast-1"
             ]
-        },
-        "SOC 2": {
-            "icon": "🛡️",
-            "color": "#388E3C",
-            "controls": [
-                ("CC6.1", "Logical Access"),
-                ("CC7.1", "System Operations"),
-                ("CC7.2", "Change Management"),
-                ("CC8.1", "Risk Mitigation"),
-                ("CC9.1", "Risk Assessment")
+            selected_regions = st.multiselect(
+                "Select regions to scan",
+                all_regions,
+                default=["us-east-1"]
+            )
+            self.session.regions = selected_regions
+        
+        st.markdown("---")
+        
+        # Account selection
+        st.markdown("### 🏢 Accounts to Review")
+        
+        if connected_accounts:
+            st.success(f"✅ {len(connected_accounts)} accounts connected from AWS Connector")
+            
+            # Show connected accounts
+            account_options = []
+            for acc in connected_accounts:
+                name = acc.get('account_name', acc.get('name', 'Unknown'))
+                acc_id = acc.get('account_id', acc.get('id', acc.get('Id', 'N/A')))
+                account_options.append(f"{name} ({acc_id})")
+            
+            selected = st.multiselect(
+                "Select accounts to include in review",
+                account_options,
+                default=account_options
+            )
+            
+            # Store selected accounts
+            self.session.accounts = [
+                acc for acc in connected_accounts
+                if f"{acc.get('account_name', acc.get('name', 'Unknown'))} ({acc.get('account_id', acc.get('id', acc.get('Id', 'N/A')))})" in selected
             ]
-        },
-        "PCI DSS": {
-            "icon": "💳",
-            "color": "#D32F2F",
-            "controls": [
-                ("1.1", "Firewall Configuration"),
-                ("2.1", "Vendor Defaults"),
-                ("3.1", "Cardholder Data"),
-                ("6.1", "Secure Development"),
-                ("8.1", "User Identification"),
-                ("10.1", "Audit Trails")
-            ]
-        },
-        "HIPAA": {
-            "icon": "🏥",
-            "color": "#7B1FA2",
-            "controls": [
-                ("164.308", "Administrative Safeguards"),
-                ("164.310", "Physical Safeguards"),
-                ("164.312", "Technical Safeguards"),
-                ("164.314", "Organizational Requirements")
-            ]
-        }
-    }
-    
-    # Framework selector
-    st.markdown("### 🎯 Select Compliance Framework")
-    
-    selected_framework = st.selectbox(
-        "Framework",
-        list(COMPLIANCE_FRAMEWORKS.keys()),
-        format_func=lambda x: f"{COMPLIANCE_FRAMEWORKS[x]['icon']} {x}"
-    )
-    
-    framework_data = COMPLIANCE_FRAMEWORKS[selected_framework]
-    
-    # Calculate compliance scores from WAF assessments
-    completed = [a for a in assessments.values() if a.get('status') == 'completed' or a.get('progress', 0) >= 80]
-    
-    if not completed:
-        st.warning("⚠️ Complete at least one WAF assessment to see compliance scores.")
-        return
-    
-    # Use most recent completed assessment
-    latest = max(completed, key=lambda x: x.get('updated_at', ''))
-    
-    # Compliance score calculation (simplified - based on WAF scores)
-    responses = latest.get('responses', {})
-    total_points = sum(r.get('points', 0) for r in responses.values())
-    max_points = len(responses) * 100
-    compliance_score = int((total_points / max_points * 100)) if max_points > 0 else 0
-    
-    # Overall compliance status
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.markdown(f"""
-        <div style="text-align: center; padding: 1.5rem; background: white; 
-                    border-radius: 8px; border: 2px solid {framework_data['color']};">
-            <div style="font-size: 2.5rem;">{framework_data['icon']}</div>
-            <div style="font-size: 2rem; font-weight: bold; color: {framework_data['color']};">
-                {compliance_score}%
-            </div>
-            <div style="font-size: 0.9rem; color: #666;">
-                Compliance Score
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        compliant_controls = int(len(framework_data['controls']) * compliance_score / 100)
-        st.metric("Compliant Controls", f"{compliant_controls}/{len(framework_data['controls'])}")
-    
-    with col3:
-        gaps = len(framework_data['controls']) - compliant_controls
-        st.metric("Gaps Identified", gaps, delta=f"-{gaps}" if gaps > 0 else "None")
-    
-    with col4:
-        high_risk = len([r for r in responses.values() if r.get('risk_level') in ['High', 'Critical']])
-        st.metric("High Risk Items", high_risk, delta=f"-{high_risk}" if high_risk > 0 else "None")
-    
-    st.markdown("---")
-    
-    # Control mapping
-    st.markdown(f"### 📊 {selected_framework} Control Mapping")
-    
-    st.info(f"**How it works:** Each WAF question maps to one or more {selected_framework} controls. Your WAF assessment automatically generates compliance evidence.")
-    
-    # Show control status
-    for control_id, control_name in framework_data['controls']:
-        # Determine status based on related WAF questions (simplified)
-        # In production, you'd map specific WAF questions to specific controls
-        status_score = compliance_score + (hash(control_id) % 20 - 10)  # Add some variation
-        status_score = max(0, min(100, status_score))
-        
-        if status_score >= 85:
-            status_icon = "✅"
-            status_color = "#4CAF50"
-            status_text = "Compliant"
-        elif status_score >= 70:
-            status_icon = "⚠️"
-            status_color = "#FF9800"
-            status_text = "Partial"
         else:
-            status_icon = "❌"
-            status_color = "#F44336"
-            status_text = "Gap"
-        
-        col_ctrl1, col_ctrl2, col_ctrl3 = st.columns([2, 1, 1])
-        
-        with col_ctrl1:
-            st.markdown(f"{status_icon} **{control_id}** - {control_name}")
-        
-        with col_ctrl2:
-            st.progress(status_score / 100)
-        
-        with col_ctrl3:
-            st.markdown(f"<span style='color: {status_color}; font-weight: bold;'>{status_text}</span>", unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Evidence and documentation
-    st.markdown("### 📄 Compliance Evidence")
-    
-    col_ev1, col_ev2 = st.columns(2)
-    
-    with col_ev1:
-        st.markdown("**Evidence Collection**")
-        st.markdown("""
-        Your WAF assessment provides evidence for:
-        - ✅ Security controls implementation
-        - ✅ Operational procedures
-        - ✅ Access management policies
-        - ✅ Data protection measures
-        - ✅ Monitoring and logging
-        - ✅ Incident response procedures
-        """)
-    
-    with col_ev2:
-        st.markdown("**Audit-Ready Reports**")
-        
-        if st.button("📥 Generate Compliance Report", use_container_width=True, type="primary"):
-            st.success("✅ Compliance report generated!")
-            st.info(f"""
-            **Report Contents:**
-            - Executive summary
-            - Control-by-control assessment
-            - Gap analysis
-            - Remediation recommendations
-            - Evidence documentation
-            - Action plan
-            """)
-        
-        if st.button("📊 Export Evidence Package", use_container_width=True):
-            st.info("Evidence package export coming soon!")
-    
-    # Gap analysis
-    st.markdown("---")
-    st.markdown("### 🔍 Gap Analysis")
-    
-    if gaps > 0:
-        st.warning(f"⚠️ **{gaps} control gaps identified** - Prioritize remediation")
-        
-        with st.expander("View Gap Details"):
-            st.markdown("**Priority Gaps:**")
-            for i, (control_id, control_name) in enumerate(framework_data['controls'][:gaps], 1):
-                st.markdown(f"""
-                **{i}. {control_id} - {control_name}**
-                - Current Status: Partial compliance
-                - Required: Full implementation
-                - Recommended Action: Review WAF Security pillar questions
-                - Estimated Effort: 2-4 weeks
-                """)
-    else:
-        st.success("🎉 **No major gaps identified!** Your AWS environment shows strong compliance posture.")
-    
-    # Action items from compliance perspective
-    st.markdown("---")
-    st.markdown("### 🎯 Recommended Actions")
-    
-    action_items = latest.get('action_items', [])
-    
-    if action_items:
-        compliance_actions = [a for a in action_items if any(kw in a.get('title', '').lower() 
-                                                              for kw in ['security', 'access', 'encrypt', 'log', 'audit'])]
-        
-        if compliance_actions:
-            st.info(f"📋 {len(compliance_actions)} compliance-related action items from your WAF assessment")
+            st.warning("⚠️ No accounts connected. Please connect accounts in AWS Connector tab first.")
+            st.info("💡 Or use existing scan results from WAF Review tab")
             
-            for idx, action in enumerate(compliance_actions[:5], 1):
-                st.markdown(f"**{idx}. {action.get('title', 'Action Item')}**")
-                st.caption(f"Priority: {action.get('priority', 'Medium')} | Pillar: {action.get('pillar', 'N/A')}")
-        else:
-            st.success("✅ No urgent compliance actions required")
-    
-    # Multi-framework comparison
-    st.markdown("---")
-    st.markdown("### 📊 Multi-Framework Comparison")
-    
-    st.info("💡 **Pro Tip:** Your single WAF assessment provides compliance evidence for multiple frameworks simultaneously!")
-    
-    comparison_data = {}
-    for framework_name in COMPLIANCE_FRAMEWORKS.keys():
-        # Calculate score with slight variation per framework
-        framework_score = compliance_score + (hash(framework_name) % 10 - 5)
-        framework_score = max(0, min(100, framework_score))
-        comparison_data[framework_name] = framework_score
-    
-    # Show comparison chart
-    st.bar_chart(comparison_data)
-    
-    with col2:
-        st.markdown("### ➕ New Assessment")
-        
-        with st.form("compliance_new_assessment_form"):
-            assessment_name = st.text_input(
-                "Assessment Name",
-                placeholder="e.g., Production Workload Q4 2024"
-            )
-            
-            workload_name = st.text_input(
-                "Workload Name",
-                placeholder="e.g., E-commerce Platform"
-            )
-            
-            assessment_type = st.selectbox(
-                "Assessment Type",
-                ["Quick (30 min)", "Standard (2 hours)", "Comprehensive (1 day)"]
-            )
-            
-            aws_account = st.text_input(
-                "AWS Account ID (Optional)",
-                placeholder="123456789012"
-            )
-            
-            # NEW: Auto-scanning option
-            st.markdown("---")
-            enable_scanning = st.checkbox(
-                "🔍 Enable Smart Scanning",
-                value=True,
-                help="Automatically scan AWS environment and pre-fill answers"
-            )
-            
-            if enable_scanning:
-                st.info("""
-                **🚀 Smart Scanning Benefits:**
-                - Auto-detect 60-80 questions (~30-40%)
-                - Provide evidence for all answers
-                - Save 2-3 hours of manual work
-                - Higher accuracy based on actual config
-                """)
-            
-            submitted = st.form_submit_button("🚀 Create Assessment", use_container_width=True)
-            
-            if submitted:
-                if not assessment_name:
-                    st.error("Please provide an assessment name")
-                else:
-                    # Create new assessment
-                    assessment_id = str(uuid.uuid4())
-                    
-                    new_assessment = {
-                        'id': assessment_id,
-                        'name': assessment_name,
-                        'workload_name': workload_name,
-                        'type': assessment_type,
-                        'aws_account': aws_account,
-                        'created_at': datetime.now().isoformat(),
-                        'updated_at': datetime.now().isoformat(),
-                        'progress': 0,
-                        'responses': {},
-                        'scores': {},
-                        'action_items': [],
-                        'status': 'in_progress',
-                        'enable_scanning': enable_scanning,
-                        'scan_results': None,
-                        'auto_detected': {}
-                    }
-                    
-                    st.session_state.waf_assessments[assessment_id] = new_assessment
-                    st.session_state.current_waf_assessment_id = assessment_id
-                    st.success(f"✅ Created: {assessment_name}")
-                    
-                    # If scanning enabled, trigger scan on next screen
-                    if enable_scanning:
-                        st.session_state.trigger_scan = True
-                    
-                    st.rerun()
-
-def render_assessment_workspace():
-    """Render the assessment workspace with all its tabs"""
-    assessment_id = st.session_state.current_waf_assessment_id
-    assessment = st.session_state.waf_assessments.get(assessment_id)
-    
-    if not assessment:
-        st.error("Assessment not found")
-        if st.button("← Back to Assessments"):
-            st.session_state.current_waf_assessment_id = None
-            st.rerun()
-        return
-    
-    # Header with back button
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        status_emoji = "✅" if assessment.get('status') == 'completed' else "🔄"
-        assessment_name = assessment.get('name') or assessment.get('workload_name', 'Unnamed Assessment')
-        st.markdown(f"### {status_emoji} {assessment_name}")
-        st.caption(f"Workload: {assessment.get('workload_name', 'N/A')} | "
-                  f"Environment: {assessment.get('environment', 'N/A')} | "
-                  f"Progress: {assessment.get('progress', 0)}%")
-    
-    with col2:
-        if assessment.get('progress', 0) >= 80:
-            if st.button("📄 View Report", use_container_width=True):
-                st.session_state.show_report = True
-                st.rerun()
-    
-    with col3:
-        if st.button("← Back to List", key="back_to_list", use_container_width=True):
-            st.session_state.current_waf_assessment_id = None
-            st.session_state.show_report = False
-            st.rerun()
-    
-    st.divider()
-    
-    # Check if showing report
-    if st.session_state.get('show_report', False):
-        render_full_report(assessment)
-        return
-    
-    # Assessment workspace tabs
-    tabs = st.tabs([
-        "📊 Dashboard",
-        "📝 Assessment",
-        "🤖 AI Insights",
-        "📋 Action Items"
-    ])
-    
-    with tabs[0]:
-        render_dashboard_tab(assessment)
-    
-    with tabs[1]:
-        render_assessment_tab(assessment)
-    
-    with tabs[2]:
-        render_ai_insights_tab(assessment)
-    
-    with tabs[3]:
-        render_action_items_tab(assessment)
-
-def render_full_report(assessment: Dict):
-    """Render the complete assessment report"""
-    st.markdown("### 📄 Assessment Report")
-    
-    # Header actions
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        assessment_name = assessment.get('name') or assessment.get('workload_name', 'Unnamed Assessment')
-        st.markdown(f"**{assessment_name}**")
-        st.caption(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    
-    with col2:
-        if st.button("📥 Export PDF", use_container_width=True):
-            try:
-                # Import PDF generator
-                from pdf_report_generator import generate_waf_pdf_report
+            # Check for existing scan results
+            if 'multi_scan_results' in st.session_state:
+                results = st.session_state.multi_scan_results
+                account_count = len([k for k in results.keys() if k != 'consolidated_pdf'])
+                st.success(f"📊 Found existing scan results for {account_count} accounts")
                 
-                with st.spinner("📄 Generating PDF report..."):
-                    # Generate PDF
-                    pdf_bytes = generate_waf_pdf_report(assessment)
-                    
-                    # Create filename
-                    assessment_name = assessment.get('name', 'assessment')
-                    filename = f"WAF_Assessment_{assessment_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf"
-                    
-                    # Provide download button
-                    st.download_button(
-                        label="⬇️ Download PDF Report",
-                        data=pdf_bytes,
-                        file_name=filename,
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-                    
-                    st.success("✅ PDF generated successfully!")
-                    
-            except ImportError:
-                st.error("❌ PDF generation requires 'reportlab' package. Install with: pip install reportlab")
-            except Exception as e:
-                st.error(f"❌ Error generating PDF: {str(e)}")
-                st.info("💡 Make sure reportlab is installed: pip install reportlab")
-    
-    with col3:
-        if st.button("📊 Back to Dashboard", use_container_width=True):
-            st.session_state.show_report = False
-            st.rerun()
-    
-    st.divider()
-    
-    # Executive Summary
-    st.markdown("## Executive Summary")
-    
-    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-    with col_s1:
-        st.metric("Overall Score", f"{assessment.get('overall_score', 0):.0f}/100")
-    with col_s2:
-        total_q = 205
-        answered = len(assessment.get('responses', {}))
-        st.metric("Completion", f"{answered}/{total_q}")
-    with col_s3:
-        auto_count = len(assessment.get('auto_detected', {}))
-        st.metric("Auto-detected", auto_count)
-    with col_s4:
-        action_count = len(assessment.get('action_items', []))
-        st.metric("Action Items", action_count)
-    
-    # Pillar Scores
-    st.markdown("## Pillar Scores")
-    pillar_cols = st.columns(6)
-    for idx, pillar in enumerate(Pillar):
-        with pillar_cols[idx]:
-            score = assessment.get('scores', {}).get(pillar.value, 0)
-            st.markdown(f"""
-            <div style="text-align: center; padding: 1rem; background: white; 
-                        border-radius: 8px; border: 2px solid {pillar.color};">
-                <div style="font-size: 2rem;">{pillar.icon}</div>
-                <div style="font-size: 1.5rem; font-weight: bold; color: {pillar.color};">
-                    {score}
-                </div>
-                <div style="font-size: 0.8rem; color: #666;">
-                    {pillar.value.split()[0]}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Key Findings
-    st.markdown("## Key Findings")
-    
-    responses = assessment.get('responses', {})
-    high_risk = [r for r in responses.values() if r.get('risk_level') in ['High', 'Critical']]
-    
-    if high_risk:
-        st.warning(f"🔴 **{len(high_risk)} High/Critical Risk Items** - Immediate attention required")
-        with st.expander("View High Risk Items"):
-            for resp in high_risk[:10]:
-                st.markdown(f"- {resp.get('choice_text', 'Unknown')}")
-    else:
-        st.success("✅ No high-risk items identified!")
-    
-    # Action Items
-    st.markdown("## Recommended Actions")
-    action_items = assessment.get('action_items', [])
-    progress = assessment.get('progress', 0)
-    
-    if action_items:
-        st.info(f"📋 {len(action_items)} action items identified")
-        for idx, action in enumerate(action_items[:5], 1):
-            st.markdown(f"**{idx}. {action.get('title', 'Action Item')}**")
-            st.caption(f"Priority: {action.get('priority', 'Medium')} | "
-                      f"Effort: {action.get('estimated_effort', 'Unknown')}")
-    else:
-        # FIX: Show different message based on completion
-        if progress >= 80:
-            st.success("✅ No action items needed - Your architecture follows all best practices!")
-        else:
-            st.info(f"Complete the assessment ({progress:.0f}% done) to generate action items")
-    
-    # Detailed responses by pillar
-    st.markdown("## Detailed Responses")
-    
-    # Get all questions to map responses to pillars
-    questions = get_complete_waf_questions()
-    question_map = {q.id: q for q in questions}
-    
-    for pillar in Pillar:
-        with st.expander(f"{pillar.icon} {pillar.value}"):
-            # FIX: Filter responses by matching question pillar, not by ID prefix
-            pillar_responses = {}
-            for qid, resp in responses.items():
-                question = question_map.get(qid)
-                if question and question.pillar == pillar:
-                    pillar_responses[qid] = resp
-            
-            if pillar_responses:
-                st.info(f"Answered: {len(pillar_responses)} questions in this pillar")
-                # Show first 5 responses
-                for idx, (qid, resp) in enumerate(list(pillar_responses.items())[:5], 1):
-                    question = question_map.get(qid)
-                    question_text = question.text[:80] + "..." if question and len(question.text) > 80 else (question.text if question else qid)
-                    st.markdown(f"**{idx}. {question_text}**")
-                    st.caption(f"Answer: {resp.get('choice_text', 'N/A')[:100]}")
-                    st.caption(f"Risk: {resp.get('risk_level', 'Unknown')}")
-                
-                if len(pillar_responses) > 5:
-                    st.caption(f"... and {len(pillar_responses) - 5} more responses in this pillar")
-            else:
-                st.caption("No responses yet for this pillar")
-
-def render_dashboard_tab(assessment: Dict):
-    """Render assessment dashboard with scanning capability"""
-    st.markdown("### 📊 Assessment Overview")
-    
-    # Scanning Section
-    if assessment.get('enable_scanning', False):
-        st.markdown("### 🔍 Smart Scanning")
-        
-        col_scan1, col_scan2 = st.columns([3, 1])
-        
-        with col_scan1:
-            if assessment.get('scan_results') is None:
-                st.info("📡 AWS environment scanning enabled. Click 'Run Scan' to auto-detect answers.")
-            else:
-                scan_time = assessment.get('scan_completed_at', 'Unknown')
-                summary = WAFAutoDetector.get_detection_summary(assessment.get('auto_detected', {}))
-                st.success(f"""
-                ✅ **Scan completed:** {scan_time[:16] if scan_time != 'Unknown' else scan_time}
-                - Auto-detected: **{summary['total_detected']} questions** ({summary['coverage_percentage']:.0f}%)
-                - High confidence: {summary['high_confidence']} questions
-                - Medium confidence: {summary['medium_confidence']} questions
-                """)
-        
-        with col_scan2:
-            if assessment.get('scan_results') is None:
-                if st.button("🔍 Run Scan", use_container_width=True, type="primary"):
-                    run_aws_scan(assessment)
-            else:
-                if st.button("🔄 Re-scan", use_container_width=True):
-                    run_aws_scan(assessment)
-        
-        st.divider()
-    
-    # Key metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Overall Score", f"{assessment.get('overall_score', 0)}/100")
-    with col2:
-        st.metric("Progress", f"{assessment.get('progress', 0)}%")
-    with col3:
-        st.metric("Questions", f"{len(assessment.get('responses', {}))}/205")
-    with col4:
-        st.metric("Action Items", len(assessment.get('action_items', [])))
-    
-    # ADD RECALCULATE BUTTON - CRITICAL FIX FOR EXISTING ASSESSMENTS
-    if len(assessment.get('responses', {})) > 0:
-        if assessment.get('overall_score', 0) == 0 or assessment.get('progress', 0) != 100:
-            st.warning("⚠️ Scores need recalculation. Click the button below to fix.")
-        
-        if st.button("🔄 Recalculate All Scores Now", use_container_width=True, type="primary"):
-            with st.spinner("Recalculating all scores..."):
-                try:
-                    # Get ALL questions
-                    questions = get_complete_waf_questions()
-                    
-                    # Import and run scoring
-                    from assessment_scoring_helper import calculate_assessment_scores
-                    calculate_assessment_scores(assessment, questions)
-                    
-                    # Save to Firebase if available
-                    try:
-                        from firebase_database_helper import save_assessment_to_firebase
-                        if st.session_state.get('firebase_initialized', False):
-                            assessment_id = assessment.get('assessment_id') or assessment.get('id')
-                            save_assessment_to_firebase(assessment_id, assessment)
-                    except:
-                        pass
-                    
-                    st.success(f"""
-                    ✅ **Recalculation Complete!**
-                    - Overall Score: {assessment.get('overall_score', 0)}/100
-                    - Progress: {assessment.get('progress', 0)}%
-                    - Pillar Scores: {len(assessment.get('scores', {}))} calculated
-                    - Action Items: {len(assessment.get('action_items', []))} generated
-                    """)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error recalculating: {str(e)}")
-                    st.exception(e)
-    
-    st.divider()
-    
-    # Pillar scores
-    st.markdown("### 🎯 Pillar Scores")
-    
-    pillar_cols = st.columns(6)
-    for idx, pillar in enumerate(Pillar):
-        with pillar_cols[idx]:
-            score = assessment.get('scores', {}).get(pillar.value, 0)
-            st.markdown(f"""
-            <div style="text-align: center; padding: 1rem; background: white; 
-                        border-radius: 8px; border: 2px solid {pillar.color};">
-                <div style="font-size: 2rem;">{pillar.icon}</div>
-                <div style="font-size: 1.5rem; font-weight: bold; color: {pillar.color};">
-                    {score}
-                </div>
-                <div style="font-size: 0.8rem; color: #666;">
-                    {pillar.value.split()[0]}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-def render_assessment_tab(assessment: Dict):
-    """Render assessment questions with AI assistance and PAGINATION - ENHANCED VERSION"""
-    
-    # Import the pagination module
-    try:
-        from waf_pagination_enhanced import render_questions_with_pagination
-        PAGINATION_AVAILABLE = True
-    except ImportError:
-        PAGINATION_AVAILABLE = False
-        st.warning("⚠️ Pagination module not found. Using legacy view.")
-    
-    st.markdown("### 📝 Assessment Questions with AI Assistant")
-    
-    questions = get_complete_waf_questions()
-    
-    # Header with pillar filter
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        pillar_filter = st.selectbox(
-            "Select Pillar",
-            ["All"] + [p.value for p in Pillar],
-            key="pillar_filter"
-        )
-    with col2:
-        if st.button("💡 AI Tips", help="Get AI-powered guidance"):
-            st.session_state.show_ai_tips = not st.session_state.get('show_ai_tips', False)
-    
-    # AI Tips panel
-    if st.session_state.get('show_ai_tips', False):
-        st.info("""
-        **🤖 AI Assistant Features - Your Competitive Advantage:**
-        - **🎯 Simplified Explanations**: Understand complex questions easily
-        - **💡 Smart Recommendations**: Get personalized answer suggestions
-        - **📚 Real Examples**: See how others implement best practices
-        - **🛠️ Action Steps**: Get practical implementation guidance
-        - **✨ Context-Aware**: Tailored to your specific workload
-        
-        *This AI assistance is NOT available in AWS's native WAF Tool!*
-        """)
-    
-    # Filter questions by pillar
-    filtered_questions = questions
-    if pillar_filter != "All":
-        filtered_questions = [q for q in questions if q.pillar.value == pillar_filter]
-    
-    # Get auto-detected questions
-    auto_detected = assessment.get('auto_detected', {})
-    auto_detected_count = sum(1 for q in filtered_questions if q.id in auto_detected)
-    
-    # Show statistics
-    info_msg = f"📋 {len(filtered_questions)} questions in this pillar"
-    if auto_detected_count > 0:
-        info_msg += f" | ✅ {auto_detected_count} auto-detected ({auto_detected_count/len(filtered_questions)*100:.0f}%)"
-    info_msg += " | 🤖 AI Assistant available"
-    st.info(info_msg)
-    
-    # ============================================================================
-    # USE PAGINATION MODULE (if available) - NEW!
-    # ============================================================================
-    if PAGINATION_AVAILABLE:
-        # CRITICAL FIX: Pass ALL questions (not filtered_questions) for accurate scoring
-        # The pagination module will handle pillar filtering for display
-        render_questions_with_pagination(assessment, questions, pillar_filter)
-    else:
-        # Fallback to original loop-based rendering (show limited questions)
-        st.warning("Using legacy view. Install pagination module for better experience.")
-        show_count = st.number_input("Show", min_value=5, max_value=50, value=10, step=5)
-        
-        # Original loop rendering (kept as fallback)
-        for idx, question in enumerate(filtered_questions[:show_count]):
-            is_auto_detected = question.id in auto_detected
-            detected_data = auto_detected.get(question.id, {})
-            
-            expander_title = f"{question.pillar.icon} {question.id}: {question.text}"
-            if is_auto_detected:
-                expander_title = f"✅ {expander_title}"
-            
-            with st.expander(expander_title):
-                st.markdown(f"**Category:** {question.category}")
-                st.markdown(question.description)
-                
-                # AUTO-DETECTION SECTION
-                if is_auto_detected:
-                    st.markdown("---")
-                    st.markdown("### 🔍 Auto-Detected from AWS Scan")
-                    
-                    confidence = detected_data.get('confidence', 0)
-                    confidence_color = "🟢" if confidence >= 85 else "🟡" if confidence >= 70 else "🟠"
-                    
-                    col_det1, col_det2 = st.columns([3, 1])
-                    with col_det1:
-                        st.success(f"""
-                        **{confidence_color} Auto-Detected Answer**
-                        - Confidence: {confidence}%
-                        - Detected: {question.choices[detected_data.get('choice_index', 0)].text[:80]}...
-                        - Evidence: {len(detected_data.get('evidence', []))} findings
-                        """)
-                    
-                    with col_det2:
-                        override = st.checkbox("✏️ Override", key=f"override_{question.id}")
-                    
-                    if detected_data.get('evidence'):
-                        with st.expander("📊 View Scan Evidence"):
-                            for ev in detected_data.get('evidence', []):
-                                st.caption(f"• {ev}")
-                    
-                    st.markdown("---")
-                else:
-                    override = False
-                
-                # AI Assistant Button
-                col_ai, col_scan_info = st.columns([1, 3])
-                with col_ai:
-                    if st.button(f"🤖 Get AI Help", key=f"ai_help_{question.id}", use_container_width=True, type="secondary"):
-                        with st.spinner("🤖 AI is analyzing this question for you..."):
-                            ai_assistance = get_ai_question_assistance(question, assessment)
-                            if ai_assistance:
-                                st.session_state[f"ai_assist_{question.id}"] = ai_assistance
-                                st.success("✅ AI analysis complete!")
-                
-                with col_scan_info:
-                    if is_auto_detected and not override:
-                        st.info("💡 Using auto-detected answer. Check 'Override' to manually select.")
-                    elif not is_auto_detected:
-                        st.caption("⚠️ Manual answer required (not auto-detectable)")
-                
-                # Show AI assistance if available
-                if f"ai_assist_{question.id}" in st.session_state:
-                    ai_help = st.session_state[f"ai_assist_{question.id}"]
-                    st.markdown("---")
-                    
-                    st.markdown("### 🤖 AI Assistant Analysis")
-                    st.caption("*Personalized guidance powered by Claude AI*")
-                    
-                    ai_tabs = st.tabs(["📖 Explanation", "💡 Why It Matters", "✅ Recommendation", "📚 Example", "🛠️ Steps"])
-                    
-                    with ai_tabs[0]:
-                        st.markdown("**Simplified Explanation:**")
-                        st.info(ai_help.get('simplified_explanation', 'Processing...'))
-                    
-                    with ai_tabs[1]:
-                        st.markdown("**Business Impact:**")
-                        st.success(ai_help.get('why_matters', 'Processing...'))
-                    
-                    with ai_tabs[2]:
-                        st.markdown("**AI Recommendation:**")
-                        st.warning(ai_help.get('recommendation', 'Processing...'))
-                    
-                    with ai_tabs[3]:
-                        st.markdown("**Real-World Example:**")
-                        st.markdown(ai_help.get('example', 'Processing...'))
-                    
-                    with ai_tabs[4]:
-                        st.markdown("**Implementation Steps:**")
-                        st.markdown(ai_help.get('implementation_steps', 'Processing...'))
-                    
-                    st.markdown("---")
-                
-                st.markdown("**Select your answer:**")
-                
-                # Response selection
-                response_key = f"response_{question.id}"
-                current_response = assessment.get('responses', {}).get(question.id, {})
-                
-                # Determine default index
-                if is_auto_detected and not override:
-                    default_index = detected_data.get('choice_index', 0)
-                elif current_response:
-                    default_index = current_response.get('choice_index', 0)
-                else:
-                    default_index = 0
-                
-                selected_choice = st.radio(
-                    "Choose one:",
-                    range(len(question.choices)),
-                    format_func=lambda i: f"{question.choices[i].risk_level.icon} {question.choices[i].text}",
-                    key=response_key,
-                    index=default_index,
-                    disabled=(is_auto_detected and not override)
-                )
-                
-                # Show guidance for selected choice
-                if selected_choice is not None:
-                    st.caption(f"💬 **Guidance:** {question.choices[selected_choice].guidance}")
-                
-                # Notes
-                notes_default = ""
-                if is_auto_detected and not override:
-                    notes_default = "Auto-detected from AWS scan\n" + "\n".join([f"• {e}" for e in detected_data.get('evidence', [])])
-                elif current_response:
-                    notes_default = current_response.get('notes', '')
-                
-                notes = st.text_area(
-                    "Additional Notes & Evidence",
-                    value=notes_default,
-                    key=f"notes_{question.id}",
-                    placeholder="Add context, evidence, or observations that support your answer...",
-                    height=100
-                )
-                
-                # SAVE BUTTON - Now with Firebase integration
-                if st.button("💾 Save Response", key=f"save_{question.id}", use_container_width=True, type="primary"):
-                    # Import Firebase helper
-                    try:
-                        from firebase_database_helper import save_assessment_to_firebase, auto_sync_response
-                        FIREBASE_AVAILABLE = st.session_state.get('firebase_initialized', False)
-                    except:
-                        FIREBASE_AVAILABLE = False
-                    
-                    # Prepare response data
-                    response_data = {
-                        'choice_index': selected_choice,
-                        'choice_text': question.choices[selected_choice].text,
-                        'risk_level': question.choices[selected_choice].risk_level.label,
-                        'points': question.choices[selected_choice].points,
-                        'notes': notes,
-                        'timestamp': datetime.now().isoformat(),
-                        'ai_assisted': f"ai_assist_{question.id}" in st.session_state,
-                        'auto_detected': is_auto_detected,
-                        'overridden': (is_auto_detected and override),
-                        'scan_confidence': detected_data.get('confidence', 0) if is_auto_detected else 0
-                    }
-                    
-                    # Save to session state
-                    if 'responses' not in assessment:
-                        assessment['responses'] = {}
-                    assessment['responses'][question.id] = response_data
-                    
-                    # Update progress
-                    total_questions = len(questions)
-                    assessment['progress'] = int((len(assessment['responses']) / total_questions) * 100)
-                    assessment['updated_at'] = datetime.now().isoformat()
-                    
-                    # Track AI assistance usage
-                    if f"ai_assist_{question.id}" in st.session_state:
-                        if 'ai_assistance_used' not in assessment:
-                            assessment['ai_assistance_used'] = 0
-                        assessment['ai_assistance_used'] += 1
-                        del st.session_state[f"ai_assist_{question.id}"]
-                    
-                    # NEW: Save to Firebase if available
-                    if FIREBASE_AVAILABLE:
-                        assessment_id = assessment.get('assessment_id', 'default')
-                        sync_success = auto_sync_response(assessment_id, question.id, response_data)
-                        
-                        if not sync_success:
-                            success, message = save_assessment_to_firebase(assessment_id, assessment)
-                            if success:
-                                st.success("✅ Response saved to Firebase!")
-                            else:
-                                st.warning(f"⚠️ Saved locally but Firebase sync failed: {message}")
-                        else:
-                            st.success("✅ Response saved successfully!")
-                    else:
-                        st.success("✅ Response saved locally!")
-                        if not st.session_state.get('firebase_initialized', False):
-                            st.info("💡 Enable Firebase to persist data across sessions")
-                    
-                    st.rerun()
-
-def get_ai_question_assistance(question: Question, assessment: Dict) -> Optional[Dict]:
-    """
-    Get AI-powered assistance for understanding and answering questions.
-    
-    THIS IS THE KEY DIFFERENTIATOR FROM AWS'S NATIVE WAF TOOL:
-    - Simplifies complex questions into plain language
-    - Provides context-specific recommendations
-    - Offers real-world examples
-    - Gives actionable implementation steps
-    - Tailored to the user's specific workload
-    
-    AWS's tool just shows questions - we provide intelligent guidance!
-    """
-    if not ANTHROPIC_AVAILABLE:
-        return {
-            'simplified_explanation': "AI assistance requires the Anthropic library. Install with: pip install anthropic",
-            'why_matters': "This question is part of AWS best practices for well-architected workloads.",
-            'recommendation': "Review the answer choices and select based on your current implementation.",
-            'example': "Consider how this applies to your specific use case.",
-            'implementation_steps': "• Review current state\n• Compare to best practices\n• Plan improvements"
-        }
-    
-    try:
-        # Get API key - supports multiple formats
-        api_key = None
-        if hasattr(st, 'secrets'):
-            # Format 1: Root level ANTHROPIC_API_KEY
-            if 'ANTHROPIC_API_KEY' in st.secrets:
-                api_key = st.secrets['ANTHROPIC_API_KEY']
-            # Format 2: [anthropic] section with ANTHROPIC_API_KEY (user's format)
-            elif 'anthropic' in st.secrets:
-                if 'ANTHROPIC_API_KEY' in st.secrets['anthropic']:
-                    api_key = st.secrets['anthropic']['ANTHROPIC_API_KEY']
-                elif 'api_key' in st.secrets['anthropic']:
-                    api_key = st.secrets['anthropic']['api_key']
-        
-        if not api_key:
-            return {
-                'simplified_explanation': "To enable AI assistance, add your Anthropic API key to Streamlit secrets.",
-                'why_matters': "This question helps ensure your architecture follows AWS best practices.",
-                'recommendation': "Review your current implementation and select the answer that best matches.",
-                'example': "Consider your specific requirements when answering.",
-                'implementation_steps': "• Add ANTHROPIC_API_KEY to .streamlit/secrets.toml\n• Restart the application\n• Click AI Help again"
-            }
-        
-        client = anthropic.Anthropic(api_key=api_key)
-        
-        # Build context-aware prompt
-        workload_context = f"""
-Workload Name: {assessment.get('workload_name', 'Not specified')}
-Assessment Type: {assessment.get('type', 'Not specified')}
-Organization: {assessment.get('name', 'Not specified')}
-AWS Account: {assessment.get('aws_account', 'Not specified')}
-"""
-        
-        prompt = f"""You are an expert AWS Solutions Architect helping users complete a Well-Architected Framework assessment.
-
-QUESTION DETAILS:
-- ID: {question.id}
-- Pillar: {question.pillar.value}
-- Category: {question.category}
-- Question: {question.text}
-- Description: {question.description}
-
-WORKLOAD CONTEXT:
-{workload_context}
-
-BEST PRACTICES:
-{chr(10).join(f"- {bp}" for bp in question.best_practices)}
-
-ANSWER CHOICES:
-{chr(10).join(f"{i+1}. {choice.text} ({choice.risk_level.label} risk, {choice.points} points)" for i, choice in enumerate(question.choices))}
-
-Provide a JSON response with these exact keys:
-
-{{
-  "simplified_explanation": "2-3 sentences explaining this question in simple, non-technical language that a business user can understand",
-  "why_matters": "2-3 sentences explaining the real business impact - why should they care about this? What happens if they get it wrong?",
-  "recommendation": "3-4 sentences recommending which answer choice is likely best for their workload and explaining why, based on the context provided",
-  "example": "A concrete 4-5 sentence real-world example (anonymized) showing how a company addressed this area successfully or failed to address it",
-  "implementation_steps": "4-6 bullet points (using • prefix) with practical, actionable steps they can take to improve in this area"
-}}
-
-Be conversational, practical, and avoid jargon. Focus on actionable advice."""
-
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
-            temperature=0.7,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        # Parse response
-        import json
-        import re
-        
-        text = response.content[0].text
-        
-        # Try to extract JSON
-        json_match = re.search(r'\{[\s\S]*\}', text)
-        if json_match:
-            result = json.loads(json_match.group())
-            return result
-        else:
-            # Fallback
-            return {
-                'simplified_explanation': "This question assesses a critical aspect of your AWS architecture.",
-                'why_matters': "Following best practices in this area reduces risk and improves reliability.",
-                'recommendation': "Evaluate your current implementation against the answer choices provided.",
-                'example': "Organizations that implement these practices see improved outcomes.",
-                'implementation_steps': "• Review current state\n• Identify gaps\n• Create action plan\n• Implement improvements"
-            }
-    
-    except Exception as e:
-        return {
-            'simplified_explanation': f"AI assistance temporarily unavailable: {str(e)[:100]}",
-            'why_matters': "This question is important for AWS best practices.",
-            'recommendation': "Review the answer choices and select based on your implementation.",
-            'example': "Consider your specific use case.",
-            'implementation_steps': "• Review documentation\n• Assess current state\n• Plan improvements"
-        }
-
-def render_ai_insights_tab(assessment: Dict):
-    """Render AI-powered insights with comprehensive pillar-wise analysis"""
-    st.markdown("### 🤖 AI-Powered Insights & Recommendations")
-    
-    if not ANTHROPIC_AVAILABLE:
-        st.warning("⚠️ Anthropic API not available. Install with: `pip install anthropic`")
-        st.info("💡 Add your ANTHROPIC_API_KEY to Streamlit secrets to enable AI insights.")
-        return
-    
-    # Check if assessment has enough responses
-    responses = assessment.get('responses', {})
-    progress = assessment.get('progress', 0)
-    
-    if not responses:
-        st.info("📝 Complete some assessment questions to generate AI insights.")
-        return
-    
-    if progress < 50:
-        st.warning(f"⚠️ Assessment is only {progress}% complete. For best insights, complete at least 50% of questions.")
-    
-    # Show what we'll analyze
-    st.info(f"""
-    **Ready to analyze:**
-    - {len(responses)} questions answered ({progress}% complete)
-    - Overall Score: {assessment.get('overall_score', 0)}/100
-    - {len(assessment.get('scores', {}))} pillars evaluated
-    
-    Claude AI will provide comprehensive insights based on your responses.
-    """)
-    
-    # Check if insights are already cached in session state
-    cache_key = f"ai_insights_{assessment.get('id', 'unknown')}"
-    
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        generate_button = st.button(
-            "🚀 Generate Comprehensive AI Insights",
-            use_container_width=True,
-            type="primary"
-        )
-    
-    with col2:
-        if cache_key in st.session_state:
-            if st.button("🔄 Regenerate", use_container_width=True):
-                # Clear cache to regenerate
-                del st.session_state[cache_key]
-                st.rerun()
-    
-    # Generate or show cached insights
-    if generate_button or cache_key in st.session_state:
-        
-        if cache_key not in st.session_state:
-            # Generate new insights
-            with st.spinner("🤖 Claude is analyzing your assessment... This may take 30-60 seconds."):
-                try:
-                    # Import AI insights generator
-                    from ai_insights_generator import generate_comprehensive_insights, format_insights_for_display
-                    
-                    # Get all questions
-                    questions = get_complete_waf_questions()
-                    
-                    # Generate insights
-                    insights = generate_comprehensive_insights(assessment, questions)
-                    
-                    # Cache the results
-                    st.session_state[cache_key] = insights
-                    
-                    st.success("✅ AI analysis complete!")
-                    
-                except Exception as e:
-                    st.error(f"❌ Failed to generate insights: {str(e)}")
-                    st.exception(e)
+                if st.button("Use Existing Scan Results"):
+                    self._import_existing_results(results)
                     return
         
-        # Display insights
-        try:
-            from ai_insights_generator import format_insights_for_display
-            insights = st.session_state[cache_key]
-            
-            st.divider()
-            format_insights_for_display(insights)
-            
-        except Exception as e:
-            st.error(f"❌ Failed to display insights: {str(e)}")
-            st.exception(e)
-
-def render_action_items_tab(assessment: Dict):
-    """Render action items"""
-    st.markdown("### 📋 Action Items")
+        st.markdown("---")
+        
+        # Proceed button
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("▶️ Start WAF Review", type="primary", use_container_width=True):
+                if self.session.accounts or 'multi_scan_results' in st.session_state:
+                    self.session.current_phase = ReviewPhase.SCANNING
+                    self.session.updated_at = datetime.now()
+                    st.rerun()
+                else:
+                    st.error("Please select at least one account or connect accounts first")
     
-    action_items = assessment.get('action_items', [])
-    progress = assessment.get('progress', 0)
-    overall_score = assessment.get('overall_score', 0)
+    def _import_existing_results(self, results: Dict):
+        """Import findings from existing scan results"""
+        
+        findings = []
+        for account_id, data in results.items():
+            if account_id == 'consolidated_pdf' or not isinstance(data, dict):
+                continue
+            
+            for finding in data.get('findings', []):
+                # Use pillar from scan if available, otherwise map from service
+                pillar = finding.get('pillar', '') or self._map_service_to_pillar(finding.get('service', ''))
+                
+                findings.append(Finding(
+                    id=hashlib.md5(f"{account_id}-{finding.get('resource', '')}-{finding.get('title', '')}".encode()).hexdigest()[:8],
+                    title=finding.get('title', 'Unknown'),
+                    description=finding.get('description', ''),
+                    severity=finding.get('severity', 'MEDIUM'),
+                    pillar=pillar,
+                    service=finding.get('service', 'Unknown'),
+                    resource=finding.get('resource', 'Unknown'),
+                    account_id=account_id
+                ))
+            
+            # Add account to list
+            self.session.accounts.append({
+                'account_id': account_id,
+                'account_name': data.get('account_name', account_id)
+            })
+        
+        self.session.findings = findings
+        self.session.scan_completed = True
+        self.session.scan_timestamp = datetime.now()
+        self.session.current_phase = ReviewPhase.QUESTIONNAIRE
+        self.session.updated_at = datetime.now()
+        
+        # Update session state for dashboard - store findings immediately
+        findings_list = []
+        for f in findings:
+            if hasattr(f, '__dict__'):
+                findings_list.append({
+                    'severity': getattr(f, 'severity', 'MEDIUM'),
+                    'title': getattr(f, 'title', ''),
+                    'pillar': getattr(f, 'pillar', ''),
+                    'service': getattr(f, 'service', ''),
+                })
+            elif isinstance(f, dict):
+                findings_list.append(f)
+        st.session_state['last_findings'] = findings_list
+        
+        st.rerun()
     
-    if not action_items:
-        # FIX: Show appropriate message based on completion
-        if progress >= 80:
-            st.success("✅ **No action items needed!**")
-            st.info(f"""
-            🎉 Excellent! Your architecture follows AWS Well-Architected best practices.
+    def _map_service_to_pillar(self, service: str) -> str:
+        """Map AWS service to WAF pillar"""
+        service = service.upper() if service else ''
+        service_pillar_map = {
+            # Security pillar
+            'IAM': WAFPillar.SECURITY.value,
+            'S3': WAFPillar.SECURITY.value,
+            'VPC': WAFPillar.SECURITY.value,
+            'KMS': WAFPillar.SECURITY.value,
+            'CLOUDTRAIL': WAFPillar.SECURITY.value,
+            'GUARDDUTY': WAFPillar.SECURITY.value,
+            'SECURITY HUB': WAFPillar.SECURITY.value,
+            'SECURITYHUB': WAFPillar.SECURITY.value,
+            'WAF': WAFPillar.SECURITY.value,
+            'SHIELD': WAFPillar.SECURITY.value,
+            'SECRETS MANAGER': WAFPillar.SECURITY.value,
+            'SECRETSMANAGER': WAFPillar.SECURITY.value,
+            'ACM': WAFPillar.SECURITY.value,
+            'INSPECTOR': WAFPillar.SECURITY.value,
+            'MACIE': WAFPillar.SECURITY.value,
+            'NETWORK FIREWALL': WAFPillar.SECURITY.value,
             
-            **Assessment Status:**
-            - Progress: {progress:.0f}%
-            - Overall Score: {overall_score}/100
-            - All responses indicate low risk
+            # Reliability pillar
+            'EC2': WAFPillar.RELIABILITY.value,
+            'RDS': WAFPillar.RELIABILITY.value,
+            'ELB': WAFPillar.RELIABILITY.value,
+            'ELB/ALB': WAFPillar.RELIABILITY.value,
+            'ALB': WAFPillar.RELIABILITY.value,
+            'NLB': WAFPillar.RELIABILITY.value,
+            'AUTO SCALING': WAFPillar.RELIABILITY.value,
+            'AUTOSCALING': WAFPillar.RELIABILITY.value,
+            'ROUTE53': WAFPillar.RELIABILITY.value,
+            'ROUTE 53': WAFPillar.RELIABILITY.value,
+            'BACKUP': WAFPillar.RELIABILITY.value,
+            'ELASTICACHE': WAFPillar.RELIABILITY.value,
+            'DYNAMODB': WAFPillar.RELIABILITY.value,
+            'SQS': WAFPillar.RELIABILITY.value,
+            'SNS': WAFPillar.RELIABILITY.value,
             
-            **What this means:**
-            - Your architecture is well-designed
-            - No critical or high-priority issues identified
-            - Continue monitoring and maintain current standards
+            # Operational Excellence pillar
+            'CLOUDWATCH': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'CLOUDFORMATION': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'CONFIG': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'SYSTEMS MANAGER': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'SSM': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'X-RAY': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'XRAY': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'CODEPIPELINE': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'CODEBUILD': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'CODEDEPLOY': WAFPillar.OPERATIONAL_EXCELLENCE.value,
+            'EVENTBRIDGE': WAFPillar.OPERATIONAL_EXCELLENCE.value,
             
-            **Next Steps:**
-            - Schedule quarterly reassessments
-            - Review the AI Insights tab for optimization opportunities
-            - Consider advanced optimization strategies for cost and performance
-            """)
+            # Performance Efficiency pillar
+            'LAMBDA': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'ECS': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'EKS': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'FARGATE': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'CLOUDFRONT': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'API GATEWAY': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'APIGATEWAY': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            'GLOBAL ACCELERATOR': WAFPillar.PERFORMANCE_EFFICIENCY.value,
+            
+            # Cost Optimization pillar
+            'COST EXPLORER': WAFPillar.COST_OPTIMIZATION.value,
+            'TRUSTED ADVISOR': WAFPillar.COST_OPTIMIZATION.value,
+            'BUDGETS': WAFPillar.COST_OPTIMIZATION.value,
+            'SAVINGS PLANS': WAFPillar.COST_OPTIMIZATION.value,
+            'RESERVED INSTANCES': WAFPillar.COST_OPTIMIZATION.value,
+            'COMPUTE OPTIMIZER': WAFPillar.COST_OPTIMIZATION.value,
+            
+            # Sustainability pillar
+            'SUSTAINABILITY': WAFPillar.SUSTAINABILITY.value,
+            'GRAVITON': WAFPillar.SUSTAINABILITY.value,
+        }
+        return service_pillar_map.get(service, WAFPillar.SECURITY.value)
+    
+    # ========================================================================
+    # PHASE 2: SCANNING
+    # ========================================================================
+    
+    def _render_scanning_phase(self):
+        """Render scanning phase - contained to prevent UI bleeding to other tabs"""
+        
+        # Use a container to isolate the scanning UI
+        scanning_container = st.container()
+        
+        with scanning_container:
+            st.markdown("## 🔍 Step 2: AWS Account Scanning")
+            
+            # Check if we should use existing results
+            if 'multi_scan_results' in st.session_state and not self.session.scan_completed:
+                results = st.session_state.multi_scan_results
+                account_count = len([k for k in results.keys() if k != 'consolidated_pdf'])
+                
+                st.info(f"📊 Found existing scan results from WAF Review tab ({account_count} accounts)")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Use Existing Results", type="primary", use_container_width=True):
+                        self._import_existing_results(results)
+                with col2:
+                    if st.button("🔄 Run New Scan", use_container_width=True):
+                        self._run_new_scan()
+            
+            elif self.session.scan_completed:
+                # Show scan results summary
+                st.success(f"✅ Scan completed at {self.session.scan_timestamp}")
+                
+                # Show findings summary by pillar
+                self._render_findings_summary()
+                
+                col1, col2, col3 = st.columns([1, 1, 1])
+                with col2:
+                    if st.button("▶️ Continue to Questionnaire", type="primary", use_container_width=True):
+                        self.session.current_phase = ReviewPhase.QUESTIONNAIRE
+                        self.session.updated_at = datetime.now()
+                        st.rerun()
+            
+            else:
+                self._run_new_scan()
+    
+    def _run_new_scan(self):
+        """Execute new AWS scan"""
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        status_text.markdown("🔍 **Initializing scan...**")
+        progress_bar.progress(10)
+        
+        findings = []
+        
+        if self.session.scan_source == "security_hub":
+            status_text.markdown("🔍 **Querying Security Hub...**")
+            findings = self._scan_security_hub()
         else:
-            st.info(f"✅ No action items yet. Complete the assessment ({progress:.0f}% done) to generate recommendations.")
-        return
+            status_text.markdown("🔍 **Scanning AWS resources...**")
+            findings = self._scan_direct_api()
+        
+        progress_bar.progress(80)
+        
+        # Store results
+        self.session.findings = findings
+        self.session.scan_completed = True
+        self.session.scan_timestamp = datetime.now()
+        self.session.resources_scanned = len(set(f.resource for f in findings))
+        self.session.services_scanned = len(set(f.service for f in findings))
+        
+        progress_bar.progress(100)
+        status_text.markdown("✅ **Scan complete!**")
+        
+        time.sleep(1)
+        st.rerun()
     
-    # Display action items grouped by priority
-    critical_items = [item for item in action_items if item.get('risk_level', '').upper() == 'CRITICAL']
-    high_items = [item for item in action_items if item.get('risk_level', '').upper() == 'HIGH']
-    medium_items = [item for item in action_items if item.get('risk_level', '').upper() == 'MEDIUM']
+    def _scan_security_hub(self) -> List[Finding]:
+        """Scan using Security Hub - FIXED VERSION"""
+        findings = []
+        
+        connected_accounts = st.session_state.get('connected_accounts', [])
+        
+        if not connected_accounts:
+            if st.session_state.get('aws_access_key') and st.session_state.get('aws_secret_key'):
+                connected_accounts = [{
+                    'name': 'Primary Account',
+                    'access_key': st.session_state.get('aws_access_key'),
+                    'secret_key': st.session_state.get('aws_secret_key'),
+                    'region': st.session_state.get('aws_region', 'us-east-1')
+                }]
+        
+        if not connected_accounts:
+            return []
+        
+        for account in connected_accounts:
+            try:
+                # Create session using the same pattern as streamlit_app.py
+                session = self._create_account_session(account)
+                
+                if not session:
+                    continue
+                
+                # Query Security Hub
+                securityhub = session.client('securityhub')
+                
+                # Get findings
+                paginator = securityhub.get_paginator('get_findings')
+                
+                filters = {
+                    'RecordState': [{'Value': 'ACTIVE', 'Comparison': 'EQUALS'}],
+                    'WorkflowStatus': [{'Value': 'NEW', 'Comparison': 'EQUALS'}]
+                }
+                
+                for page in paginator.paginate(Filters=filters, MaxResults=100):
+                    for sh_finding in page.get('Findings', []):
+                        severity = sh_finding.get('Severity', {}).get('Label', 'MEDIUM')
+                        finding_type = sh_finding.get('Type', [''])[0] if sh_finding.get('Type') else ''
+                        pillar = self._map_securityhub_to_pillar(finding_type)
+                        
+                        finding = Finding(
+                            id=sh_finding.get('Id', ''),
+                            title=sh_finding.get('Title', 'Unknown'),
+                            description=sh_finding.get('Description', ''),
+                            severity=severity,
+                            pillar=pillar,
+                            service='Security Hub',
+                            resource=sh_finding.get('Resources', [{}])[0].get('Id', 'N/A'),
+                            account_id=sh_finding.get('AwsAccountId', ''),
+                            region=sh_finding.get('Region', ''),
+                            recommendation=sh_finding.get('Remediation', {}).get('Recommendation', {}).get('Text', '')
+                        )
+                        findings.append(finding)
+                
+            except Exception as e:
+                st.warning(f"Security Hub query failed for {account.get('name', 'account')}: {str(e)}")
+        
+        return findings
     
-    # Summary
-    st.info(f"📋 **{len(action_items)} action items identified** | "
-            f"🔴 {len(critical_items)} Critical | "
-            f"🟠 {len(high_items)} High | "
-            f"🟡 {len(medium_items)} Medium")
+    def _map_securityhub_to_pillar(self, finding_type: str) -> str:
+        """Map Security Hub finding type to WAF pillar"""
+        finding_type_lower = finding_type.lower()
+        
+        if any(x in finding_type_lower for x in ['iam', 'encryption', 'kms', 'secret', 'password', 'access']):
+            return 'Security'
+        elif any(x in finding_type_lower for x in ['backup', 'availability', 'redundancy', 'failover']):
+            return 'Reliability'
+        elif any(x in finding_type_lower for x in ['performance', 'latency', 'throughput']):
+            return 'Performance Efficiency'
+        elif any(x in finding_type_lower for x in ['cost', 'unused', 'idle', 'savings']):
+            return 'Cost Optimization'
+        elif any(x in finding_type_lower for x in ['logging', 'monitoring', 'cloudwatch', 'cloudtrail']):
+            return 'Operational Excellence'
+        else:
+            return 'Security'
     
-    # Critical Priority
-    if critical_items:
-        st.markdown("### 🔴 Critical Priority")
-        for idx, item in enumerate(critical_items, 1):
-            with st.expander(f"{idx}. [{item.get('pillar', 'Unknown')}] {item.get('title', 'Action Item')}", expanded=True):
-                st.markdown(item.get('description', 'No description available'))
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.caption(f"**Priority:** {item.get('priority', 'Unknown')}")
-                with col2:
-                    st.caption(f"**Effort:** {item.get('effort', 'Unknown')}")
-                with col3:
-                    st.caption(f"**Cost:** {item.get('cost', 'Unknown')}")
+    def _create_account_session(self, account: dict):
+        """Create boto3 session for an account - matches streamlit_app.py pattern"""
+        try:
+            # Pattern 1: Organizations import with credentials sub-dict
+            if account.get('connection_type') == 'organizations':
+                return boto3.Session(
+                    aws_access_key_id=account['credentials']['access_key'],
+                    aws_secret_access_key=account['credentials']['secret_key'],
+                    region_name=account.get('region', 'us-east-1')
+                )
+            
+            # Pattern 2: AssumeRole authentication
+            elif account.get('auth_method') == 'assume_role':
+                # Check for hub credentials
+                if 'multi_hub_access_key' not in st.session_state or 'multi_hub_secret_key' not in st.session_state:
+                    st.error(f"❌ Hub credentials not configured. Please set them in Multi-Account → AssumeRole Setup (Step 1)")
+                    return None
+                
+                # Create base session with hub credentials
+                base_session = boto3.Session(
+                    aws_access_key_id=st.session_state.multi_hub_access_key,
+                    aws_secret_access_key=st.session_state.multi_hub_secret_key
+                )
+                
+                # Import and use the assume_role helper
+                try:
+                    from aws_connector import assume_role
+                except ImportError:
+                    st.error("❌ aws_connector module not available")
+                    return None
+                
+                # Assume the role
+                assumed_creds = assume_role(
+                    base_session,
+                    account['role_arn'],
+                    account.get('external_id'),
+                    session_name="WAFReviewScan"
+                )
+                
+                if not assumed_creds:
+                    st.error(f"❌ Failed to assume role: {account.get('role_arn')}")
+                    return None
+                
+                # Create session with assumed credentials
+                return boto3.Session(
+                    aws_access_key_id=assumed_creds.access_key_id,
+                    aws_secret_access_key=assumed_creds.secret_access_key,
+                    aws_session_token=assumed_creds.session_token,
+                    region_name=account.get('region', 'us-east-1')
+                )
+            
+            # Pattern 3: Direct connection from AWS Connector (Single Account mode)
+            elif account.get('connection_type') == 'direct':
+                # Use credentials from session state (set by AWS Connector)
+                access_key = st.session_state.get('aws_access_key')
+                secret_key = st.session_state.get('aws_secret_key')
+                region = account.get('region') or st.session_state.get('aws_region', 'us-east-1')
+                
+                if access_key and secret_key:
+                    return boto3.Session(
+                        aws_access_key_id=access_key,
+                        aws_secret_access_key=secret_key,
+                        region_name=region
+                    )
+                else:
+                    # Try using get_aws_session as fallback
+                    try:
+                        from aws_connector import get_aws_session
+                        session = get_aws_session()
+                        if session:
+                            return session
+                    except:
+                        pass
+                    st.warning(f"⚠️ Session state credentials not found for direct connection")
+                    return None
+            
+            # Pattern 4: Manual credentials in account dict
+            else:
+                access_key = account.get('access_key')
+                secret_key = account.get('secret_key')
+                
+                if access_key and secret_key:
+                    return boto3.Session(
+                        aws_access_key_id=access_key,
+                        aws_secret_access_key=secret_key,
+                        region_name=account.get('region', 'us-east-1')
+                    )
+                
+                # Last resort: try get_aws_session
+                try:
+                    from aws_connector import get_aws_session
+                    session = get_aws_session()
+                    if session:
+                        return session
+                except:
+                    pass
+                
+                st.warning(f"⚠️ No credentials for {account.get('name', 'account')}")
+                return None
+                
+        except Exception as e:
+            st.error(f"❌ Session creation failed for {account.get('name', 'account')}: {str(e)}")
+            return None
     
-    # High Priority
-    if high_items:
-        st.markdown("### 🟠 High Priority")
-        for idx, item in enumerate(high_items, 1):
-            with st.expander(f"{idx}. [{item.get('pillar', 'Unknown')}] {item.get('title', 'Action Item')}"):
-                st.markdown(item.get('description', 'No description available'))
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.caption(f"**Priority:** {item.get('priority', 'Unknown')}")
-                with col2:
-                    st.caption(f"**Effort:** {item.get('effort', 'Unknown')}")
-                with col3:
-                    st.caption(f"**Cost:** {item.get('cost', 'Unknown')}")
+    def _scan_direct_api(self) -> List[Finding]:
+        """Scan using direct AWS API calls - FIXED VERSION using AWSLandscapeScanner"""
+        findings = []
+        
+        # Check if we have connected accounts
+        connected_accounts = st.session_state.get('connected_accounts', [])
+        
+        if not connected_accounts:
+            # Try single account from session
+            if st.session_state.get('aws_access_key') and st.session_state.get('aws_secret_key'):
+                connected_accounts = [{
+                    'name': 'Primary Account',
+                    'access_key': st.session_state.get('aws_access_key'),
+                    'secret_key': st.session_state.get('aws_secret_key'),
+                    'region': st.session_state.get('aws_region', 'us-east-1')
+                }]
+        
+        if not connected_accounts:
+            st.warning("⚠️ No AWS accounts connected. Please connect accounts in the AWS Connector tab.")
+            return []
+        
+        # Import scanner
+        try:
+            from landscape_scanner import AWSLandscapeScanner
+        except ImportError:
+            st.error("❌ Landscape scanner module not available")
+            return []
+        
+        total_accounts = len(connected_accounts)
+        
+        for idx, account in enumerate(connected_accounts):
+            account_name = account.get('name', f'Account {idx+1}')
+            
+            st.markdown(f"**Scanning {account_name}...** ({idx+1}/{total_accounts})")
+            
+            try:
+                # Create boto3 session using the unified method
+                session = self._create_account_session(account)
+                
+                if not session:
+                    st.warning(f"⚠️ Could not create session for {account_name}")
+                    continue
+                
+                # Get account ID
+                try:
+                    sts = session.client('sts')
+                    account_id = sts.get_caller_identity()['Account']
+                except Exception as e:
+                    account_id = account.get('account_id', 'unknown')
+                    st.warning(f"Could not get account ID: {str(e)}")
+                
+                # Initialize scanner with session
+                scanner = AWSLandscapeScanner(session)
+                
+                # Run scan
+                regions = [account.get('region', 'us-east-1')]
+                
+                assessment = scanner.run_scan(regions=regions)
+                
+                # Convert landscape findings to our Finding format
+                for lf in assessment.findings:
+                    finding = Finding(
+                        id=lf.id,
+                        title=lf.title,
+                        description=lf.description,
+                        severity=lf.severity,
+                        pillar=lf.pillar,
+                        service=lf.source_service,
+                        resource=', '.join(lf.affected_resources[:3]) if lf.affected_resources else 'N/A',
+                        account_id=account_id,
+                        region=lf.region or regions[0],
+                        recommendation=lf.recommendation
+                    )
+                    findings.append(finding)
+                
+                st.success(f"✅ {account_name}: Found {len(assessment.findings)} findings")
+                
+            except Exception as e:
+                st.error(f"❌ Error scanning {account_name}: {str(e)}")
+                import traceback
+                with st.expander("Error Details"):
+                    st.code(traceback.format_exc())
+        
+        return findings
     
-    # Medium Priority
-    if medium_items:
-        st.markdown("### 🟡 Medium Priority")
-        for idx, item in enumerate(medium_items, 1):
-            with st.expander(f"{idx}. [{item.get('pillar', 'Unknown')}] {item.get('title', 'Action Item')}"):
-                st.markdown(item.get('description', 'No description available'))
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.caption(f"**Priority:** {item.get('priority', 'Unknown')}")
-                with col2:
-                    st.caption(f"**Effort:** {item.get('effort', 'Unknown')}")
-                with col3:
-                    st.caption(f"**Cost:** {item.get('cost', 'Unknown')}")
-
-def render_reports_tab(assessment: Dict):
-    """Render reports"""
-    st.markdown("### 📄 Reports & Export")
+    def _render_findings_summary(self):
+        """Render summary of findings by pillar"""
+        
+        # Group findings by pillar
+        pillar_findings = {}
+        for pillar in WAFPillar:
+            pillar_findings[pillar.value] = [f for f in self.session.findings if f.pillar == pillar.value]
+        
+        st.markdown("### 📊 Findings by WAF Pillar")
+        
+        cols = st.columns(3)
+        for idx, (pillar, findings) in enumerate(pillar_findings.items()):
+            pillar_enum = WAFPillar(pillar)
+            icon = PILLAR_ICONS.get(pillar_enum, "📋")
+            
+            critical = len([f for f in findings if f.severity == "CRITICAL"])
+            high = len([f for f in findings if f.severity == "HIGH"])
+            medium = len([f for f in findings if f.severity == "MEDIUM"])
+            low = len([f for f in findings if f.severity == "LOW"])
+            
+            with cols[idx % 3]:
+                st.markdown(f"""
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 10px; 
+                            border-left: 4px solid {PILLAR_COLORS.get(pillar_enum, '#666')}; margin-bottom: 10px;">
+                    <h4>{icon} {pillar}</h4>
+                    <p><b>{len(findings)}</b> findings</p>
+                    <small>🔴 {critical} Critical | 🟠 {high} High | 🟡 {medium} Medium | 🟢 {low} Low</small>
+                </div>
+                """, unsafe_allow_html=True)
     
-    col1, col2 = st.columns(2)
+    # ========================================================================
+    # PHASE 3: QUESTIONNAIRE
+    # ========================================================================
     
-    with col1:
-        if st.button("📊 Executive Summary (PDF)", use_container_width=True):
-            st.info("📄 PDF generation coming soon...")
+    def _get_pending_questions_by_pillar(self) -> Dict[str, List[Dict]]:
+        """Get pending (unanswered) questions organized by pillar"""
+        pending_by_pillar = {}
+        
+        for pillar in WAFPillar:
+            questions = WAF_QUESTIONS.get(pillar, [])
+            pillar_responses = {r.question_id: r for r in self.session.responses if r.pillar == pillar.value}
+            
+            pending = []
+            for q in questions:
+                response = pillar_responses.get(q['id'])
+                if not response or not response.response:
+                    pending.append(q)
+            
+            if pending:
+                pending_by_pillar[pillar.value] = pending
+        
+        return pending_by_pillar
     
-    with col2:
-        if st.button("📥 Export Data (JSON)", use_container_width=True):
-            export_data = json.dumps(assessment, indent=2, default=str)
-            assessment_id = assessment.get('assessment_id') or assessment.get('id', 'unknown')
-            st.download_button(
-                "⬇️ Download JSON",
-                export_data,
-                file_name=f"waf_assessment_{assessment_id[:8]}.json",
-                mime="application/json"
+    def _render_questionnaire_phase(self):
+        """Render WAF questionnaire phase"""
+        
+        st.markdown("## 📝 Step 3: WAF Questionnaire")
+        st.markdown("""
+        Answer questions about your workload to complete the assessment. 
+        Questions that can be auto-detected from scan results are pre-filled.
+        """)
+        
+        # Check for saved progress
+        has_saved, saved_info = self.has_saved_progress()
+        if has_saved and not self.session.responses:
+            st.info(f"📂 **Saved progress found!** {saved_info}")
+            col_restore, col_new = st.columns(2)
+            with col_restore:
+                if st.button("📥 Restore Saved Progress", type="primary", use_container_width=True):
+                    if self.load_progress():
+                        st.success("✅ Progress restored!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Could not restore progress")
+            with col_new:
+                if st.button("🆕 Start Fresh", use_container_width=True):
+                    self.clear_saved_progress()
+                    self._auto_detect_answers()
+                    st.rerun()
+            st.markdown("---")
+        
+        # Auto-detect answers from findings (if no responses yet)
+        if not self.session.responses:
+            self._auto_detect_answers()
+        
+        # Show progress - count correctly
+        total_questions = sum(len(q) for q in WAF_QUESTIONS.values())
+        # Auto-detected = questions with auto-filled answers
+        auto_detected = len([r for r in self.session.responses if r.auto_detected and r.response])
+        # Answered = questions with any response (auto or manual)
+        answered = len([r for r in self.session.responses if r.response])
+        # Pending = questions without answers
+        pending = total_questions - answered
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Questions", total_questions)
+        with col2:
+            st.metric("Auto-Detected", auto_detected)
+        with col3:
+            st.metric("Answered", f"{answered}/{total_questions}")
+        with col4:
+            st.metric("Pending", pending)
+        
+        st.progress(answered / total_questions if total_questions > 0 else 0)
+        
+        # Get pending questions by pillar
+        pending_by_pillar = self._get_pending_questions_by_pillar()
+        
+        # Show pending questions summary if there are any
+        if pending > 0:
+            st.markdown("---")
+            
+            # Filter toggle
+            show_pending_only = st.checkbox("🔍 **Show Pending Questions Only**", key="show_pending_filter")
+            
+            # Show which pillars have pending questions
+            pending_pillars = []
+            for pillar in WAFPillar:
+                pillar_pending = pending_by_pillar.get(pillar.value, [])
+                if pillar_pending:
+                    pending_pillars.append(f"{PILLAR_ICONS[pillar]} {pillar.value} ({len(pillar_pending)})")
+            
+            if pending_pillars:
+                st.warning(f"⚠️ **Pending questions in:** {', '.join(pending_pillars)}")
+                
+                # Quick jump to pending questions
+                with st.expander("📋 **View All Pending Questions**", expanded=False):
+                    for pillar_name, questions in pending_by_pillar.items():
+                        st.markdown(f"**{pillar_name}:**")
+                        for q in questions:
+                            st.markdown(f"- `{q['id']}`: {q['question'][:80]}...")
+        else:
+            show_pending_only = False
+            st.success("✅ **All questions answered!** You can now calculate scores.")
+        
+        st.markdown("---")
+        
+        # Initialize pillar selection in session state if not exists
+        if 'current_waf_pillar' not in st.session_state:
+            st.session_state.current_waf_pillar = WAFPillar.OPERATIONAL_EXCELLENCE.value
+        
+        # Build pillar selector with pending counts
+        pillar_options = []
+        pillar_labels = {}
+        for p in WAFPillar:
+            pillar_pending = pending_by_pillar.get(p.value, [])
+            if pillar_pending:
+                label = f"{PILLAR_ICONS[p]} {p.value} ⚠️({len(pillar_pending)})"
+            else:
+                label = f"{PILLAR_ICONS[p]} {p.value} ✅"
+            pillar_options.append(p.value)
+            pillar_labels[p.value] = label
+        
+        # Pillar selector using columns with buttons (preserves state on rerun)
+        st.markdown("##### Select Pillar:")
+        pillar_cols = st.columns(6)
+        for idx, pillar in enumerate(WAFPillar):
+            with pillar_cols[idx]:
+                pillar_pending = pending_by_pillar.get(pillar.value, [])
+                is_selected = st.session_state.current_waf_pillar == pillar.value
+                
+                # Create button label
+                if pillar_pending:
+                    btn_label = f"{PILLAR_ICONS[pillar]} ({len(pillar_pending)})"
+                else:
+                    btn_label = f"{PILLAR_ICONS[pillar]} ✅"
+                
+                # Style based on selection
+                btn_type = "primary" if is_selected else "secondary"
+                
+                if st.button(
+                    btn_label, 
+                    key=f"pillar_btn_{pillar.value}",
+                    type=btn_type,
+                    use_container_width=True,
+                    help=pillar.value
+                ):
+                    st.session_state.current_waf_pillar = pillar.value
+                    st.rerun()
+        
+        # Show current pillar name
+        current_pillar_enum = next((p for p in WAFPillar if p.value == st.session_state.current_waf_pillar), WAFPillar.OPERATIONAL_EXCELLENCE)
+        st.markdown(f"### {PILLAR_ICONS[current_pillar_enum]} {current_pillar_enum.value}")
+        
+        # Render questions for selected pillar only
+        self._render_pillar_questions(current_pillar_enum, show_pending_only=show_pending_only)
+        
+        st.markdown("---")
+        
+        # Navigation with Save button
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            if st.button("⬅️ Back to Scan Results", use_container_width=True):
+                self.session.current_phase = ReviewPhase.SCANNING
+                st.rerun()
+        with col2:
+            # Save Progress button
+            if st.button("💾 Save Progress", use_container_width=True, type="secondary"):
+                if self.save_progress():
+                    st.success("✅ Progress saved! You can continue later.")
+                    time.sleep(1)
+                    st.rerun()
+        with col3:
+            if st.button("▶️ Calculate Scores", type="primary", use_container_width=True):
+                # Auto-save before moving to next phase
+                self.save_progress()
+                self.session.questionnaire_completed = True
+                self.session.current_phase = ReviewPhase.SCORING
+                self.session.updated_at = datetime.now()
+                st.rerun()
+        
+        # Show last saved info
+        has_saved, saved_info = self.has_saved_progress()
+        if has_saved:
+            st.caption(f"💾 {saved_info}")
+    
+    def _auto_detect_answers(self):
+        """Auto-detect questionnaire answers from scan findings"""
+        
+        # Debug: Show findings count
+        total_findings = len(self.session.findings)
+        
+        for pillar in WAFPillar:
+            questions = WAF_QUESTIONS.get(pillar, [])
+            pillar_findings = [f for f in self.session.findings if f.pillar == pillar.value]
+            
+            # Debug info - show what we're working with
+            scan_detectable_qs = [q for q in questions if q.get('scan_detectable', False)]
+            
+            for q in questions:
+                # Check if question can be auto-detected
+                if q.get('scan_detectable', False):
+                    detection_services = q.get('detection_services', [])
+                    relevant_findings = [f for f in pillar_findings if f.service in detection_services]
+                    
+                    if relevant_findings:
+                        # Determine answer based on findings
+                        critical_high = [f for f in relevant_findings if f.severity in ['CRITICAL', 'HIGH']]
+                        
+                        if len(critical_high) > 2:
+                            response = "no"
+                            confidence = 0.9
+                        elif len(critical_high) > 0:
+                            response = "partial"
+                            confidence = 0.8
+                        else:
+                            response = "partial"  # Medium/Low findings = partial
+                            confidence = 0.7
+                        
+                        self.session.responses.append(QuestionResponse(
+                            question_id=q['id'],
+                            pillar=pillar.value,
+                            question_text=q['question'],
+                            response=response,
+                            auto_detected=True,
+                            confidence=confidence,
+                            evidence=[f"{f.title} ({f.severity})" for f in relevant_findings[:3]]
+                        ))
+                    else:
+                        # No findings for this question - could NOT detect, needs manual review
+                        self.session.responses.append(QuestionResponse(
+                            question_id=q['id'],
+                            pillar=pillar.value,
+                            question_text=q['question'],
+                            response="",  # Empty - needs manual answer
+                            auto_detected=False,
+                            confidence=0.0,
+                            evidence=["No scan data available for this question"]
+                        ))
+                else:
+                    # Manual question - cannot be auto-detected
+                    self.session.responses.append(QuestionResponse(
+                        question_id=q['id'],
+                        pillar=pillar.value,
+                        question_text=q['question'],
+                        response="",  # Empty - needs manual answer
+                        auto_detected=False
+                    ))
+        
+        # Count only questions with actual auto-detected answers (non-empty)
+        self.session.auto_detected_count = len([r for r in self.session.responses if r.auto_detected and r.response])
+        self.session.manual_required_count = len([r for r in self.session.responses if not r.response])
+    
+    def _render_pillar_questions(self, pillar: WAFPillar, show_pending_only: bool = False):
+        """Render questions for a specific pillar"""
+        
+        questions = WAF_QUESTIONS.get(pillar, [])
+        pillar_responses = {r.question_id: r for r in self.session.responses if r.pillar == pillar.value}
+        
+        # Debug: Show question count for this pillar
+        if not questions:
+            st.warning(f"⚠️ No questions found for {pillar.value}. WAF_QUESTIONS has {len(WAF_QUESTIONS)} pillars with keys: {[k.value for k in WAF_QUESTIONS.keys()]}")
+            return
+        
+        # Count answered vs pending for this pillar
+        answered_count = len([q for q in questions if pillar_responses.get(q['id']) and pillar_responses[q['id']].response])
+        pending_count = len(questions) - answered_count
+        
+        # Show summary
+        if pending_count > 0:
+            st.caption(f"📝 {len(questions)} questions | ✅ {answered_count} answered | ⚠️ {pending_count} pending")
+        else:
+            st.caption(f"📝 {len(questions)} questions | ✅ All answered!")
+        
+        # Filter questions if showing pending only
+        if show_pending_only:
+            questions_to_show = [q for q in questions if not pillar_responses.get(q['id']) or not pillar_responses[q['id']].response]
+            if not questions_to_show:
+                st.success("✅ All questions in this pillar are answered!")
+                return
+            st.info(f"🔍 Showing {len(questions_to_show)} pending questions only")
+        else:
+            questions_to_show = questions
+        
+        for q in questions_to_show:
+            response = pillar_responses.get(q['id'])
+            
+            # Determine if question has an answer
+            has_answer = response and response.response in ["yes", "partial", "no", "not_applicable"]
+            
+            # Add visual indicator for pending questions
+            q_label = f"**{q['id']}**: {q['question']}"
+            if not has_answer:
+                q_label = f"⚠️ **{q['id']}**: {q['question']}"
+            
+            with st.expander(q_label, expanded=not has_answer):
+                st.markdown(f"*{q.get('description', '')}*")
+                
+                # Show auto-detection status
+                if response and response.auto_detected and response.response:
+                    confidence_color = "green" if response.confidence > 0.7 else "orange" if response.confidence > 0.5 else "red"
+                    st.markdown(f"""
+                    <div style="background: #e8f5e9; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                        🤖 <b>Auto-detected</b> (Confidence: 
+                        <span style="color: {confidence_color}">{response.confidence:.0%}</span>)
+                        <br><small>Evidence: {', '.join(response.evidence[:3])}</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif not has_answer:
+                    st.markdown("""
+                    <div style="background: #fff3e0; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                        ⚠️ <b>Answer required</b> - Please select an option below
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Response options - include "Not answered" option
+                options = ["", "yes", "partial", "no", "not_applicable"]
+                labels = {"": "⬜ Select...", "yes": "✅ Yes", "partial": "⚠️ Partial", "no": "❌ No", "not_applicable": "➖ N/A"}
+                
+                current_response = response.response if response else ""
+                current_index = options.index(current_response) if current_response in options else 0
+                
+                new_response = st.radio(
+                    "Your assessment:",
+                    options,
+                    index=current_index,
+                    format_func=lambda x: labels.get(x, x),
+                    key=f"q_{q['id']}",
+                    horizontal=True
+                )
+                
+                # Update response ONLY if it changed (prevents infinite rerun)
+                if new_response != current_response:
+                    if response:
+                        response.response = new_response
+                    elif new_response:
+                        # Create new response if user answers a question that wasn't tracked
+                        self.session.responses.append(QuestionResponse(
+                            question_id=q['id'],
+                            pillar=pillar.value,
+                            question_text=q['question'],
+                            response=new_response,
+                            auto_detected=False
+                        ))
+                
+                # Best practices
+                if q.get('best_practices'):
+                    st.markdown("**Best Practices:**")
+                    for bp in q['best_practices']:
+                        st.markdown(f"- {bp}")
+    
+    # ========================================================================
+    # PHASE 4: SCORING
+    # ========================================================================
+    
+    def _render_scoring_phase(self):
+        """Render scoring phase with consolidated WAF scores"""
+        
+        st.markdown("## 📊 Step 4: WAF Scores")
+        
+        # Calculate scores
+        if not self.session.pillar_scores:
+            self._calculate_scores()
+        
+        # Update session state for dashboard to read
+        self._update_dashboard_session_state()
+        
+        # Overall score
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    padding: 30px; border-radius: 15px; text-align: center; color: white;">
+            <h1 style="margin: 0; font-size: 64px;">{self.session.overall_score:.0f}</h1>
+            <p style="margin: 0; font-size: 24px;">Overall WAF Score</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Pillar scores
+        st.markdown("### 📈 Scores by Pillar")
+        
+        cols = st.columns(3)
+        for idx, pillar in enumerate(WAFPillar):
+            score_data = self.session.pillar_scores.get(pillar.value)
+            if score_data:
+                icon = PILLAR_ICONS[pillar]
+                color = PILLAR_COLORS[pillar]
+                score = score_data.combined_score
+                
+                # Score color
+                score_color = "#4CAF50" if score >= 80 else "#FF9800" if score >= 60 else "#F44336"
+                
+                with cols[idx % 3]:
+                    st.markdown(f"""
+                    <div style="background: white; padding: 20px; border-radius: 10px; 
+                                border: 2px solid {color}; margin-bottom: 15px; text-align: center;">
+                        <h3 style="margin: 0;">{icon} {pillar.value}</h3>
+                        <h1 style="color: {score_color}; margin: 10px 0;">{score:.0f}</h1>
+                        <small>
+                            🔍 Scan: {score_data.scan_score:.0f} | 
+                            📝 Questions: {score_data.questionnaire_score:.0f}
+                        </small>
+                        <br>
+                        <small>🔴 {score_data.critical_count} Critical | 🟠 {score_data.high_count} High</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+        
+        # Save initial score for comparison
+        if not self.session.initial_score:
+            self.session.initial_score = self.session.overall_score
+        
+        st.markdown("---")
+        
+        # Improvement areas
+        st.markdown("### 🎯 Priority Improvement Areas")
+        
+        all_improvements = []
+        for pillar, score_data in self.session.pillar_scores.items():
+            for area in score_data.improvement_areas:
+                all_improvements.append((pillar, area, score_data.combined_score))
+        
+        # Sort by score (lowest first)
+        all_improvements.sort(key=lambda x: x[2])
+        
+        for pillar, area, score in all_improvements[:5]:
+            st.warning(f"**{pillar}**: {area}")
+        
+        st.markdown("---")
+        
+        # Navigation
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            if st.button("⬅️ Back to Questionnaire"):
+                self.session.current_phase = ReviewPhase.QUESTIONNAIRE
+                st.rerun()
+        with col3:
+            if st.button("▶️ Proceed to Remediation", type="primary"):
+                self.session.current_phase = ReviewPhase.REMEDIATION
+                self.session.updated_at = datetime.now()
+                st.rerun()
+    
+    def _update_dashboard_session_state(self):
+        """Update session state keys for the unified dashboard to read"""
+        
+        # Store findings in format dashboard expects
+        findings_list = []
+        for f in self.session.findings:
+            if hasattr(f, '__dict__'):
+                findings_list.append({
+                    'severity': getattr(f, 'severity', 'MEDIUM'),
+                    'title': getattr(f, 'title', ''),
+                    'pillar': getattr(f, 'pillar', ''),
+                    'service': getattr(f, 'service', ''),
+                    'description': getattr(f, 'description', ''),
+                })
+            elif isinstance(f, dict):
+                findings_list.append(f)
+        
+        st.session_state['last_findings'] = findings_list
+        
+        # Store pillar scores in format dashboard expects
+        pillar_scores_dict = {}
+        for pillar_name, score_obj in self.session.pillar_scores.items():
+            if hasattr(score_obj, 'combined_score'):
+                pillar_scores_dict[pillar_name] = int(score_obj.combined_score)
+            elif hasattr(score_obj, 'score'):
+                pillar_scores_dict[pillar_name] = int(score_obj.score)
+            elif isinstance(score_obj, (int, float)):
+                pillar_scores_dict[pillar_name] = int(score_obj)
+        
+        # Store in unified_assessment_results for backward compatibility
+        st.session_state['unified_assessment_results'] = {
+            'overall_score': self.session.overall_score,
+            'pillar_scores': pillar_scores_dict,
+            'findings': findings_list,
+            'scan_completed': self.session.scan_completed,
+            'questionnaire_completed': self.session.questionnaire_completed,
+        }
+        
+        # Store in last_scan for backward compatibility
+        st.session_state['last_scan'] = {
+            'findings': self.session.findings,
+            'pillar_scores': self.session.pillar_scores,
+            'overall_score': self.session.overall_score,
+            'scan_time': datetime.now().isoformat(),
+            'accounts': self.session.accounts,
+            'regions': self.session.regions,
+        }
+    
+    def _calculate_scores(self):
+        """Calculate scores for all pillars"""
+        
+        for pillar in WAFPillar:
+            pillar_findings = [f for f in self.session.findings if f.pillar == pillar.value]
+            pillar_responses = [r for r in self.session.responses if r.pillar == pillar.value]
+            
+            # Calculate scan score (based on findings severity)
+            scan_score = 100
+            for finding in pillar_findings:
+                if finding.severity == "CRITICAL":
+                    scan_score -= 15
+                elif finding.severity == "HIGH":
+                    scan_score -= 10
+                elif finding.severity == "MEDIUM":
+                    scan_score -= 5
+                elif finding.severity == "LOW":
+                    scan_score -= 2
+            scan_score = max(0, scan_score)
+            
+            # Calculate questionnaire score
+            questionnaire_score = 0
+            answered = 0
+            for response in pillar_responses:
+                if response.response:
+                    answered += 1
+                    if response.response == "yes":
+                        questionnaire_score += 100
+                    elif response.response == "partial":
+                        questionnaire_score += 50
+                    elif response.response == "not_applicable":
+                        questionnaire_score += 100  # N/A counts as compliant
+            
+            questionnaire_score = questionnaire_score / max(answered, 1)
+            
+            # Combined score (weighted average)
+            combined_score = (scan_score * 0.6) + (questionnaire_score * 0.4)
+            
+            # Identify improvement areas
+            improvements = []
+            critical_findings = [f for f in pillar_findings if f.severity == "CRITICAL"]
+            high_findings = [f for f in pillar_findings if f.severity == "HIGH"]
+            
+            for f in critical_findings[:2]:
+                improvements.append(f.title)
+            for f in high_findings[:2]:
+                improvements.append(f.title)
+            
+            self.session.pillar_scores[pillar.value] = PillarScore(
+                pillar=pillar,
+                scan_score=scan_score,
+                questionnaire_score=questionnaire_score,
+                combined_score=combined_score,
+                findings_count=len(pillar_findings),
+                critical_count=len(critical_findings),
+                high_count=len(high_findings),
+                questions_answered=answered,
+                questions_total=len(pillar_responses),
+                improvement_areas=improvements
             )
+        
+        # Calculate overall score
+        total_score = sum(s.combined_score for s in self.session.pillar_scores.values())
+        self.session.overall_score = total_score / len(self.session.pillar_scores)
+    
+    # ========================================================================
+    # PHASE 5: REMEDIATION (Integrated with Real CloudFormation Deployment)
+    # ========================================================================
+    
+    def _get_remediation_engine(self):
+        """Get or create remediation engine instance"""
+        if not hasattr(self, '_remediation_engine') or self._remediation_engine is None:
+            if REMEDIATION_ENGINE_AVAILABLE:
+                self._remediation_engine = RemediationEngine()
+            else:
+                self._remediation_engine = None
+        return self._remediation_engine
+    
+    def _render_remediation_phase(self):
+        """Render AI-powered remediation phase with real CloudFormation deployment"""
+        
+        st.markdown("## 🔨 Step 5: AI-Powered Remediation")
+        
+        # Check if real remediation engine is available
+        if REMEDIATION_ENGINE_AVAILABLE:
+            st.markdown("""
+            Review and deploy automated fixes for your findings.
+            **Real CloudFormation deployment** is enabled - changes will be applied to your AWS account.
+            """)
+            st.success("✅ **Real Deployment Mode** - CloudFormation stacks will be created in your AWS account")
+        else:
+            st.markdown("""
+            Review remediation code for your findings.
+            Export CloudFormation/Terraform code for manual deployment.
+            """)
+            st.warning("⚠️ **Export Only Mode** - Remediation engine not available. Code will be generated for manual deployment.")
+        
+        # Generate remediation items if not done
+        if not self.session.remediation_items:
+            self._generate_remediation_items()
+        
+        # Store findings for remediation tab integration
+        st.session_state['waf_review_findings'] = [
+            {
+                'id': f.id,
+                'title': f.title,
+                'service': f.service,
+                'severity': f.severity,
+                'resource': f.resource,
+                'account_id': f.account_id,
+                'region': getattr(f, 'region', 'us-east-1'),
+                'pillar': f.pillar
+            }
+            for f in self.session.findings
+        ]
+        
+        # Summary metrics
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            st.metric("Total Findings", len(self.session.findings))
+        with col2:
+            remediatable = len([r for r in self.session.remediation_items if r.cloudformation])
+            st.metric("Auto-Remediatable", remediatable)
+        with col3:
+            approved = len([r for r in self.session.remediation_items if r.status == "approved"])
+            st.metric("Approved", approved)
+        with col4:
+            deployed = len([r for r in self.session.remediation_items if r.status == "deployed"])
+            st.metric("Deployed", deployed)
+        with col5:
+            failed = len([r for r in self.session.remediation_items if r.status == "failed"])
+            st.metric("Failed", failed, delta_color="inverse" if failed > 0 else "off")
+        
+        st.markdown("---")
+        
+        # Deployment method selection (only if real engine available)
+        if REMEDIATION_ENGINE_AVAILABLE:
+            deployment_method = st.radio(
+                "Deployment Method",
+                ["🚀 Auto Deploy (CloudFormation)", "📥 Export Only (Manual)"],
+                horizontal=True,
+                help="Auto Deploy will create CloudFormation stacks directly. Export Only generates code for manual deployment."
+            )
+            self._use_auto_deploy = "Auto Deploy" in deployment_method
+        else:
+            self._use_auto_deploy = False
+        
+        st.markdown("---")
+        
+        # Filter options
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            severity_filter = st.multiselect(
+                "Filter by Severity",
+                ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+                default=["CRITICAL", "HIGH"]
+            )
+        with col2:
+            pillar_filter = st.multiselect(
+                "Filter by Pillar",
+                [p.value for p in WAFPillar],
+                default=[p.value for p in WAFPillar]
+            )
+        with col3:
+            status_filter = st.multiselect(
+                "Filter by Status",
+                ["pending", "approved", "deployed", "failed"],
+                default=["pending", "approved"]
+            )
+        
+        # Filtered items
+        filtered_items = [
+            r for r in self.session.remediation_items
+            if r.severity in severity_filter and r.pillar in pillar_filter and r.status in status_filter
+        ]
+        
+        st.markdown(f"### 📋 Remediation Items ({len(filtered_items)})")
+        
+        # Bulk actions
+        col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+        with col1:
+            if st.button("✅ Approve All Filtered", use_container_width=True):
+                approved_count = 0
+                for item in filtered_items:
+                    if item.status == "pending":
+                        item.status = "approved"
+                        item.approved_at = datetime.now().isoformat()
+                        approved_count += 1
+                if approved_count > 0:
+                    st.success(f"✅ Approved {approved_count} items!")
+                    st.rerun()
+                else:
+                    st.info("No pending items to approve")
+        
+        with col2:
+            approved_items = [r for r in filtered_items if r.status == "approved"]
+            if st.button(f"🚀 Deploy Approved ({len(approved_items)})", type="primary", use_container_width=True, disabled=len(approved_items) == 0):
+                self._deploy_approved_items_real()
+        
+        with col3:
+            if st.button("🔄 Refresh Status", use_container_width=True):
+                self._refresh_deployment_status()
+                st.rerun()
+        
+        with col4:
+            if st.button("📥 Export All Code", use_container_width=True):
+                self._export_remediation_code()
+        
+        st.markdown("---")
+        
+        # Show deployment progress if any deployments are in progress
+        deploying_items = [r for r in self.session.remediation_items if r.status == "deploying"]
+        if deploying_items:
+            st.warning(f"⏳ {len(deploying_items)} deployment(s) in progress...")
+            for item in deploying_items:
+                st.markdown(f"- `{item.stack_name}`: {item.finding_title}")
+        
+        # Render each remediation item
+        for idx, item in enumerate(filtered_items):
+            self._render_remediation_item_enhanced(item, idx)
+        
+        st.markdown("---")
+        
+        # Navigation
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            if st.button("⬅️ Back to Scores", use_container_width=True):
+                self.session.current_phase = ReviewPhase.SCORING
+                st.rerun()
+        
+        with col2:
+            # Save progress
+            if st.button("💾 Save Progress", use_container_width=True):
+                if self.save_progress():
+                    st.success("✅ Progress saved!")
+        
+        with col3:
+            deployed_count = len([r for r in self.session.remediation_items if r.status == "deployed"])
+            if deployed_count > 0:
+                if st.button("▶️ Verify Fixes (Re-scan)", type="primary", use_container_width=True):
+                    self.session.current_phase = ReviewPhase.RESCAN
+                    self.session.updated_at = datetime.now()
+                    st.rerun()
+            else:
+                st.info("Deploy at least one fix to proceed to verification")
+    
+    def _generate_remediation_items(self):
+        """Generate remediation items for all findings"""
+        
+        for finding in self.session.findings:
+            cfn, tf, cli = self._generate_remediation_code(finding)
+            
+            self.session.remediation_items.append(RemediationItem(
+                finding_id=finding.id,
+                finding_title=finding.title,
+                severity=finding.severity,
+                pillar=finding.pillar,
+                service=finding.service,
+                resource=finding.resource,
+                account_id=finding.account_id,
+                cloudformation=cfn,
+                terraform=tf,
+                aws_cli=cli,
+                stack_name=f"waf-fix-{finding.id}"
+            ))
+    
+    def _generate_remediation_code(self, finding: Finding) -> Tuple[str, str, List[str]]:
+        """Generate CloudFormation, Terraform, and CLI commands for a finding"""
+        
+        title = finding.title.lower()
+        service = finding.service.lower()
+        resource = finding.resource
+        
+        # S3 Encryption
+        if service == 's3' and 'encrypt' in title:
+            cfn = f"""AWSTemplateFormatVersion: '2010-09-09'
+Description: Enable S3 bucket encryption for {resource}
+Resources:
+  BucketEncryption:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: {resource}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+            BucketKeyEnabled: true"""
+            
+            tf = f"""resource "aws_s3_bucket_server_side_encryption_configuration" "{resource.replace('-', '_')}" {{
+  bucket = "{resource}"
+  rule {{
+    apply_server_side_encryption_by_default {{
+      sse_algorithm = "AES256"
+    }}
+    bucket_key_enabled = true
+  }}
+}}"""
+            
+            cli = [
+                f"aws s3api put-bucket-encryption --bucket {resource} \\",
+                f"  --server-side-encryption-configuration '{{\"Rules\":[{{\"ApplyServerSideEncryptionByDefault\":{{\"SSEAlgorithm\":\"AES256\"}},\"BucketKeyEnabled\":true}}]}}'"
+            ]
+            
+            return cfn, tf, cli
+        
+        # S3 Public Access
+        if service == 's3' and 'public' in title:
+            cfn = f"""AWSTemplateFormatVersion: '2010-09-09'
+Description: Block public access for S3 bucket {resource}
+Resources:
+  PublicAccessBlock:
+    Type: AWS::S3::BucketPublicAccessBlock
+    Properties:
+      Bucket: {resource}
+      BlockPublicAcls: true
+      BlockPublicPolicy: true
+      IgnorePublicAcls: true
+      RestrictPublicBuckets: true"""
+            
+            tf = f"""resource "aws_s3_bucket_public_access_block" "{resource.replace('-', '_')}" {{
+  bucket = "{resource}"
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}}"""
+            
+            cli = [
+                f"aws s3api put-public-access-block --bucket {resource} \\",
+                f"  --public-access-block-configuration 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true'"
+            ]
+            
+            return cfn, tf, cli
+        
+        # Security Group
+        if 'security group' in title.lower():
+            return self._generate_security_group_remediation(resource)
+        
+        # EC2 IMDSv2
+        if service == 'ec2' and 'imds' in title:
+            cfn = f"""AWSTemplateFormatVersion: '2010-09-09'
+Description: Enforce IMDSv2 for EC2 instance {resource}
+Resources:
+  # Note: This requires instance stop/start or launch template update
+  # Use AWS CLI for immediate enforcement"""
+            
+            tf = f"""# Enforce IMDSv2 on instance
+resource "aws_ec2_instance_metadata_options" "{resource.replace('-', '_')}" {{
+  instance_id              = "{resource}"
+  http_tokens              = "required"
+  http_endpoint            = "enabled"
+}}"""
+            
+            cli = [
+                f"aws ec2 modify-instance-metadata-options \\",
+                f"  --instance-id {resource} \\",
+                f"  --http-tokens required \\",
+                f"  --http-endpoint enabled"
+            ]
+            
+            return cfn, tf, cli
+        
+        # Default - no automated remediation
+        return "", "", []
+    
+    def _generate_security_group_remediation(self, sg_id: str) -> Tuple[str, str, List[str]]:
+        """Generate remediation for security group"""
+        
+        cfn = f"""AWSTemplateFormatVersion: '2010-09-09'
+Description: Remove overly permissive rules from security group {sg_id}
+# WARNING: This may break applications. Review before deploying.
+# Manual review required - auto-remediation not recommended for security groups."""
+        
+        tf = f"""# WARNING: Review before applying - may break applications
+# Security group {sg_id} has overly permissive rules
+# Manual review required"""
+        
+        cli = [
+            f"# List current rules for security group {sg_id}",
+            f"aws ec2 describe-security-groups --group-ids {sg_id}",
+            f"",
+            f"# To remove a specific ingress rule (modify as needed):",
+            f"# aws ec2 revoke-security-group-ingress --group-id {sg_id} --protocol tcp --port 22 --cidr 0.0.0.0/0"
+        ]
+        
+        return cfn, tf, cli
+    
+    def _render_remediation_item_enhanced(self, item: RemediationItem, idx: int):
+        """Render a single remediation item with enhanced deployment options"""
+        
+        severity_colors = {
+            "CRITICAL": "🔴",
+            "HIGH": "🟠",
+            "MEDIUM": "🟡",
+            "LOW": "🟢"
+        }
+        
+        status_badges = {
+            "pending": "⏳ Pending",
+            "approved": "✅ Approved",
+            "deploying": "🔄 Deploying...",
+            "deployed": "🚀 Deployed",
+            "verified": "✅ Verified",
+            "failed": "❌ Failed",
+            "rolled_back": "↩️ Rolled Back"
+        }
+        
+        # Determine if this item has real remediation code
+        has_remediation = item.cloudformation and not item.cloudformation.startswith('#')
+        
+        status_display = status_badges.get(item.status, item.status)
+        expander_label = f"{severity_colors.get(item.severity, '⚪')} **{item.severity}** - {item.finding_title} | {status_display}"
+        
+        with st.expander(expander_label, expanded=(item.status == "failed")):
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown(f"**Service:** {item.service}")
+                st.markdown(f"**Resource:** `{item.resource}`")
+                st.markdown(f"**Account:** {item.account_id}")
+                st.markdown(f"**Pillar:** {item.pillar}")
+                
+                # Show stack info if deployed
+                if item.stack_name and item.status in ["deployed", "deploying", "verified"]:
+                    st.markdown(f"**Stack Name:** `{item.stack_name}`")
+                if item.stack_id:
+                    st.markdown(f"**Stack ID:** `{item.stack_id[:50]}...`")
+                if item.deployed_at:
+                    st.markdown(f"**Deployed:** {item.deployed_at}")
+            
+            with col2:
+                # Action buttons based on status
+                if item.status == "pending":
+                    if has_remediation:
+                        if st.button("✅ Approve", key=f"approve_{idx}_{item.finding_id}", use_container_width=True):
+                            item.status = "approved"
+                            item.approved_at = datetime.now().isoformat()
+                            st.rerun()
+                    else:
+                        st.info("Manual remediation required")
+                
+                elif item.status == "approved":
+                    if has_remediation and getattr(self, '_use_auto_deploy', False):
+                        if st.button("🚀 Deploy Now", key=f"deploy_{idx}_{item.finding_id}", type="primary", use_container_width=True):
+                            self._deploy_single_item_real(item)
+                            st.rerun()
+                    else:
+                        st.info("Export code below")
+                
+                elif item.status == "deploying":
+                    st.info("⏳ Deployment in progress...")
+                    if st.button("🔄 Check Status", key=f"check_{idx}_{item.finding_id}", use_container_width=True):
+                        self._check_deployment_status(item)
+                        st.rerun()
+                
+                elif item.status == "deployed":
+                    st.success("✅ Successfully deployed")
+                    if st.button("↩️ Rollback", key=f"rollback_{idx}_{item.finding_id}", use_container_width=True):
+                        self._rollback_deployment(item)
+                        st.rerun()
+                
+                elif item.status == "failed":
+                    st.error("❌ Deployment failed")
+                    if st.button("🔄 Retry", key=f"retry_{idx}_{item.finding_id}", use_container_width=True):
+                        item.status = "approved"
+                        st.rerun()
+            
+            # Code tabs
+            if item.cloudformation or item.terraform:
+                code_tabs = st.tabs(["☁️ CloudFormation", "🏗️ Terraform", "💻 AWS CLI", "📋 Copy"])
+                
+                with code_tabs[0]:
+                    if item.cloudformation:
+                        st.code(item.cloudformation, language="yaml")
+                    else:
+                        st.info("No CloudFormation template available for this finding")
+                
+                with code_tabs[1]:
+                    if item.terraform:
+                        st.code(item.terraform, language="hcl")
+                    else:
+                        st.info("No Terraform code available for this finding")
+                
+                with code_tabs[2]:
+                    if item.aws_cli:
+                        st.code("\n".join(item.aws_cli), language="bash")
+                    else:
+                        st.info("No CLI commands available for this finding")
+                
+                with code_tabs[3]:
+                    # Copyable text area
+                    if item.cloudformation:
+                        st.text_area("CloudFormation (Copy)", item.cloudformation, height=150, key=f"copy_cfn_{idx}")
+                    if item.aws_cli:
+                        st.text_area("AWS CLI (Copy)", "\n".join(item.aws_cli), height=100, key=f"copy_cli_{idx}")
+    
+    def _deploy_single_item_real(self, item: RemediationItem):
+        """Deploy a single remediation item using real CloudFormation"""
+        
+        if not REMEDIATION_ENGINE_AVAILABLE:
+            st.error("❌ Remediation engine not available")
+            return
+        
+        try:
+            # Create remediation engine
+            engine = self._get_remediation_engine()
+            
+            if engine is None:
+                st.error("❌ Could not initialize remediation engine")
+                item.status = "failed"
+                return
+            
+            # Set stack name if not set
+            if not item.stack_name:
+                item.stack_name = f"waf-fix-{item.finding_id[:8]}-{int(time.time())}"
+            
+            # Prepare region
+            region = getattr(item, 'region', None) or 'us-east-1'
+            
+            # Deploy via CloudFormation
+            with st.spinner(f"🚀 Deploying {item.finding_title}..."):
+                try:
+                    # Use boto3 directly for CloudFormation deployment
+                    session = boto3.Session()
+                    cf_client = session.client('cloudformation', region_name=region)
+                    
+                    # Create stack
+                    response = cf_client.create_stack(
+                        StackName=item.stack_name,
+                        TemplateBody=item.cloudformation,
+                        Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
+                        Tags=[
+                            {'Key': 'CreatedBy', 'Value': 'WAF-Scanner'},
+                            {'Key': 'FindingId', 'Value': item.finding_id},
+                            {'Key': 'Severity', 'Value': item.severity},
+                            {'Key': 'Pillar', 'Value': item.pillar},
+                        ],
+                        OnFailure='ROLLBACK'
+                    )
+                    
+                    item.stack_id = response.get('StackId', '')
+                    item.status = "deploying"
+                    item.deployed_at = datetime.now().isoformat()
+                    
+                    st.success(f"✅ Stack creation initiated: {item.stack_name}")
+                    st.info("Stack is being created. Click 'Refresh Status' to check progress.")
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    if 'AlreadyExistsException' in error_msg:
+                        st.warning(f"⚠️ Stack {item.stack_name} already exists. Checking status...")
+                        self._check_deployment_status(item)
+                    else:
+                        item.status = "failed"
+                        st.error(f"❌ CloudFormation deployment failed: {error_msg}")
+                    
+        except Exception as e:
+            item.status = "failed"
+            st.error(f"❌ Deployment error: {str(e)}")
+    
+    def _deploy_approved_items_real(self):
+        """Deploy all approved remediation items using real CloudFormation"""
+        
+        approved_items = [r for r in self.session.remediation_items if r.status == "approved"]
+        
+        if not approved_items:
+            st.warning("No approved items to deploy")
+            return
+        
+        if not REMEDIATION_ENGINE_AVAILABLE and getattr(self, '_use_auto_deploy', False):
+            st.error("❌ Remediation engine not available for auto-deployment")
+            return
+        
+        # Confirmation dialog
+        st.warning(f"⚠️ You are about to deploy {len(approved_items)} remediation(s) to your AWS account.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            confirm = st.checkbox("I understand this will create CloudFormation stacks", key="deploy_confirm")
+        
+        if not confirm:
+            st.info("Check the box above to confirm deployment")
+            return
+        
+        # Deploy each item
+        progress = st.progress(0)
+        status_container = st.empty()
+        results = {"success": 0, "failed": 0}
+        
+        for idx, item in enumerate(approved_items):
+            status_container.markdown(f"🚀 Deploying ({idx + 1}/{len(approved_items)}): {item.finding_title}...")
+            progress.progress((idx + 1) / len(approved_items))
+            
+            self._deploy_single_item_real(item)
+            
+            if item.status in ["deploying", "deployed"]:
+                results["success"] += 1
+            else:
+                results["failed"] += 1
+            
+            time.sleep(0.5)  # Brief pause between deployments
+        
+        progress.progress(100)
+        
+        if results["failed"] == 0:
+            status_container.success(f"✅ All {results['success']} deployment(s) initiated successfully!")
+        else:
+            status_container.warning(f"⚠️ {results['success']} succeeded, {results['failed']} failed")
+        
+        self.session.remediation_deployed = len([r for r in self.session.remediation_items if r.status in ["deployed", "deploying"]])
+        
+        time.sleep(1)
+        st.rerun()
+    
+    def _check_deployment_status(self, item: RemediationItem):
+        """Check the status of a CloudFormation deployment"""
+        
+        if not item.stack_name:
+            return
+        
+        try:
+            region = getattr(item, 'region', None) or 'us-east-1'
+            session = boto3.Session()
+            cf_client = session.client('cloudformation', region_name=region)
+            
+            response = cf_client.describe_stacks(StackName=item.stack_name)
+            
+            if response.get('Stacks'):
+                stack = response['Stacks'][0]
+                stack_status = stack.get('StackStatus', '')
+                
+                if stack_status in ['CREATE_COMPLETE', 'UPDATE_COMPLETE']:
+                    item.status = "deployed"
+                    st.success(f"✅ Stack {item.stack_name} deployed successfully!")
+                elif stack_status in ['CREATE_IN_PROGRESS', 'UPDATE_IN_PROGRESS']:
+                    item.status = "deploying"
+                    st.info(f"⏳ Stack {item.stack_name} is still being created...")
+                elif stack_status in ['CREATE_FAILED', 'ROLLBACK_COMPLETE', 'ROLLBACK_FAILED', 'DELETE_COMPLETE']:
+                    item.status = "failed"
+                    reason = stack.get('StackStatusReason', 'Unknown reason')
+                    st.error(f"❌ Stack {item.stack_name} failed: {reason}")
+                else:
+                    st.info(f"Stack status: {stack_status}")
+                    
+        except Exception as e:
+            if 'does not exist' in str(e):
+                item.status = "failed"
+                st.error(f"❌ Stack {item.stack_name} does not exist or was deleted")
+            else:
+                st.error(f"❌ Error checking status: {str(e)}")
+    
+    def _refresh_deployment_status(self):
+        """Refresh status of all deploying items"""
+        
+        deploying_items = [r for r in self.session.remediation_items if r.status == "deploying"]
+        
+        for item in deploying_items:
+            self._check_deployment_status(item)
+    
+    def _rollback_deployment(self, item: RemediationItem):
+        """Rollback a deployed CloudFormation stack"""
+        
+        if not item.stack_name:
+            st.error("No stack name to rollback")
+            return
+        
+        try:
+            region = getattr(item, 'region', None) or 'us-east-1'
+            session = boto3.Session()
+            cf_client = session.client('cloudformation', region_name=region)
+            
+            with st.spinner(f"↩️ Rolling back {item.stack_name}..."):
+                cf_client.delete_stack(StackName=item.stack_name)
+                item.status = "rolled_back"
+                st.success(f"✅ Stack {item.stack_name} deletion initiated")
+                
+        except Exception as e:
+            st.error(f"❌ Rollback failed: {str(e)}")
+    
+    def _export_remediation_code(self):
+        """Export all remediation code to downloadable files"""
+        
+        # Create combined CloudFormation template
+        cfn_templates = []
+        tf_templates = []
+        cli_commands = []
+        
+        for item in self.session.remediation_items:
+            if item.cloudformation and not item.cloudformation.startswith('#'):
+                cfn_templates.append(f"# ====== {item.finding_title} ======\n{item.cloudformation}\n")
+            if item.terraform:
+                tf_templates.append(f"# ====== {item.finding_title} ======\n{item.terraform}\n")
+            if item.aws_cli:
+                cli_commands.append(f"# ====== {item.finding_title} ======\n" + "\n".join(item.aws_cli) + "\n")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if cfn_templates:
+                cfn_content = "\n".join(cfn_templates)
+                st.download_button(
+                    "📥 Download CloudFormation",
+                    cfn_content,
+                    file_name="waf_remediation_cloudformation.yaml",
+                    mime="text/yaml"
+                )
+        
+        with col2:
+            if tf_templates:
+                tf_content = "\n".join(tf_templates)
+                st.download_button(
+                    "📥 Download Terraform",
+                    tf_content,
+                    file_name="waf_remediation_terraform.tf",
+                    mime="text/plain"
+                )
+        
+        with col3:
+            if cli_commands:
+                cli_content = "#!/bin/bash\n" + "\n".join(cli_commands)
+                st.download_button(
+                    "📥 Download CLI Script",
+                    cli_content,
+                    file_name="waf_remediation_cli.sh",
+                    mime="text/x-sh"
+                )
+        
+        st.success(f"📦 Exported {len(cfn_templates)} CloudFormation, {len(tf_templates)} Terraform, {len(cli_commands)} CLI")
+    
+    # Keep old function for backward compatibility
+    def _render_remediation_item(self, item: RemediationItem, idx: int):
+        """Legacy function - redirects to enhanced version"""
+        self._render_remediation_item_enhanced(item, idx)
+    
+    def _deploy_single_item(self, item: RemediationItem):
+        """Legacy function - redirects to real deployment"""
+        self._deploy_single_item_real(item)
+    
+    def _deploy_approved_items(self):
+        """Legacy function - redirects to real deployment"""
+        self._deploy_approved_items_real()
+    
+    # ========================================================================
+    # PHASE 6: RE-SCAN (Real Verification)
+    # ========================================================================
+    
+    def _render_rescan_phase(self):
+        """Render re-scan verification phase with real AWS scanning"""
+        
+        st.markdown("## ✅ Step 6: Verify Remediation")
+        st.markdown("Re-scan your accounts to verify fixes have been applied and measure improvement.")
+        
+        deployed_count = len([r for r in self.session.remediation_items if r.status == "deployed"])
+        deploying_count = len([r for r in self.session.remediation_items if r.status == "deploying"])
+        
+        # Show deployment summary
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Deployed", deployed_count)
+        with col2:
+            st.metric("In Progress", deploying_count)
+        with col3:
+            st.metric("Initial Score", f"{self.session.initial_score:.0f}")
+        with col4:
+            if self.session.rescan_completed:
+                st.metric("Final Score", f"{self.session.final_score:.0f}", delta=f"+{self.session.score_improvement:.0f}")
+            else:
+                st.metric("Final Score", "Pending")
+        
+        st.markdown("---")
+        
+        # Check if deployments are still in progress
+        if deploying_count > 0:
+            st.warning(f"⏳ {deploying_count} deployment(s) still in progress. Wait for completion before verifying.")
+            
+            if st.button("🔄 Refresh Deployment Status", use_container_width=True):
+                self._refresh_deployment_status()
+                st.rerun()
+            
+            with st.expander("📋 Deployments in Progress"):
+                for item in self.session.remediation_items:
+                    if item.status == "deploying":
+                        st.markdown(f"- **{item.finding_title}** - Stack: `{item.stack_name}`")
+        
+        if not self.session.rescan_completed:
+            st.info(f"📊 {deployed_count} remediation(s) deployed. Run a verification scan to measure improvement.")
+            
+            # Verification options
+            st.markdown("### 🔍 Verification Options")
+            
+            verification_method = st.radio(
+                "Choose verification method:",
+                ["🔄 Full Re-scan (Recommended)", "⚡ Quick Check (Stack Status Only)", "📊 Estimated Score"],
+                help="Full re-scan will run the same scan again to find remaining issues. Quick check verifies stack status only."
+            )
+            
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                if "Full Re-scan" in verification_method:
+                    if st.button("🔍 Run Verification Scan", type="primary", use_container_width=True, disabled=deploying_count > 0):
+                        self._run_verification_scan_real()
+                elif "Quick Check" in verification_method:
+                    if st.button("⚡ Quick Verify", type="primary", use_container_width=True):
+                        self._run_quick_verification()
+                else:
+                    if st.button("📊 Calculate Estimated Score", type="primary", use_container_width=True):
+                        self._calculate_estimated_improvement()
+        
+        else:
+            # Show before/after comparison
+            st.markdown("### 📊 Before & After Comparison")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown(f"""
+                <div style="background: #ffebee; padding: 20px; border-radius: 10px; text-align: center;">
+                    <h4>Before Remediation</h4>
+                    <h1 style="color: #c62828;">{self.session.initial_score:.0f}</h1>
+                    <p>{self.session.initial_findings_count} findings</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                improvement = self.session.final_score - self.session.initial_score
+                findings_fixed = getattr(self.session, 'findings_fixed', deployed_count)
+                st.markdown(f"""
+                <div style="background: #e8f5e9; padding: 20px; border-radius: 10px; text-align: center;">
+                    <h4>Improvement</h4>
+                    <h1 style="color: #2e7d32;">+{improvement:.0f}</h1>
+                    <p>{findings_fixed} findings fixed</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                remaining_findings = getattr(self.session, 'remaining_findings_count', 0)
+                st.markdown(f"""
+                <div style="background: #e3f2fd; padding: 20px; border-radius: 10px; text-align: center;">
+                    <h4>After Remediation</h4>
+                    <h1 style="color: #1565c0;">{self.session.final_score:.0f}</h1>
+                    <p>{remaining_findings} findings remaining</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Show fixed vs remaining findings
+            if hasattr(self.session, 'fixed_findings') and self.session.fixed_findings:
+                st.markdown("### ✅ Verified Fixed")
+                with st.expander(f"Fixed Findings ({len(self.session.fixed_findings)})", expanded=False):
+                    for f in self.session.fixed_findings[:10]:
+                        st.markdown(f"- ✅ **{f.get('title', f.get('finding_title', 'Unknown'))}**")
+                    if len(self.session.fixed_findings) > 10:
+                        st.markdown(f"... and {len(self.session.fixed_findings) - 10} more")
+            
+            if hasattr(self.session, 'remaining_findings') and self.session.remaining_findings:
+                st.markdown("### ⚠️ Remaining Issues")
+                with st.expander(f"Remaining Findings ({len(self.session.remaining_findings)})", expanded=False):
+                    for f in self.session.remaining_findings[:10]:
+                        severity = f.get('severity', 'UNKNOWN')
+                        st.markdown(f"- {'🔴' if severity == 'CRITICAL' else '🟠' if severity == 'HIGH' else '🟡'} **{f.get('title', 'Unknown')}** ({severity})")
+                    if len(self.session.remaining_findings) > 10:
+                        st.markdown(f"... and {len(self.session.remaining_findings) - 10} more")
+            
+            # Pillar comparison
+            if hasattr(self.session, 'pillar_comparison') and self.session.pillar_comparison:
+                st.markdown("### 📈 Improvement by Pillar")
+                for pillar, data in self.session.pillar_comparison.items():
+                    before = data.get('before', 0)
+                    after = data.get('after', 0)
+                    delta = after - before
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.progress(after / 100 if after else 0)
+                    with col2:
+                        st.markdown(f"**{pillar}**: {before:.0f} → {after:.0f} (+{delta:.0f})")
+            
+            st.markdown("---")
+            
+            # Navigation
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col1:
+                if st.button("🔄 Re-scan Again", use_container_width=True):
+                    self.session.rescan_completed = False
+                    st.rerun()
+            with col2:
+                if st.button("⬅️ Back to Remediate", use_container_width=True):
+                    self.session.current_phase = ReviewPhase.REMEDIATION
+                    st.rerun()
+            with col3:
+                if st.button("▶️ Complete Review", type="primary", use_container_width=True):
+                    self.session.current_phase = ReviewPhase.COMPLETE
+                    self.session.updated_at = datetime.now()
+                    st.rerun()
+    
+    def _run_verification_scan_real(self):
+        """Run real verification scan after remediation"""
+        
+        progress = st.progress(0)
+        status = st.empty()
+        
+        # Store initial findings count
+        self.session.initial_findings_count = len(self.session.findings)
+        initial_finding_ids = {f.id for f in self.session.findings}
+        
+        status.markdown("🔍 **Initiating verification scan...**")
+        progress.progress(10)
+        
+        try:
+            # Re-run the scan using the same configuration
+            from landscape_scanner import LandscapeScanner
+            
+            scanner = LandscapeScanner()
+            new_findings = []
+            
+            # Scan each account that was originally scanned
+            for idx, account in enumerate(self.session.accounts):
+                account_id = account.get('account_id', account.get('id', 'unknown'))
+                status.markdown(f"🔍 **Scanning account {account_id}...**")
+                progress.progress(10 + int((idx + 1) / len(self.session.accounts) * 60))
+                
+                try:
+                    # Scan account
+                    results = scanner.scan_account(
+                        account_id=account_id,
+                        regions=self.session.regions
+                    )
+                    new_findings.extend(results.get('findings', []))
+                except Exception as e:
+                    st.warning(f"⚠️ Could not scan {account_id}: {str(e)}")
+            
+            progress.progress(80)
+            status.markdown("📊 **Analyzing results...**")
+            
+            # Compare findings
+            new_finding_ids = {f.get('id', f.get('finding_id', '')) for f in new_findings}
+            
+            # Fixed = in original but not in new
+            fixed_ids = initial_finding_ids - new_finding_ids
+            self.session.fixed_findings = [f for f in self.session.findings if f.id in fixed_ids]
+            self.session.findings_fixed = len(fixed_ids)
+            
+            # Remaining = still present
+            self.session.remaining_findings = new_findings
+            self.session.remaining_findings_count = len(new_findings)
+            
+            # Calculate new score
+            # Score improvement based on findings fixed vs total
+            if self.session.initial_findings_count > 0:
+                fix_rate = self.session.findings_fixed / self.session.initial_findings_count
+                self.session.score_improvement = fix_rate * 30  # Max 30 points improvement
+            else:
+                self.session.score_improvement = 0
+            
+            self.session.final_score = min(100, self.session.initial_score + self.session.score_improvement)
+            
+            # Pillar comparison
+            self.session.pillar_comparison = {}
+            for pillar in WAFPillar:
+                before_count = len([f for f in self.session.findings if f.pillar == pillar.value])
+                after_count = len([f for f in new_findings if f.get('pillar') == pillar.value])
+                
+                before_score = self.session.pillar_scores.get(pillar.value, PillarScore(pillar=pillar.value)).combined_score
+                # Estimate after score based on reduction
+                if before_count > 0:
+                    reduction = (before_count - after_count) / before_count
+                    after_score = min(100, before_score + (reduction * 20))
+                else:
+                    after_score = before_score
+                
+                self.session.pillar_comparison[pillar.value] = {
+                    'before': before_score,
+                    'after': after_score,
+                    'findings_before': before_count,
+                    'findings_after': after_count
+                }
+            
+            progress.progress(100)
+            status.markdown("✅ **Verification scan complete!**")
+            
+        except ImportError:
+            # Fallback to estimated improvement if scanner not available
+            status.markdown("⚠️ **Scanner not available, using estimated improvement...**")
+            self._calculate_estimated_improvement()
+            return
+        except Exception as e:
+            st.error(f"❌ Verification scan failed: {str(e)}")
+            status.markdown("⚠️ **Using estimated improvement due to scan error...**")
+            self._calculate_estimated_improvement()
+            return
+        
+        self.session.rescan_completed = True
+        self.session.rescan_timestamp = datetime.now()
+        
+        time.sleep(1)
+        st.rerun()
+    
+    def _run_quick_verification(self):
+        """Quick verification by checking stack status only"""
+        
+        progress = st.progress(0)
+        status = st.empty()
+        
+        status.markdown("⚡ **Checking deployment status...**")
+        
+        verified_count = 0
+        failed_count = 0
+        
+        deployed_items = [r for r in self.session.remediation_items if r.status in ["deployed", "deploying"]]
+        
+        for idx, item in enumerate(deployed_items):
+            progress.progress(int((idx + 1) / len(deployed_items) * 100))
+            
+            if item.stack_name:
+                self._check_deployment_status(item)
+                
+                if item.status == "deployed":
+                    verified_count += 1
+                elif item.status == "failed":
+                    failed_count += 1
+        
+        # Calculate score based on verified deployments
+        self.session.findings_fixed = verified_count
+        self.session.initial_findings_count = len(self.session.findings)
+        
+        if self.session.initial_findings_count > 0:
+            fix_rate = verified_count / self.session.initial_findings_count
+            self.session.score_improvement = fix_rate * 25
+        else:
+            self.session.score_improvement = 0
+        
+        self.session.final_score = min(100, self.session.initial_score + self.session.score_improvement)
+        self.session.remaining_findings_count = self.session.initial_findings_count - verified_count
+        
+        self.session.rescan_completed = True
+        self.session.rescan_timestamp = datetime.now()
+        
+        status.markdown(f"✅ **Quick verification complete!** {verified_count} verified, {failed_count} failed")
+        
+        time.sleep(1)
+        st.rerun()
+    
+    def _calculate_estimated_improvement(self):
+        """Calculate estimated score improvement based on deployments"""
+        
+        deployed_count = len([r for r in self.session.remediation_items if r.status == "deployed"])
+        
+        self.session.initial_findings_count = len(self.session.findings)
+        self.session.findings_fixed = deployed_count
+        self.session.remaining_findings_count = max(0, self.session.initial_findings_count - deployed_count)
+        
+        # Estimate improvement: ~3 points per fix, max 30
+        self.session.score_improvement = min(deployed_count * 3, 30)
+        self.session.final_score = min(100, self.session.initial_score + self.session.score_improvement)
+        
+        self.session.rescan_completed = True
+        self.session.rescan_timestamp = datetime.now()
+        
+        st.success(f"📊 Estimated improvement calculated: +{self.session.score_improvement:.0f} points")
+        time.sleep(1)
+        st.rerun()
+    
+    # Keep legacy function for compatibility
+    def _run_verification_scan(self):
+        """Legacy function - redirects to real verification"""
+        self._run_verification_scan_real()
+    
+    # ========================================================================
+    # PHASE 7: COMPLETE
+    # ========================================================================
+    
+    def _render_complete_phase(self):
+        """Render completion phase with final report and navigation to WAF Assessment"""
+        
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%); 
+                    padding: 30px; border-radius: 15px; text-align: center; color: white;">
+            <h1>🎉 Unified Assessment Complete!</h1>
+            <p>Your assessment is ready. Proceed to WAF Assessment for detailed analysis and remediation.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Final summary
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Initial Score", f"{self.session.initial_score:.0f}")
+        with col2:
+            st.metric("Final Score", f"{self.session.final_score:.0f}")
+        with col3:
+            st.metric("Improvement", f"+{self.session.score_improvement:.0f}")
+        with col4:
+            deployed = len([r for r in self.session.remediation_items if r.status == "deployed"])
+            st.metric("Fixes Deployed", deployed)
+        
+        st.markdown("---")
+        
+        # Store assessment data for WAF Assessment tab
+        assessment_data = {
+            'session_id': self.session.session_id,
+            'completed_at': datetime.now().isoformat(),
+            'accounts': self.session.accounts,
+            'regions': self.session.regions,
+            'findings': [vars(f) if hasattr(f, '__dict__') else f for f in self.session.findings],
+            'pillar_scores': {k: vars(v) if hasattr(v, '__dict__') else v for k, v in self.session.pillar_scores.items()},
+            'overall_score': self.session.overall_score,
+            'initial_score': self.session.initial_score,
+            'final_score': self.session.final_score,
+            'score_improvement': self.session.score_improvement,
+            'questionnaire_responses': [vars(r) if hasattr(r, '__dict__') else r for r in self.session.responses],
+            'remediation_items': [vars(r) if hasattr(r, '__dict__') else r for r in self.session.remediation_items],
+            'resources_scanned': self.session.resources_scanned,
+            'services_scanned': self.session.services_scanned,
+        }
+        
+        # Store in session state for other tabs to access
+        st.session_state['unified_assessment_results'] = assessment_data
+        st.session_state['last_scan'] = {
+            'findings': self.session.findings,
+            'pillar_scores': self.session.pillar_scores,
+            'overall_score': self.session.overall_score,
+            'scan_time': datetime.now().isoformat(),
+            'accounts': self.session.accounts,
+            'regions': self.session.regions,
+        }
+        
+        # Navigation options
+        st.markdown("### 🚀 Next Steps")
+        
+        st.info("""
+        **Recommended Flow:**
+        1. **WAF Assessment** - View detailed pillar analysis and recommendations
+        2. **Remediation** - Deploy fixes for identified issues  
+        3. **Compliance** - Map findings to compliance frameworks
+        4. **AI Lens** - Get AI-powered insights and optimization suggestions
+        """)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("📊 Go to WAF Assessment", type="primary", use_container_width=True):
+                # Navigate to WAF Assessment tab
+                st.session_state['active_tab'] = 'WAF Assessment'
+                st.session_state['navigate_to'] = 'waf_assessment'
+                st.rerun()
+        
+        with col2:
+            if st.button("🔧 Go to Remediation", use_container_width=True):
+                # Navigate to Remediation tab
+                st.session_state['active_tab'] = 'Remediation'
+                st.session_state['navigate_to'] = 'remediation'
+                st.rerun()
+        
+        with col3:
+            if st.button("🤖 Go to AI Lens", use_container_width=True):
+                # Navigate to AI Lens tab
+                st.session_state['active_tab'] = 'AI Lens'
+                st.session_state['navigate_to'] = 'ai_lens'
+                st.rerun()
+        
+        st.markdown("---")
+        
+        # Report generation
+        st.markdown("### 📄 Generate Reports")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("📊 Executive Summary PDF", use_container_width=True):
+                st.info("PDF generation would be triggered here")
+        
+        with col2:
+            if st.button("📋 Detailed Findings CSV", use_container_width=True):
+                st.info("CSV export would be triggered here")
+        
+        with col3:
+            if st.button("📁 Full Report Package", use_container_width=True):
+                st.info("Full package download would be triggered here")
+        
+        st.markdown("---")
+        
+        # Start new review
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("🔄 Start New Unified Assessment", use_container_width=True):
+                # Reset session
+                st.session_state[self.session_key] = WAFReviewSession(
+                    session_id=hashlib.md5(str(datetime.now()).encode()).hexdigest()[:12],
+                    created_at=datetime.now(),
+                    updated_at=datetime.now()
+                )
+                st.rerun()
 
-# Export main function
-__all__ = [
-    'Pillar', 'RiskLevel', 'AssessmentType',
-    'Question', 'Choice', 'Response', 'ActionItem', 'WAFAssessment',
-    'get_complete_waf_questions',
-    'render_waf_review_tab'  # Main function for streamlit_app.py
-]
+
+# ============================================================================
+# MAIN RENDER FUNCTION
+# ============================================================================
+
+def render_comprehensive_waf_review():
+    """Main entry point for the comprehensive WAF Review module"""
+    workflow = WAFReviewWorkflow()
+    workflow.render()
+
+
+# Allow direct execution for testing
+if __name__ == "__main__":
+    render_comprehensive_waf_review()
