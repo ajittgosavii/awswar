@@ -121,7 +121,7 @@ class LiveDataService:
             return "$0"
     
     @st.cache_data(ttl=300)
-def get_security_findings(self, account_name: str = None) -> List[Dict]:
+    def get_security_findings(self, account_name: str = None) -> List[Dict]:
         """Get real security findings from Security Hub"""
         try:
             if not self.account_mgr:

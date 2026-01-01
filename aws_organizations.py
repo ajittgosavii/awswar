@@ -23,7 +23,7 @@ class AWSOrganizationsManager:
     # ============= ORGANIZATION INFO =============
     
     @st.cache_data(ttl=600)
-def get_organization(self) -> Optional[Dict[str, Any]]:
+    def get_organization(self) -> Optional[Dict[str, Any]]:
         """Get organization details"""
         try:
             response = self.org_client.describe_organization()
@@ -44,7 +44,7 @@ def get_organization(self) -> Optional[Dict[str, Any]]:
     # ============= ACCOUNT OPERATIONS =============
     
     @st.cache_data(ttl=600)  # 10 min cache - accounts rarely change
-def list_accounts(self) -> List[Dict[str, Any]]:
+    def list_accounts(self) -> List[Dict[str, Any]]:
         """List all accounts in the organization"""
         try:
             accounts = []
