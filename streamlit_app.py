@@ -676,10 +676,11 @@ def render_sidebar():
         
         scan_mode = st.radio(
             "Account Scope",
-            ["Single Account", "Multi-Account"],
-            key="scan_mode_radio"
+            ["Single Account", "Multi-Account", "Security Hub"],
+            key="scan_mode_radio",
+            help="Security Hub mode for 100+ account enterprises"
         )
-        st.session_state.scan_mode = "single" if scan_mode == "Single Account" else "multi"
+        st.session_state.scan_mode = "single" if scan_mode == "Single Account" else ("security_hub" if scan_mode == "Security Hub" else "multi")
         
         st.markdown("---")
         
@@ -721,6 +722,16 @@ def render_sidebar():
                         st.info("👉 Go to AWS Connector tab")
                 except:
                     st.warning("⚠️ Not Connected")
+            elif st.session_state.scan_mode == "security_hub":
+                # Security Hub mode
+                st.markdown("#### Security Hub")
+                if st.session_state.get('security_hub_connected'):
+                    st.success("✅ Security Hub Connected")
+                    st.info(f"**Members:** {st.session_state.get('sh_member_count', 0)} accounts")
+                    st.caption("🔒 Delegated Admin mode")
+                else:
+                    st.warning("⚠️ Not Connected")
+                    st.info("👉 Go to AWS Connector → Security Hub")
             else:
                 st.markdown("#### Multi-Account")
                 num_accounts = len(st.session_state.connected_accounts)
@@ -817,28 +828,47 @@ def render_aws_connector_tab():
     # Live mode - show real connector
     st.info("🔴 **Live Mode** - Configure real AWS credentials below")
     
-    # Mode selection
+    # Mode selection - THREE CONNECTION MODES
     col1, col2 = st.columns([1, 3])
     with col1:
         mode = st.radio(
             "Connection Mode",
-            ["Single Account", "Multi-Account"],
-            key="connector_mode"
+            ["Single Account", "Multi-Account", "Security Hub (Enterprise)"],
+            key="connector_mode",
+            help="Choose based on your AWS organization size"
         )
     
     with col2:
-        st.info("""
-        **Single Account:** Connect one AWS account for WAF assessment
-        
-        **Multi-Account:** Connect multiple accounts for organization-wide WAF scanning
-        """)
+        if mode == "Single Account":
+            st.info("""
+            **Single Account:** Connect one AWS account for WAF assessment
+            
+            Best for: Individual accounts, POCs, small organizations
+            """)
+        elif mode == "Multi-Account":
+            st.info("""
+            **Multi-Account:** Connect multiple accounts using AssumeRole or AWS Organizations
+            
+            Best for: Organizations with 10-100 accounts
+            """)
+        else:
+            st.success("""
+            **Security Hub (Enterprise):** Connect via Security Hub Delegated Administrator
+            
+            Best for: Enterprise organizations with **100-1000+ accounts**
+            - Single aggregator connection instead of 500+ individual connections
+            - Automatic WAF pillar mapping from Security Hub findings
+            - Supports GuardDuty, Inspector, Config, Macie findings
+            """)
     
     st.markdown("---")
     
     if mode == "Single Account":
         render_single_account_connector()
-    else:
+    elif mode == "Multi-Account":
         render_multi_account_connector()
+    else:
+        render_security_hub_connector()
 
 def render_single_account_connector():
     """Single account connection"""
@@ -1569,6 +1599,232 @@ def render_multi_account_connector():
                         st.warning("Selected accounts are already imported")
             else:
                 st.info("👆 Select accounts above to import")
+
+# ============================================================================
+# SECURITY HUB CONNECTOR (ENTERPRISE MODE)
+# ============================================================================
+
+def render_security_hub_connector():
+    """Security Hub Delegated Administrator connection for enterprise organizations"""
+    
+    st.markdown("### 🔒 Security Hub Enterprise Connection")
+    st.markdown("Connect via Security Hub Delegated Administrator for organizations with 100-1000+ accounts")
+    
+    # Benefits overview
+    with st.expander("📋 Why Use Security Hub Mode?", expanded=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            **Traditional Multi-Account (AssumeRole):**
+            - ❌ 500 accounts = 500 API connections
+            - ❌ 15-30 minutes scan time
+            - ❌ Complex IAM role management
+            - ❌ API throttling issues
+            """)
+        
+        with col2:
+            st.markdown("""
+            **Security Hub Delegated Admin:**
+            - ✅ 500 accounts = 1 aggregator connection
+            - ✅ 3-5 minutes scan time
+            - ✅ Simple IAM setup
+            - ✅ No throttling issues
+            - ✅ Automatic WAF pillar mapping
+            """)
+    
+    st.markdown("---")
+    
+    # Configuration tabs
+    tab1, tab2, tab3 = st.tabs(["🔧 Configure", "📊 Test Connection", "📖 Setup Guide"])
+    
+    with tab1:
+        st.markdown("#### Delegated Administrator Credentials")
+        st.info("Enter credentials for your Security Hub Delegated Administrator account")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            sh_access_key = st.text_input(
+                "Access Key ID",
+                type="password",
+                help="Delegated Admin account access key",
+                key="sh_access_key"
+            )
+            sh_region = st.selectbox(
+                "Aggregation Region",
+                ["us-east-1", "us-east-2", "us-west-2", "eu-west-1", "eu-central-1", "ap-southeast-1"],
+                help="Region where Security Hub aggregation is configured",
+                key="sh_region"
+            )
+        
+        with col2:
+            sh_secret_key = st.text_input(
+                "Secret Access Key",
+                type="password",
+                help="Delegated Admin account secret key",
+                key="sh_secret_key"
+            )
+            finding_types = st.multiselect(
+                "Finding Sources",
+                ["GuardDuty", "Inspector", "Config", "Macie", "IAM Access Analyzer", "Firewall Manager"],
+                default=["GuardDuty", "Inspector", "Config"],
+                help="Security Hub integrations to pull findings from",
+                key="sh_finding_types"
+            )
+        
+        # Advanced options
+        with st.expander("⚙️ Advanced Options"):
+            col1, col2 = st.columns(2)
+            with col1:
+                cache_ttl = st.slider("Cache TTL (seconds)", 60, 600, 300, key="sh_cache_ttl")
+                max_findings = st.number_input("Max Findings per Source", 100, 10000, 1000, key="sh_max_findings")
+            with col2:
+                severity_filter = st.multiselect(
+                    "Severity Filter",
+                    ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"],
+                    default=["CRITICAL", "HIGH", "MEDIUM"],
+                    key="sh_severity_filter"
+                )
+                include_archived = st.checkbox("Include Archived Findings", value=False, key="sh_include_archived")
+        
+        # Connect button
+        col1, col2, col3 = st.columns([1, 1, 2])
+        
+        with col1:
+            if st.button("🔌 Connect", type="primary", use_container_width=True, key="sh_connect_btn"):
+                if sh_access_key and sh_secret_key:
+                    with st.spinner("Connecting to Security Hub..."):
+                        try:
+                            # Try to use the enterprise Security Hub connector
+                            from security_hub_enterprise import EnterpriseSecurityHubManager
+                            
+                            manager = EnterpriseSecurityHubManager(
+                                delegated_admin_access_key=sh_access_key,
+                                delegated_admin_secret_key=sh_secret_key,
+                                region=sh_region,
+                                cache_ttl=cache_ttl
+                            )
+                            
+                            # Test connection
+                            hub_status = manager.get_hub_status()
+                            
+                            if hub_status.get('hub_enabled'):
+                                st.session_state.security_hub_connected = True
+                                st.session_state.security_hub_manager = manager
+                                st.session_state.sh_member_count = hub_status.get('member_count', 0)
+                                st.success(f"✅ Connected! Found {hub_status.get('member_count', 0)} member accounts")
+                                st.rerun()
+                            else:
+                                st.error("Security Hub is not enabled in this account")
+                                
+                        except ImportError:
+                            st.error("Security Hub Enterprise module not available")
+                        except Exception as e:
+                            st.error(f"Connection failed: {str(e)}")
+                else:
+                    st.error("Please provide both Access Key and Secret Key")
+        
+        with col2:
+            if st.button("🔄 Clear", use_container_width=True, key="sh_clear_btn"):
+                for key in ['security_hub_connected', 'security_hub_manager', 'sh_member_count']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
+        
+        # Connection status
+        if st.session_state.get('security_hub_connected'):
+            st.success(f"""
+            ✅ **Connected to Security Hub**
+            
+            - Member Accounts: {st.session_state.get('sh_member_count', 0)}
+            - Region: {sh_region}
+            - Cache TTL: {cache_ttl}s
+            
+            👉 Go to **WAF Assessment** tab to scan all accounts via Security Hub
+            """)
+    
+    with tab2:
+        st.markdown("#### Test Security Hub Connection")
+        
+        if st.session_state.get('security_hub_connected'):
+            st.success("✅ Security Hub connection is active")
+            
+            if st.button("🔍 Fetch Sample Findings", key="sh_test_findings_btn"):
+                with st.spinner("Fetching findings..."):
+                    try:
+                        manager = st.session_state.security_hub_manager
+                        
+                        # Get sample findings
+                        findings = list(manager.get_findings_by_pillar("security", max_results=10))
+                        
+                        st.info(f"Retrieved {len(findings)} sample security findings")
+                        
+                        if findings:
+                            import pandas as pd
+                            df = pd.DataFrame([{
+                                'Title': f.get('Title', 'N/A')[:50],
+                                'Severity': f.get('Severity', {}).get('Label', 'N/A'),
+                                'Account': f.get('AwsAccountId', 'N/A'),
+                                'Resource': f.get('Resources', [{}])[0].get('Type', 'N/A')[:30]
+                            } for f in findings])
+                            st.dataframe(df, use_container_width=True)
+                            
+                    except Exception as e:
+                        st.error(f"Error fetching findings: {str(e)}")
+        else:
+            st.warning("⚠️ Connect to Security Hub first in the Configure tab")
+    
+    with tab3:
+        st.markdown("#### Setup Guide: Security Hub Delegated Administrator")
+        
+        st.markdown("""
+        **Prerequisites:**
+        1. AWS Organizations enabled
+        2. Security Hub enabled in management account
+        3. Delegated administrator designated
+        4. Member accounts enrolled
+        
+        **Step 1: Designate Delegated Administrator**
+        ```bash
+        aws securityhub enable-organization-admin-account \\
+            --admin-account-id 111122223333
+        ```
+        
+        **Step 2: Enable Finding Aggregation**
+        ```bash
+        aws securityhub create-finding-aggregator \\
+            --region us-east-1 \\
+            --region-linking-mode ALL_REGIONS
+        ```
+        
+        **Step 3: Required IAM Permissions**
+        ```json
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "securityhub:DescribeHub",
+                        "securityhub:GetFindings",
+                        "securityhub:ListMembers",
+                        "securityhub:GetInsights"
+                    ],
+                    "Resource": "*"
+                }
+            ]
+        }
+        ```
+        
+        **Step 4: Connect in this tool**
+        1. Enter Delegated Admin credentials
+        2. Select aggregation region
+        3. Click Connect
+        4. Go to WAF Assessment to scan
+        """)
+        
+        st.info("📖 For detailed setup, see: docs/SECURITY_HUB_500_ACCOUNTS_GUIDE.md")
 
 # ============================================================================
 # WAF SCANNER TAB
