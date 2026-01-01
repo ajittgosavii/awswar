@@ -220,6 +220,164 @@ TEXT_SERVICE_PATTERNS = {
     r'\bTransit Gateway\b': 'transit_gateway',
 }
 
+# Visio AWS Shape patterns (for .vsdx files)
+VISIO_AWS_SHAPES = {
+    # Official AWS Architecture Icons names
+    'amazon ec2': 'ec2',
+    'amazon ec2 instance': 'ec2',
+    'ec2 instance': 'ec2',
+    'aws lambda': 'lambda',
+    'lambda function': 'lambda',
+    'amazon s3': 's3',
+    's3 bucket': 's3',
+    'amazon rds': 'rds',
+    'rds instance': 'rds',
+    'amazon aurora': 'aurora',
+    'amazon dynamodb': 'dynamodb',
+    'dynamodb table': 'dynamodb',
+    'amazon vpc': 'vpc',
+    'vpc': 'vpc',
+    'subnet': 'vpc',
+    'internet gateway': 'vpc',
+    'nat gateway': 'nat_gateway',
+    'elastic load balancing': 'alb',
+    'application load balancer': 'alb',
+    'network load balancer': 'nlb',
+    'amazon cloudfront': 'cloudfront',
+    'cloudfront distribution': 'cloudfront',
+    'amazon route 53': 'route53',
+    'route53': 'route53',
+    'amazon api gateway': 'api_gateway',
+    'api gateway': 'api_gateway',
+    'amazon sqs': 'sqs',
+    'sqs queue': 'sqs',
+    'amazon sns': 'sns',
+    'sns topic': 'sns',
+    'amazon kinesis': 'kinesis',
+    'kinesis stream': 'kinesis',
+    'amazon elasticache': 'elasticache',
+    'elasticache cluster': 'elasticache',
+    'redis': 'elasticache',
+    'amazon ecs': 'ecs',
+    'ecs cluster': 'ecs',
+    'ecs service': 'ecs',
+    'amazon eks': 'eks',
+    'eks cluster': 'eks',
+    'kubernetes': 'eks',
+    'aws fargate': 'fargate',
+    'fargate': 'fargate',
+    'aws kms': 'kms',
+    'kms key': 'kms',
+    'aws secrets manager': 'secrets_manager',
+    'secrets manager': 'secrets_manager',
+    'amazon cognito': 'cognito',
+    'cognito user pool': 'cognito',
+    'aws waf': 'waf',
+    'web application firewall': 'waf',
+    'aws shield': 'shield',
+    'amazon guardduty': 'guardduty',
+    'aws security hub': 'security_hub',
+    'amazon cloudwatch': 'cloudwatch',
+    'cloudwatch': 'cloudwatch',
+    'aws cloudtrail': 'cloudtrail',
+    'cloudtrail': 'cloudtrail',
+    'aws config': 'config',
+    'aws iam': 'iam',
+    'iam role': 'iam',
+    'amazon sagemaker': 'sagemaker',
+    'sagemaker': 'sagemaker',
+    'amazon bedrock': 'bedrock',
+    'bedrock': 'bedrock',
+    'aws glue': 'glue',
+    'glue job': 'glue',
+    'amazon athena': 'athena',
+    'athena': 'athena',
+    'amazon redshift': 'redshift',
+    'redshift cluster': 'redshift',
+    'amazon quicksight': 'quicksight',
+    'amazon efs': 'efs',
+    'elastic file system': 'efs',
+    'amazon fsx': 'fsx',
+    'aws step functions': 'step_functions',
+    'step functions': 'step_functions',
+    'amazon eventbridge': 'eventbridge',
+    'eventbridge': 'eventbridge',
+    'aws certificate manager': 'acm',
+    'acm': 'acm',
+    'aws systems manager': 'systems_manager',
+    'systems manager': 'systems_manager',
+    'aws direct connect': 'direct_connect',
+    'direct connect': 'direct_connect',
+    'aws transit gateway': 'transit_gateway',
+    'transit gateway': 'transit_gateway',
+}
+
+# Draw.io shape patterns (mxGraph style attributes)
+DRAWIO_SHAPE_PATTERNS = {
+    r'mxgraph\.aws4\.ec2': 'ec2',
+    r'mxgraph\.aws4\.instance2?': 'ec2',
+    r'mxgraph\.aws4\.lambda': 'lambda',
+    r'mxgraph\.aws4\.lambda_function': 'lambda',
+    r'mxgraph\.aws4\.s3': 's3',
+    r'mxgraph\.aws4\.bucket': 's3',
+    r'mxgraph\.aws4\.rds': 'rds',
+    r'mxgraph\.aws4\.database': 'rds',
+    r'mxgraph\.aws4\.aurora': 'aurora',
+    r'mxgraph\.aws4\.dynamodb': 'dynamodb',
+    r'mxgraph\.aws4\.vpc': 'vpc',
+    r'mxgraph\.aws4\.virtual_private_cloud': 'vpc',
+    r'mxgraph\.aws4\.subnet': 'vpc',
+    r'mxgraph\.aws4\.internet_gateway': 'vpc',
+    r'mxgraph\.aws4\.nat_gateway': 'nat_gateway',
+    r'mxgraph\.aws4\.elastic_load_balancing': 'alb',
+    r'mxgraph\.aws4\.application_load_balancer': 'alb',
+    r'mxgraph\.aws4\.network_load_balancer': 'nlb',
+    r'mxgraph\.aws4\.cloudfront': 'cloudfront',
+    r'mxgraph\.aws4\.route_?53': 'route53',
+    r'mxgraph\.aws4\.api_gateway': 'api_gateway',
+    r'mxgraph\.aws4\.sqs': 'sqs',
+    r'mxgraph\.aws4\.simple_queue_service': 'sqs',
+    r'mxgraph\.aws4\.sns': 'sns',
+    r'mxgraph\.aws4\.simple_notification_service': 'sns',
+    r'mxgraph\.aws4\.kinesis': 'kinesis',
+    r'mxgraph\.aws4\.elasticache': 'elasticache',
+    r'mxgraph\.aws4\.ecs': 'ecs',
+    r'mxgraph\.aws4\.elastic_container_service': 'ecs',
+    r'mxgraph\.aws4\.eks': 'eks',
+    r'mxgraph\.aws4\.elastic_kubernetes_service': 'eks',
+    r'mxgraph\.aws4\.fargate': 'fargate',
+    r'mxgraph\.aws4\.kms': 'kms',
+    r'mxgraph\.aws4\.key_management_service': 'kms',
+    r'mxgraph\.aws4\.secrets_manager': 'secrets_manager',
+    r'mxgraph\.aws4\.cognito': 'cognito',
+    r'mxgraph\.aws4\.waf': 'waf',
+    r'mxgraph\.aws4\.shield': 'shield',
+    r'mxgraph\.aws4\.guardduty': 'guardduty',
+    r'mxgraph\.aws4\.security_hub': 'security_hub',
+    r'mxgraph\.aws4\.cloudwatch': 'cloudwatch',
+    r'mxgraph\.aws4\.cloudtrail': 'cloudtrail',
+    r'mxgraph\.aws4\.config': 'config',
+    r'mxgraph\.aws4\.iam': 'iam',
+    r'mxgraph\.aws4\.identity_and_access_management': 'iam',
+    r'mxgraph\.aws4\.sagemaker': 'sagemaker',
+    r'mxgraph\.aws4\.bedrock': 'bedrock',
+    r'mxgraph\.aws4\.glue': 'glue',
+    r'mxgraph\.aws4\.athena': 'athena',
+    r'mxgraph\.aws4\.redshift': 'redshift',
+    r'mxgraph\.aws4\.quicksight': 'quicksight',
+    r'mxgraph\.aws4\.efs': 'efs',
+    r'mxgraph\.aws4\.elastic_file_system': 'efs',
+    r'mxgraph\.aws4\.fsx': 'fsx',
+    r'mxgraph\.aws4\.step_functions': 'step_functions',
+    r'mxgraph\.aws4\.eventbridge': 'eventbridge',
+    r'mxgraph\.aws4\.certificate_manager': 'acm',
+    r'mxgraph\.aws4\.systems_manager': 'systems_manager',
+    r'mxgraph\.aws4\.direct_connect': 'direct_connect',
+    r'mxgraph\.aws4\.transit_gateway': 'transit_gateway',
+    # Generic AWS patterns
+    r'mxgraph\.aws[34]\.': '',  # Catch-all for AWS shapes (will use text extraction)
+}
+
 # Security best practices to check
 SECURITY_CHECKS = {
     "encryption_at_rest": {
@@ -431,6 +589,162 @@ class ArchitectureParser:
                 service_counts[service] = service_counts.get(service, 0) + len(matches)
         
         return services, service_counts
+    
+    @staticmethod
+    def parse_visio(content: bytes) -> Tuple[List[str], Dict[str, int]]:
+        """Parse Microsoft Visio (.vsdx) files for AWS services"""
+        services = []
+        service_counts = {}
+        
+        try:
+            import zipfile
+            from xml.etree import ElementTree
+            
+            # VSDX files are ZIP archives containing XML
+            with zipfile.ZipFile(io.BytesIO(content)) as vsdx:
+                all_text = []
+                
+                # Parse all page XML files
+                for name in vsdx.namelist():
+                    if ('page' in name.lower() or 'master' in name.lower()) and name.endswith('.xml'):
+                        try:
+                            xml_content = vsdx.read(name)
+                            root = ElementTree.fromstring(xml_content)
+                            
+                            # Extract all text content
+                            for elem in root.iter():
+                                if elem.text:
+                                    all_text.append(elem.text.strip())
+                                if elem.tail:
+                                    all_text.append(elem.tail.strip())
+                                    
+                                # Check attributes for shape names
+                                for attr_val in elem.attrib.values():
+                                    if isinstance(attr_val, str):
+                                        all_text.append(attr_val)
+                        except Exception:
+                            continue
+                
+                # Join all text and search for AWS services
+                combined_text = ' '.join(all_text).lower()
+                
+                # Match against Visio AWS shape names
+                for pattern, service in VISIO_AWS_SHAPES.items():
+                    if pattern in combined_text:
+                        if service not in services:
+                            services.append(service)
+                        # Count occurrences
+                        count = combined_text.count(pattern)
+                        service_counts[service] = service_counts.get(service, 0) + max(1, count)
+                
+                # Also use general text patterns
+                for pattern, service in TEXT_SERVICE_PATTERNS.items():
+                    matches = re.findall(pattern, combined_text, re.IGNORECASE)
+                    if matches:
+                        if service not in services:
+                            services.append(service)
+                        service_counts[service] = service_counts.get(service, 0) + len(matches)
+                        
+        except ImportError:
+            # If zipfile fails, try text extraction
+            try:
+                text = content.decode('utf-8', errors='ignore')
+                return ArchitectureParser.parse_text(text)
+            except:
+                pass
+        except Exception as e:
+            print(f"Visio parsing error: {e}")
+        
+        return list(set(services)), service_counts
+    
+    @staticmethod
+    def parse_drawio(content: bytes) -> Tuple[List[str], Dict[str, int]]:
+        """Parse Draw.io / Diagrams.net files for AWS services"""
+        services = []
+        service_counts = {}
+        
+        try:
+            from xml.etree import ElementTree
+            import base64
+            import zlib
+            
+            # Decode content
+            try:
+                text_content = content.decode('utf-8')
+            except:
+                text_content = str(content)
+            
+            # Handle compressed Draw.io format
+            if '<mxfile' not in text_content and '<mxGraphModel' not in text_content:
+                # Try URL decode + inflate (Draw.io compression)
+                try:
+                    import urllib.parse
+                    decoded = urllib.parse.unquote(text_content)
+                    decompressed = zlib.decompress(base64.b64decode(decoded), -15)
+                    text_content = decompressed.decode('utf-8')
+                except:
+                    pass
+            
+            # Parse XML
+            try:
+                root = ElementTree.fromstring(text_content)
+            except:
+                # Try to extract just the diagram part
+                match = re.search(r'<mxGraphModel[^>]*>.*</mxGraphModel>', text_content, re.DOTALL)
+                if match:
+                    root = ElementTree.fromstring(match.group())
+                else:
+                    root = None
+            
+            if root is not None:
+                # Extract all style attributes and values
+                for cell in root.iter():
+                    style = cell.get('style', '')
+                    value = cell.get('value', '')
+                    label = cell.get('label', '')
+                    
+                    combined = f"{style} {value} {label}".lower()
+                    
+                    # Check Draw.io shape patterns
+                    for pattern, service in DRAWIO_SHAPE_PATTERNS.items():
+                        if service and re.search(pattern, style, re.IGNORECASE):
+                            if service not in services:
+                                services.append(service)
+                            service_counts[service] = service_counts.get(service, 0) + 1
+                    
+                    # Check text content for service names
+                    for pattern, service in TEXT_SERVICE_PATTERNS.items():
+                        if re.search(pattern, combined, re.IGNORECASE):
+                            if service not in services:
+                                services.append(service)
+                            service_counts[service] = service_counts.get(service, 0) + 1
+                    
+                    # Check Visio AWS shape names in text
+                    for pattern, service in VISIO_AWS_SHAPES.items():
+                        if pattern in combined:
+                            if service not in services:
+                                services.append(service)
+                            service_counts[service] = service_counts.get(service, 0) + 1
+            
+            # Fallback: text pattern matching on raw content
+            if not services:
+                for pattern, service in TEXT_SERVICE_PATTERNS.items():
+                    matches = re.findall(pattern, text_content, re.IGNORECASE)
+                    if matches:
+                        if service not in services:
+                            services.append(service)
+                        service_counts[service] = service_counts.get(service, 0) + len(matches)
+                        
+        except Exception as e:
+            print(f"Draw.io parsing error: {e}")
+            # Fallback to text parsing
+            try:
+                text = content.decode('utf-8', errors='ignore')
+                return ArchitectureParser.parse_text(text)
+            except:
+                pass
+        
+        return list(set(services)), service_counts
 
 
 # ============================================================================
@@ -566,6 +880,18 @@ class ArchitectureAnalyzer:
                 content = file_content.decode('utf-8')
                 source_type = "cdk_typescript"
                 services, service_counts = ArchitectureParser.parse_cdk(content)
+            
+            # NEW: Visio file support
+            elif file_type in ['vsdx', 'vsd']:
+                source_type = "visio"
+                services, service_counts = ArchitectureParser.parse_visio(file_content)
+                content = f"[Visio diagram: {file_name}]"
+            
+            # NEW: Draw.io / Diagrams.net support
+            elif file_type in ['drawio', 'dio'] or (file_type == 'xml' and 'mxfile' in file_content.decode('utf-8', errors='ignore')[:500]):
+                source_type = "drawio"
+                services, service_counts = ArchitectureParser.parse_drawio(file_content)
+                content = f"[Draw.io diagram: {file_name}]"
                 
             elif file_type == 'txt' or file_type == 'md':
                 content = file_content.decode('utf-8')
@@ -790,9 +1116,9 @@ def render_upload_analyzer_tab():
     with col1:
         uploaded_files = st.file_uploader(
             "Upload architecture files",
-            type=['tf', 'tfvars', 'yaml', 'yml', 'json', 'py', 'ts', 'txt', 'md', 'pdf', 'docx', 'pptx'],
+            type=['tf', 'tfvars', 'yaml', 'yml', 'json', 'py', 'ts', 'txt', 'md', 'pdf', 'docx', 'pptx', 'vsdx', 'vsd', 'drawio', 'dio', 'xml'],
             accept_multiple_files=True,
-            help="Supported: Terraform, CloudFormation, CDK, PDF, Word, PowerPoint, or text descriptions"
+            help="Supported: Terraform, CloudFormation, CDK, Visio, Draw.io, PDF, Word, PowerPoint, or text"
         )
     
     with col2:
@@ -801,6 +1127,8 @@ def render_upload_analyzer_tab():
         - 📜 Terraform (`.tf`, `.tfvars`)
         - ☁️ CloudFormation (`.yaml`, `.json`)
         - 🔧 AWS CDK (`.py`, `.ts`)
+        - 📐 **Visio** (`.vsdx`, `.vsd`) ⭐ NEW
+        - 🎨 **Draw.io** (`.drawio`, `.xml`) ⭐ NEW
         - 📄 PDF Documents (`.pdf`)
         - 📝 Word Documents (`.docx`)
         - 📊 PowerPoint (`.pptx`)
