@@ -593,9 +593,11 @@ class ArchitectureDesignerIntegrated:
         if 'arch_config' not in st.session_state:
             st.session_state.arch_config = {}
         
-        # Create tabs
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        # Create tabs - EXPANDED with Upload & Diagram Generator
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "🎯 Design", 
+            "📤 Upload & Analyze",
+            "📐 Diagram Generator",
             "📊 WAF Assessment", 
             "🔒 Compliance", 
             "🤖 AI Insights",
@@ -606,15 +608,21 @@ class ArchitectureDesignerIntegrated:
             ArchitectureDesignerIntegrated._render_design_tab()
         
         with tab2:
-            ArchitectureDesignerIntegrated._render_waf_tab()
+            ArchitectureDesignerIntegrated._render_upload_tab()
         
         with tab3:
-            ArchitectureDesignerIntegrated._render_compliance_tab()
+            ArchitectureDesignerIntegrated._render_diagram_tab()
         
         with tab4:
-            ArchitectureDesignerIntegrated._render_ai_tab()
+            ArchitectureDesignerIntegrated._render_waf_tab()
         
         with tab5:
+            ArchitectureDesignerIntegrated._render_compliance_tab()
+        
+        with tab6:
+            ArchitectureDesignerIntegrated._render_ai_tab()
+        
+        with tab7:
             ArchitectureDesignerIntegrated._render_export_tab()
     
     @staticmethod
@@ -723,6 +731,362 @@ class ArchitectureDesignerIntegrated:
                         <div style="font-size: 9px; color: #666;">{pillar.value[:12]}</div>
                     </div>
                     """, unsafe_allow_html=True)
+    
+    @staticmethod
+    def _render_upload_tab():
+        """Render Upload & Analyze tab for existing architecture diagrams"""
+        
+        st.markdown("### 📤 Upload & Analyze Existing Architecture")
+        st.markdown("Upload your existing architecture diagrams or IaC files for automatic WAF assessment")
+        
+        # File upload section
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            uploaded_files = st.file_uploader(
+                "Upload architecture files",
+                type=['tf', 'tfvars', 'yaml', 'yml', 'json', 'py', 'ts', 'txt', 'md', 
+                      'pdf', 'docx', 'pptx', 'vsdx', 'vsd', 'drawio', 'dio', 'xml'],
+                accept_multiple_files=True,
+                help="Supported: Terraform, CloudFormation, CDK, Visio, Draw.io, PDF, Word, PowerPoint",
+                key="arch_upload_files"
+            )
+        
+        with col2:
+            st.markdown("**Supported Formats:**")
+            st.markdown("""
+            - 📜 **Terraform** (`.tf`, `.tfvars`)
+            - ☁️ **CloudFormation** (`.yaml`, `.json`)
+            - 🔧 **AWS CDK** (`.py`, `.ts`)
+            - 📐 **Visio** (`.vsdx`, `.vsd`) ⭐
+            - 🎨 **Draw.io** (`.drawio`, `.xml`) ⭐
+            - 📄 **PDF** Documents
+            - 📝 **Word** (`.docx`)
+            - 📊 **PowerPoint** (`.pptx`)
+            """)
+        
+        # Text input option
+        st.markdown("---")
+        st.markdown("### ✏️ Or Describe Your Architecture")
+        
+        text_input = st.text_area(
+            "Paste your architecture code or description",
+            height=150,
+            placeholder="""Paste Terraform code, CloudFormation template, or describe your architecture:
+
+Example:
+"Our application uses CloudFront for CDN, ALB for load balancing, 
+ECS Fargate for containers, Aurora PostgreSQL for database, 
+and S3 for static assets. We have CloudWatch for monitoring."
+""",
+            key="arch_text_input"
+        )
+        
+        # Analyze buttons
+        col1, col2, col3 = st.columns([1, 1, 2])
+        
+        with col1:
+            analyze_files = st.button("🔍 Analyze Files", type="primary", disabled=not uploaded_files, key="arch_analyze_files_btn")
+        
+        with col2:
+            analyze_text = st.button("🔍 Analyze Text", type="primary", disabled=not text_input, key="arch_analyze_text_btn")
+        
+        # Process analysis
+        if analyze_files and uploaded_files:
+            ArchitectureDesignerIntegrated._process_uploaded_files(uploaded_files)
+        
+        if analyze_text and text_input:
+            ArchitectureDesignerIntegrated._process_text_input(text_input)
+        
+        # Show analysis results
+        if 'arch_upload_results' in st.session_state:
+            ArchitectureDesignerIntegrated._display_upload_results()
+    
+    @staticmethod
+    def _process_uploaded_files(uploaded_files):
+        """Process uploaded architecture files"""
+        try:
+            # Try to use the full analyzer
+            from architecture_upload_analyzer import ArchitectureAnalyzer, AnalysisResult
+            
+            with st.spinner("🔄 Analyzing uploaded files..."):
+                all_services = []
+                all_service_counts = {}
+                
+                for uploaded_file in uploaded_files:
+                    file_content = uploaded_file.read()
+                    file_name = uploaded_file.name
+                    file_type = file_name.split('.')[-1].lower()
+                    
+                    result = ArchitectureAnalyzer.analyze_file(file_content, file_name, file_type)
+                    all_services.extend(result.detected_services)
+                    
+                    for svc, count in result.service_counts.items():
+                        all_service_counts[svc] = all_service_counts.get(svc, 0) + count
+                
+                # Update session state with detected services
+                all_services = list(set(all_services))
+                st.session_state.arch_upload_results = {
+                    'services': all_services,
+                    'service_counts': all_service_counts,
+                    'file_count': len(uploaded_files),
+                    'source': 'files'
+                }
+                
+                # Also update the main services list
+                st.session_state.arch_services = all_services
+                
+            st.success(f"✅ Analyzed {len(uploaded_files)} file(s) - Found {len(all_services)} AWS services")
+            st.rerun()
+            
+        except ImportError:
+            st.error("Upload analyzer module not available. Please check installation.")
+        except Exception as e:
+            st.error(f"Error analyzing files: {str(e)}")
+    
+    @staticmethod
+    def _process_text_input(text_input):
+        """Process text description of architecture"""
+        try:
+            from architecture_upload_analyzer import ArchitectureParser
+            
+            with st.spinner("🔄 Analyzing architecture description..."):
+                services, service_counts = ArchitectureParser.parse_text(text_input)
+                
+                st.session_state.arch_upload_results = {
+                    'services': services,
+                    'service_counts': service_counts,
+                    'file_count': 0,
+                    'source': 'text'
+                }
+                
+                # Update the main services list
+                st.session_state.arch_services = services
+                
+            st.success(f"✅ Detected {len(services)} AWS services from description")
+            st.rerun()
+            
+        except ImportError:
+            # Fallback basic parser
+            import re
+            service_patterns = {
+                r'\bEC2\b|\binstance\b': 'ec2',
+                r'\bLambda\b|\bfunction\b': 'lambda',
+                r'\bS3\b|\bbucket\b': 's3',
+                r'\bRDS\b|\bdatabase\b': 'rds',
+                r'\bAurora\b': 'aurora',
+                r'\bDynamoDB\b': 'dynamodb',
+                r'\bECS\b|\bFargate\b': 'ecs',
+                r'\bEKS\b|\bKubernetes\b': 'eks',
+                r'\bALB\b|\bload.?balancer\b': 'alb',
+                r'\bCloudFront\b|\bCDN\b': 'cloudfront',
+                r'\bCloudWatch\b|\bmonitoring\b': 'cloudwatch',
+                r'\bVPC\b|\bnetwork\b': 'vpc',
+            }
+            
+            services = []
+            for pattern, service in service_patterns.items():
+                if re.search(pattern, text_input, re.IGNORECASE):
+                    services.append(service)
+            
+            st.session_state.arch_upload_results = {
+                'services': services,
+                'service_counts': {s: 1 for s in services},
+                'file_count': 0,
+                'source': 'text'
+            }
+            st.session_state.arch_services = services
+            st.success(f"✅ Detected {len(services)} AWS services")
+            st.rerun()
+    
+    @staticmethod
+    def _display_upload_results():
+        """Display analysis results from uploaded files"""
+        results = st.session_state.arch_upload_results
+        
+        st.markdown("---")
+        st.markdown("### 📊 Analysis Results")
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Services Detected", len(results['services']))
+        col2.metric("Files Analyzed", results.get('file_count', 0))
+        col3.metric("Source", results.get('source', 'unknown').title())
+        
+        if results['services']:
+            st.markdown("#### Detected AWS Services")
+            
+            # Group by category
+            service_categories = {
+                'Compute': ['ec2', 'lambda', 'ecs', 'eks', 'fargate', 'batch'],
+                'Storage': ['s3', 'ebs', 'efs', 'fsx', 'glacier'],
+                'Database': ['rds', 'aurora', 'dynamodb', 'elasticache', 'redshift', 'neptune', 'documentdb'],
+                'Networking': ['vpc', 'alb', 'nlb', 'cloudfront', 'route53', 'api_gateway', 'nat_gateway'],
+                'Security': ['kms', 'waf', 'shield', 'guardduty', 'cognito', 'secrets_manager', 'security_hub', 'iam'],
+                'Operations': ['cloudwatch', 'cloudtrail', 'config', 'systems_manager'],
+            }
+            
+            for category, category_services in service_categories.items():
+                found = [s for s in results['services'] if s.lower() in category_services]
+                if found:
+                    with st.expander(f"**{category}** ({len(found)} services)", expanded=True):
+                        st.markdown(", ".join([f"`{s.upper()}`" for s in found]))
+            
+            # Action buttons
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("📊 Run WAF Assessment", type="primary", key="upload_run_waf"):
+                    st.info("Switch to the WAF Assessment tab to see the full assessment")
+            
+            with col2:
+                if st.button("🔄 Clear Results", key="upload_clear_results"):
+                    del st.session_state.arch_upload_results
+                    st.session_state.arch_services = []
+                    st.rerun()
+        else:
+            st.warning("No AWS services detected. Try uploading IaC files or providing more details.")
+    
+    @staticmethod
+    def _render_diagram_tab():
+        """Render Architecture Diagram Generator tab"""
+        
+        st.markdown("### 📐 Architecture Diagram Generator")
+        st.markdown("Generate professional AWS architecture diagrams from your design")
+        
+        services = st.session_state.get('arch_services', [])
+        config = st.session_state.get('arch_config', {})
+        
+        if not services:
+            st.warning("⚠️ Please select services in the Design tab or upload files in Upload & Analyze tab first")
+            
+            # Demo option
+            st.markdown("---")
+            st.markdown("#### 🎮 Demo Mode")
+            if st.button("Generate Demo Diagram", key="demo_diagram_btn"):
+                services = ['cloudfront', 'alb', 'ecs', 'aurora', 's3', 'cloudwatch', 'waf', 'kms']
+                st.session_state.arch_services = services
+                st.rerun()
+            return
+        
+        # Diagram configuration
+        st.markdown("#### Diagram Settings")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            diagram_style = st.selectbox(
+                "Diagram Style",
+                options=["Three-Tier", "Microservices", "Serverless", "Data Pipeline", "Hub-Spoke"],
+                index=0,
+                key="diagram_style_select"
+            )
+        
+        with col2:
+            color_scheme = st.selectbox(
+                "Color Scheme",
+                options=["AWS Orange", "Professional Blue", "Dark Mode", "Grayscale"],
+                index=0,
+                key="color_scheme_select"
+            )
+        
+        with col3:
+            include_labels = st.checkbox("Include Labels", value=True, key="include_labels_check")
+            include_connections = st.checkbox("Include Connections", value=True, key="include_conn_check")
+        
+        # Generate button
+        col1, col2, col3 = st.columns([1, 1, 2])
+        
+        with col1:
+            generate_btn = st.button("🎨 Generate Diagram", type="primary", key="generate_diagram_btn")
+        
+        with col2:
+            export_format = st.selectbox("Export Format", ["SVG", "PNG", "PDF"], key="export_format_select")
+        
+        if generate_btn or 'generated_diagram' in st.session_state:
+            st.markdown("---")
+            st.markdown("### 🖼️ Generated Architecture Diagram")
+            
+            # Try to use SVG diagram generator
+            try:
+                from svg_diagram_generator import SVGDiagramGenerator, DiagramConfig
+                
+                # Create diagram
+                diagram_config = DiagramConfig(
+                    title=f"{config.get('workload_type', 'AWS')} Architecture",
+                    subtitle=f"Scale: {config.get('scale', 'Medium').title()} | Multi-AZ: {config.get('multi_az', True)}",
+                    style=diagram_style.lower().replace("-", "_").replace(" ", "_"),
+                    color_scheme=color_scheme.lower().replace(" ", "_"),
+                    include_labels=include_labels,
+                    include_connections=include_connections
+                )
+                
+                generator = SVGDiagramGenerator()
+                svg_content = generator.generate(services, diagram_config)
+                
+                # Display SVG
+                st.markdown(svg_content, unsafe_allow_html=True)
+                
+                # Store for export
+                st.session_state.generated_diagram = svg_content
+                
+                # Download button
+                st.download_button(
+                    label=f"📥 Download {export_format}",
+                    data=svg_content,
+                    file_name=f"architecture_diagram.svg",
+                    mime="image/svg+xml",
+                    key="download_diagram_btn"
+                )
+                
+            except ImportError:
+                # Fallback: Generate simple text-based diagram representation
+                st.markdown("#### Architecture Components")
+                
+                # Create a simple visual representation
+                ArchitectureDesignerIntegrated._render_simple_diagram(services, config)
+                
+            except Exception as e:
+                st.error(f"Error generating diagram: {str(e)}")
+                ArchitectureDesignerIntegrated._render_simple_diagram(services, config)
+    
+    @staticmethod
+    def _render_simple_diagram(services, config):
+        """Render a simple text-based diagram when SVG generator is unavailable"""
+        
+        # Group services by tier
+        tiers = {
+            'Edge/CDN': ['cloudfront', 'route53', 'waf', 'shield'],
+            'Load Balancing': ['alb', 'nlb', 'api_gateway'],
+            'Compute': ['ec2', 'ecs', 'eks', 'lambda', 'fargate'],
+            'Database': ['rds', 'aurora', 'dynamodb', 'elasticache', 'redshift'],
+            'Storage': ['s3', 'efs', 'ebs'],
+            'Security': ['kms', 'secrets_manager', 'cognito', 'guardduty', 'security_hub', 'iam'],
+            'Operations': ['cloudwatch', 'cloudtrail', 'config', 'systems_manager']
+        }
+        
+        st.markdown("```")
+        st.markdown("┌─────────────────────────────────────────────────────────┐")
+        st.markdown("│                   AWS Architecture                       │")
+        st.markdown("└─────────────────────────────────────────────────────────┘")
+        
+        for tier_name, tier_services in tiers.items():
+            found = [s.upper() for s in services if s.lower() in tier_services]
+            if found:
+                st.markdown(f"│ {tier_name:20} │ {', '.join(found):36} │")
+        
+        st.markdown("```")
+        
+        # Service count summary
+        st.markdown("---")
+        st.markdown("#### Service Summary")
+        
+        cols = st.columns(4)
+        for idx, (tier_name, tier_services) in enumerate(tiers.items()):
+            found = [s for s in services if s.lower() in tier_services]
+            if found:
+                with cols[idx % 4]:
+                    st.metric(tier_name, len(found))
     
     @staticmethod
     def _render_waf_tab():
