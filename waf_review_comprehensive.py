@@ -1516,20 +1516,54 @@ class WAFReviewWorkflow:
                     region_name=account.get('region', 'us-east-1')
                 )
             
-            # Pattern 3: Direct manual credentials
+            # Pattern 3: Direct connection from AWS Connector (Single Account mode)
+            elif account.get('connection_type') == 'direct':
+                # Use credentials from session state (set by AWS Connector)
+                access_key = st.session_state.get('aws_access_key')
+                secret_key = st.session_state.get('aws_secret_key')
+                region = account.get('region') or st.session_state.get('aws_region', 'us-east-1')
+                
+                if access_key and secret_key:
+                    return boto3.Session(
+                        aws_access_key_id=access_key,
+                        aws_secret_access_key=secret_key,
+                        region_name=region
+                    )
+                else:
+                    # Try using get_aws_session as fallback
+                    try:
+                        from aws_connector import get_aws_session
+                        session = get_aws_session()
+                        if session:
+                            return session
+                    except:
+                        pass
+                    st.warning(f"⚠️ Session state credentials not found for direct connection")
+                    return None
+            
+            # Pattern 4: Manual credentials in account dict
             else:
                 access_key = account.get('access_key')
                 secret_key = account.get('secret_key')
                 
-                if not access_key or not secret_key:
-                    st.warning(f"⚠️ No credentials for {account.get('name', 'account')}")
-                    return None
+                if access_key and secret_key:
+                    return boto3.Session(
+                        aws_access_key_id=access_key,
+                        aws_secret_access_key=secret_key,
+                        region_name=account.get('region', 'us-east-1')
+                    )
                 
-                return boto3.Session(
-                    aws_access_key_id=access_key,
-                    aws_secret_access_key=secret_key,
-                    region_name=account.get('region', 'us-east-1')
-                )
+                # Last resort: try get_aws_session
+                try:
+                    from aws_connector import get_aws_session
+                    session = get_aws_session()
+                    if session:
+                        return session
+                except:
+                    pass
+                
+                st.warning(f"⚠️ No credentials for {account.get('name', 'account')}")
+                return None
                 
         except Exception as e:
             st.error(f"❌ Session creation failed for {account.get('name', 'account')}: {str(e)}")
