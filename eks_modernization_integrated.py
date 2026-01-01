@@ -724,7 +724,7 @@ class EKSModernizationIntegrated:
         st.session_state.eks_config = config
         
         # Quick score preview
-        if st.button("🔄 Calculate Assessment", use_container_width=True):
+        if st.button("🔄 Calculate Assessment", use_container_width=True, key="eks_calc_assessment_btn"):
             hub = EKSModernizationIntegrated()
             waf_scores, findings = hub.waf_assessor.assess(config)
             st.session_state.eks_waf_scores = waf_scores
@@ -1017,7 +1017,8 @@ spec:
             "📥 Download NodePool YAML",
             data=nodepool_yaml,
             file_name="nodepool.yaml",
-            mime="text/yaml"
+            mime="text/yaml",
+            key="eks_karpenter_nodepool_yaml_btn"
         )
         
         st.markdown("### 📄 EC2NodeClass Configuration")
@@ -1055,7 +1056,8 @@ spec:
             "📥 Download EC2NodeClass YAML",
             data=ec2nodeclass_yaml,
             file_name="ec2nodeclass.yaml",
-            mime="text/yaml"
+            mime="text/yaml",
+            key="eks_karpenter_ec2nodeclass_yaml_btn"
         )
     
     @staticmethod
@@ -1109,7 +1111,8 @@ spec:
                 data=json.dumps(export_data, indent=2, default=str),
                 file_name="eks_assessment.json",
                 mime="application/json",
-                use_container_width=True
+                use_container_width=True,
+                key="eks_export_json_btn"
             )
         
         with col2:
@@ -1134,7 +1137,8 @@ spec:
                     data=df.to_csv(index=False),
                     file_name="eks_findings.csv",
                     mime="text/csv",
-                    use_container_width=True
+                    use_container_width=True,
+                    key="eks_export_findings_btn"
                 )
             else:
                 st.info("Run assessment first")
@@ -1142,7 +1146,7 @@ spec:
         with col3:
             st.markdown("#### 🔗 WAF Integration")
             
-            if st.button("📤 Send to WAF Review", use_container_width=True):
+            if st.button("📤 Send to WAF Review", use_container_width=True, key="eks_send_waf_btn"):
                 waf_findings = []
                 for f in findings:
                     waf_findings.append({

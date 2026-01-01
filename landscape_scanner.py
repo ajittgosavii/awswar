@@ -1,5 +1,5 @@
 """
-AWS Landscape Scanner Module - PRODUCTION VERSION 2.1
+AWS Landscape Scanner Module - PRODUCTION VERSION 2.0
 Comprehensive AWS resource scanning and WAF assessment
 
 Features:
@@ -12,7 +12,6 @@ Features:
 - Cost savings estimates
 - Demo mode with realistic data
 - PDF report generation support
-- PERFORMANCE: Caching for scan results (5 minute TTL)
 """
 
 import streamlit as st
@@ -20,50 +19,6 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any, Callable
 from dataclasses import dataclass, field
 import json
-from functools import wraps
-
-# ============================================================================
-# CACHING UTILITIES FOR SCAN PERFORMANCE
-# ============================================================================
-
-def cache_scan_result(ttl_seconds: int = 300, cache_key_prefix: str = ""):
-    """
-    Decorator to cache scan results in session state with TTL.
-    Dramatically improves performance by avoiding repeated API calls.
-    
-    Args:
-        ttl_seconds: Time-to-live for cached results (default 5 minutes)
-        cache_key_prefix: Optional prefix for cache key
-    """
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            # Generate cache key
-            # Skip 'self' argument for methods
-            cache_args = args[1:] if args and hasattr(args[0], '__class__') else args
-            key_parts = [cache_key_prefix or "scan", func.__name__, str(cache_args)[:50]]
-            cache_key = "_".join(key_parts).replace(" ", "_")
-            
-            # Check if cached and not expired
-            if cache_key in st.session_state:
-                cached = st.session_state[cache_key]
-                if isinstance(cached, dict) and 'timestamp' in cached:
-                    age = (datetime.now() - cached['timestamp']).total_seconds()
-                    if age < ttl_seconds:
-                        return cached['data']
-            
-            # Execute function
-            result = func(*args, **kwargs)
-            
-            # Cache result
-            st.session_state[cache_key] = {
-                'data': result,
-                'timestamp': datetime.now()
-            }
-            
-            return result
-        return wrapper
-    return decorator
 
 # ============================================================================
 # DATA CLASSES
@@ -806,9 +761,6 @@ def generate_demo_assessment() -> LandscapeAssessment:
 class AWSLandscapeScanner:
     """Scan AWS resources for WAF assessment"""
     
-    # Class-level client cache for connection pooling
-    _client_cache: Dict[str, Any] = {}
-    
     def __init__(self, session):
         self.session = session
         self.account_id = None
@@ -818,36 +770,14 @@ class AWSLandscapeScanner:
         self.scan_errors = {}
         
         try:
-            sts = self._get_client('sts')
+            sts = session.client('sts')
             self.account_id = sts.get_caller_identity()['Account']
         except:
             pass
     
-    def _get_client(self, service_name: str, region: str = None):
-        """
-        Get cached boto3 client for better performance.
-        Reuses clients instead of creating new ones for each call.
-        """
-        cache_key = f"{service_name}_{region or 'default'}"
-        
-        if cache_key not in AWSLandscapeScanner._client_cache:
-            if region:
-                AWSLandscapeScanner._client_cache[cache_key] = self.session.client(
-                    service_name, region_name=region
-                )
-            else:
-                AWSLandscapeScanner._client_cache[cache_key] = self._get_client(service_name)
-        
-        return AWSLandscapeScanner._client_cache[cache_key]
-    
-    @classmethod
-    def clear_client_cache(cls):
-        """Clear the client cache (call when session changes)"""
-        cls._client_cache.clear()
-    
     def _scan_iam(self):
         """Enhanced IAM scanning with MFA, console access, and key rotation checks"""
-        iam = self._get_client('iam')
+        iam = self.session.client('iam')
         
         users = iam.list_users()['Users']
         self.inventory.iam_users = len(users)
@@ -911,7 +841,7 @@ class AWSLandscapeScanner:
     
     def _scan_s3(self):
         """Enhanced S3 scanning with encryption, public access, versioning, and logging checks"""
-        s3 = self._get_client('s3')
+        s3 = self.session.client('s3')
         buckets = s3.list_buckets()['Buckets']
         self.inventory.s3_buckets = len(buckets)
         
@@ -988,7 +918,7 @@ class AWSLandscapeScanner:
     
     def _scan_ec2(self, region: str):
         """Enhanced EC2 scanning with stopped instances and security group checks"""
-        ec2 = self._get_client('ec2', region_name=region)
+        ec2 = self.session.client('ec2', region_name=region)
         
         # Instances
         for reservation in ec2.describe_instances()['Reservations']:
@@ -1043,7 +973,7 @@ class AWSLandscapeScanner:
     def _scan_rds(self, region: str):
         """Enhanced RDS scanning with encryption, backups, and public access checks"""
         try:
-            rds = self._get_client('rds', region_name=region)
+            rds = self.session.client('rds', region_name=region)
             dbs = rds.describe_db_instances()['DBInstances']
             
             for db in dbs:
@@ -1133,13 +1063,13 @@ class AWSLandscapeScanner:
     
     def _scan_vpc(self, region: str):
         """Scan VPC"""
-        ec2 = self._get_client('ec2', region_name=region)
+        ec2 = self.session.client('ec2', region_name=region)
         self.inventory.security_groups = len(ec2.describe_security_groups()['SecurityGroups'])
     
     def _scan_cloudtrail(self, region: str):
         """Enhanced CloudTrail scanning with multi-region and validation checks"""
         try:
-            ct = self._get_client('cloudtrail', region_name=region)
+            ct = self.session.client('cloudtrail', region_name=region)
             trails = ct.describe_trails()['trailList']
             
             has_multiregion = any(t.get('IsMultiRegionTrail') for t in trails)
@@ -1188,7 +1118,7 @@ class AWSLandscapeScanner:
     def _scan_kms(self):
         """Scan KMS keys for rotation"""
         try:
-            kms = self._get_client('kms')
+            kms = self.session.client('kms')
             keys = kms.list_keys()['Keys']
             
             for key in keys[:50]:  # Limit to avoid throttling
@@ -1237,7 +1167,7 @@ class AWSLandscapeScanner:
     def _scan_secrets_manager(self):
         """Scan Secrets Manager for rotation"""
         try:
-            sm = self._get_client('secretsmanager')
+            sm = self.session.client('secretsmanager')
             secrets = sm.list_secrets()['SecretList']
             self.inventory.secrets_manager_secrets = len(secrets)
             
@@ -1261,7 +1191,7 @@ class AWSLandscapeScanner:
     def _scan_guardduty(self, region: str):
         """Scan GuardDuty for threat detection"""
         try:
-            gd = self._get_client('guardduty', region_name=region)
+            gd = self.session.client('guardduty', region_name=region)
             detectors = gd.list_detectors()['DetectorIds']
             
             if detectors:
@@ -1314,7 +1244,7 @@ class AWSLandscapeScanner:
     def _scan_securityhub(self, region: str):
         """Scan Security Hub status"""
         try:
-            sh = self._get_client('securityhub', region_name=region)
+            sh = self.session.client('securityhub', region_name=region)
             
             try:
                 hub = sh.describe_hub()
@@ -1339,7 +1269,7 @@ class AWSLandscapeScanner:
     def _scan_config(self, region: str):
         """Scan AWS Config for compliance"""
         try:
-            config = self._get_client('config', region_name=region)
+            config = self.session.client('config', region_name=region)
             
             try:
                 recorders = config.describe_configuration_recorders()
@@ -1385,7 +1315,7 @@ class AWSLandscapeScanner:
     def _scan_waf(self, region: str):
         """Scan AWS WAF"""
         try:
-            waf = self._get_client('wafv2', region_name=region)
+            waf = self.session.client('wafv2', region_name=region)
             
             webacls = waf.list_web_acls(Scope='REGIONAL')['WebACLs']
             self.inventory.waf_webacls = len(webacls)
@@ -1409,7 +1339,7 @@ class AWSLandscapeScanner:
     def _scan_lambda(self, region: str):
         """Enhanced Lambda scanning"""
         try:
-            lmb = self._get_client('lambda', region_name=region)
+            lmb = self.session.client('lambda', region_name=region)
             
             functions = lmb.list_functions()['Functions']
             self.inventory.lambda_functions = len(functions)
@@ -1455,7 +1385,7 @@ class AWSLandscapeScanner:
     def _scan_dynamodb(self, region: str):
         """Scan DynamoDB tables"""
         try:
-            ddb = self._get_client('dynamodb', region_name=region)
+            ddb = self.session.client('dynamodb', region_name=region)
             
             tables = ddb.list_tables()['TableNames']
             self.inventory.dynamodb_tables = len(tables)
@@ -1495,7 +1425,7 @@ class AWSLandscapeScanner:
     def _scan_elasticache(self, region: str):
         """Scan ElastiCache clusters"""
         try:
-            ec = self._get_client('elasticache', region_name=region)
+            ec = self.session.client('elasticache', region_name=region)
             
             clusters = ec.describe_cache_clusters()['CacheClusters']
             self.inventory.elasticache_clusters = len(clusters)
@@ -1520,7 +1450,7 @@ class AWSLandscapeScanner:
     def _scan_ecs(self, region: str):
         """Scan ECS clusters"""
         try:
-            ecs = self._get_client('ecs', region_name=region)
+            ecs = self.session.client('ecs', region_name=region)
             
             clusters = ecs.list_clusters()['clusterArns']
             self.inventory.ecs_clusters = len(clusters)
@@ -1534,7 +1464,7 @@ class AWSLandscapeScanner:
     def _scan_eks(self, region: str):
         """Scan EKS clusters"""
         try:
-            eks = self._get_client('eks', region_name=region)
+            eks = self.session.client('eks', region_name=region)
             
             clusters = eks.list_clusters()['clusters']
             self.inventory.eks_clusters = len(clusters)
@@ -1579,7 +1509,7 @@ class AWSLandscapeScanner:
     def _scan_autoscaling(self, region: str):
         """Scan Auto Scaling Groups"""
         try:
-            asg = self._get_client('autoscaling', region_name=region)
+            asg = self.session.client('autoscaling', region_name=region)
             
             groups = asg.describe_auto_scaling_groups()['AutoScalingGroups']
             self.inventory.autoscaling_groups = len(groups)
@@ -1602,7 +1532,7 @@ class AWSLandscapeScanner:
     
     def _scan_ebs_volumes(self, region: str):
         """Enhanced EBS volume scanning"""
-        ec2 = self._get_client('ec2', region_name=region)
+        ec2 = self.session.client('ec2', region_name=region)
         
         try:
             volumes = ec2.describe_volumes()['Volumes']
@@ -1696,7 +1626,7 @@ class AWSLandscapeScanner:
     def _scan_elastic_ips(self, region: str):
         """Scan for unused Elastic IPs"""
         try:
-            ec2 = self._get_client('ec2', region_name=region)
+            ec2 = self.session.client('ec2', region_name=region)
             
             eips = ec2.describe_addresses()['Addresses']
             
@@ -1725,7 +1655,7 @@ class AWSLandscapeScanner:
         """Enhanced ELB scanning"""
         try:
             # Classic Load Balancers
-            elb = self._get_client('elb', region_name=region)
+            elb = self.session.client('elb', region_name=region)
             classic_lbs = elb.describe_load_balancers()['LoadBalancerDescriptions']
             self.inventory.load_balancers_classic = len(classic_lbs)
             
@@ -1747,7 +1677,7 @@ class AWSLandscapeScanner:
                     ))
             
             # Modern Load Balancers
-            elbv2 = self._get_client('elbv2', region_name=region)
+            elbv2 = self.session.client('elbv2', region_name=region)
             modern_lbs = elbv2.describe_load_balancers()['LoadBalancers']
             self.inventory.load_balancers = len(classic_lbs) + len(modern_lbs)
         except:
@@ -1756,8 +1686,8 @@ class AWSLandscapeScanner:
     def _scan_cloudwatch(self, region: str):
         """Scan CloudWatch alarms and logs"""
         try:
-            cw = self._get_client('cloudwatch', region_name=region)
-            logs = self._get_client('logs', region_name=region)
+            cw = self.session.client('cloudwatch', region_name=region)
+            logs = self.session.client('logs', region_name=region)
             
             # Alarms
             alarms = cw.describe_alarms()['MetricAlarms']
@@ -1787,7 +1717,7 @@ class AWSLandscapeScanner:
     def _scan_systems_manager(self, region: str):
         """Scan Systems Manager compliance"""
         try:
-            ssm = self._get_client('ssm', region_name=region)
+            ssm = self.session.client('ssm', region_name=region)
             
             # Check compliance
             try:
@@ -1805,7 +1735,7 @@ class AWSLandscapeScanner:
     def _scan_eventbridge(self, region: str):
         """Scan EventBridge rules"""
         try:
-            eb = self._get_client('events', region_name=region)
+            eb = self.session.client('events', region_name=region)
             
             rules = eb.list_rules()['Rules']
             self.inventory.eventbridge_rules = len(rules)
@@ -1815,7 +1745,7 @@ class AWSLandscapeScanner:
     def _scan_sns(self, region: str):
         """Scan SNS topics"""
         try:
-            sns = self._get_client('sns', region_name=region)
+            sns = self.session.client('sns', region_name=region)
             
             topics = sns.list_topics()['Topics']
             self.inventory.sns_topics = len(topics)
@@ -1825,7 +1755,7 @@ class AWSLandscapeScanner:
     def _scan_backup(self, region: str):
         """Scan AWS Backup"""
         try:
-            backup = self._get_client('backup', region_name=region)
+            backup = self.session.client('backup', region_name=region)
             
             vaults = backup.list_backup_vaults()['BackupVaultList']
             self.inventory.backup_vaults = len(vaults)
@@ -1852,7 +1782,7 @@ class AWSLandscapeScanner:
     def _scan_efs(self, region: str):
         """Scan EFS filesystems"""
         try:
-            efs = self._get_client('efs', region_name=region)
+            efs = self.session.client('efs', region_name=region)
             
             filesystems = efs.describe_file_systems()['FileSystems']
             self.inventory.efs_filesystems = len(filesystems)
@@ -1877,7 +1807,7 @@ class AWSLandscapeScanner:
     def _scan_cloudfront(self):
         """Scan CloudFront distributions"""
         try:
-            cf = self._get_client('cloudfront')
+            cf = self.session.client('cloudfront')
             
             distributions = cf.list_distributions()
             if 'DistributionList' in distributions and 'Items' in distributions['DistributionList']:
@@ -1903,7 +1833,7 @@ class AWSLandscapeScanner:
     def _scan_route53(self):
         """Scan Route53 zones"""
         try:
-            r53 = self._get_client('route53')
+            r53 = self.session.client('route53')
             
             zones = r53.list_hosted_zones()['HostedZones']
             self.inventory.route53_zones = len(zones)
@@ -1917,7 +1847,7 @@ class AWSLandscapeScanner:
     def _scan_sagemaker(self, region: str):
         """Scan Amazon SageMaker resources"""
         try:
-            sm = self._get_client('sagemaker', region_name=region)
+            sm = self.session.client('sagemaker', region_name=region)
             
             # Notebooks
             try:
@@ -2005,7 +1935,7 @@ class AWSLandscapeScanner:
         try:
             # Bedrock management
             try:
-                bedrock = self._get_client('bedrock', region_name=region)
+                bedrock = self.session.client('bedrock', region_name=region)
                 
                 # List custom models
                 try:
@@ -2025,7 +1955,7 @@ class AWSLandscapeScanner:
             
             # Bedrock Agent
             try:
-                bedrock_agent = self._get_client('bedrock-agent', region_name=region)
+                bedrock_agent = self.session.client('bedrock-agent', region_name=region)
                 
                 # List agents
                 try:
@@ -2075,7 +2005,7 @@ class AWSLandscapeScanner:
         
         # Rekognition
         try:
-            rek = self._get_client('rekognition', region_name=region)
+            rek = self.session.client('rekognition', region_name=region)
             projects = rek.describe_projects()
             self.inventory.rekognition_projects = len(projects.get('ProjectDescriptions', []))
             if self.inventory.rekognition_projects > 0:
@@ -2099,7 +2029,7 @@ class AWSLandscapeScanner:
         
         # Comprehend
         try:
-            comp = self._get_client('comprehend', region_name=region)
+            comp = self.session.client('comprehend', region_name=region)
             endpoints = comp.list_endpoints()
             self.inventory.comprehend_endpoints = len(endpoints.get('EndpointPropertiesList', []))
             if self.inventory.comprehend_endpoints > 0:
@@ -2110,7 +2040,7 @@ class AWSLandscapeScanner:
         
         # Lex
         try:
-            lex = self._get_client('lexv2-models', region_name=region)
+            lex = self.session.client('lexv2-models', region_name=region)
             bots = lex.list_bots()
             self.inventory.lex_bots = len(bots.get('botSummaries', []))
             if self.inventory.lex_bots > 0:
@@ -2121,7 +2051,7 @@ class AWSLandscapeScanner:
         
         # Kendra
         try:
-            kendra = self._get_client('kendra', region_name=region)
+            kendra = self.session.client('kendra', region_name=region)
             indexes = kendra.list_indices()
             self.inventory.kendra_indexes = len(indexes.get('IndexConfigurationSummaryItems', []))
             if self.inventory.kendra_indexes > 0:
@@ -2138,7 +2068,7 @@ class AWSLandscapeScanner:
     def _scan_acm(self, region: str):
         """Scan AWS Certificate Manager for certificate issues"""
         try:
-            acm = self._get_client('acm', region_name=region)
+            acm = self.session.client('acm', region_name=region)
             certs = acm.list_certificates().get('CertificateSummaryList', [])
             
             for cert in certs:
@@ -2169,7 +2099,7 @@ class AWSLandscapeScanner:
     def _scan_api_gateway(self, region: str):
         """Scan API Gateway for security configurations"""
         try:
-            apigw = self._get_client('apigateway', region_name=region)
+            apigw = self.session.client('apigateway', region_name=region)
             apis = apigw.get_rest_apis().get('items', [])
             
             for api in apis:
@@ -2199,7 +2129,7 @@ class AWSLandscapeScanner:
     def _scan_cognito(self, region: str):
         """Scan Cognito user pools for security settings"""
         try:
-            cognito = self._get_client('cognito-idp', region_name=region)
+            cognito = self.session.client('cognito-idp', region_name=region)
             pools = cognito.list_user_pools(MaxResults=60).get('UserPools', [])
             
             for pool in pools:
@@ -2228,7 +2158,7 @@ class AWSLandscapeScanner:
     def _scan_inspector(self, region: str):
         """Scan Inspector for vulnerability status"""
         try:
-            inspector = self._get_client('inspector2', region_name=region)
+            inspector = self.session.client('inspector2', region_name=region)
             
             try:
                 status = inspector.batch_get_account_status(accountIds=[self.account_id] if self.account_id else [])
@@ -2253,7 +2183,7 @@ class AWSLandscapeScanner:
     def _scan_macie(self, region: str):
         """Scan Macie for data discovery status"""
         try:
-            macie = self._get_client('macie2', region_name=region)
+            macie = self.session.client('macie2', region_name=region)
             
             try:
                 status = macie.get_macie_session()
@@ -2277,7 +2207,7 @@ class AWSLandscapeScanner:
     def _scan_organizations(self):
         """Scan AWS Organizations for SCPs"""
         try:
-            org = self._get_client('organizations')
+            org = self.session.client('organizations')
             
             try:
                 org_info = org.describe_organization()['Organization']
@@ -2302,7 +2232,7 @@ class AWSLandscapeScanner:
     def _scan_sqs(self, region: str):
         """Scan SQS queues for security"""
         try:
-            sqs = self._get_client('sqs', region_name=region)
+            sqs = self.session.client('sqs', region_name=region)
             queues = sqs.list_queues().get('QueueUrls', [])
             self.inventory.sqs_queues = len(queues)
             
@@ -2331,7 +2261,7 @@ class AWSLandscapeScanner:
     def _scan_step_functions(self, region: str):
         """Scan Step Functions"""
         try:
-            sfn = self._get_client('stepfunctions', region_name=region)
+            sfn = self.session.client('stepfunctions', region_name=region)
             machines = sfn.list_state_machines().get('stateMachines', [])
             
             for machine in machines:
@@ -2358,7 +2288,7 @@ class AWSLandscapeScanner:
     def _scan_xray(self, region: str):
         """Scan X-Ray configuration"""
         try:
-            xray = self._get_client('xray', region_name=region)
+            xray = self.session.client('xray', region_name=region)
             rules = xray.get_sampling_rules().get('SamplingRuleRecords', [])
             if len(rules) <= 1:
                 self.findings.append(Finding(
@@ -2378,7 +2308,7 @@ class AWSLandscapeScanner:
     def _scan_compute_optimizer(self, region: str):
         """Scan Compute Optimizer recommendations"""
         try:
-            co = self._get_client('compute-optimizer', region_name=region)
+            co = self.session.client('compute-optimizer', region_name=region)
             
             try:
                 status = co.get_enrollment_status()
@@ -2402,7 +2332,7 @@ class AWSLandscapeScanner:
     def _scan_trusted_advisor(self):
         """Scan Trusted Advisor recommendations"""
         try:
-            support = self._get_client('support', region_name='us-east-1')
+            support = self.session.client('support', region_name='us-east-1')
             
             checks = support.describe_trusted_advisor_checks(language='en')['checks']
             
@@ -2437,7 +2367,7 @@ class AWSLandscapeScanner:
     def _scan_budgets(self):
         """Scan AWS Budgets"""
         try:
-            budgets = self._get_client('budgets')
+            budgets = self.session.client('budgets')
             
             budget_list = budgets.describe_budgets(AccountId=self.account_id).get('Budgets', [])
             
@@ -2459,7 +2389,7 @@ class AWSLandscapeScanner:
     def _scan_cost_anomaly(self):
         """Scan Cost Anomaly Detection"""
         try:
-            ce = self._get_client('ce')
+            ce = self.session.client('ce')
             monitors = ce.get_anomaly_monitors().get('AnomalyMonitors', [])
             
             if not monitors:
@@ -2480,7 +2410,7 @@ class AWSLandscapeScanner:
     def _scan_transit_gateway(self, region: str):
         """Scan Transit Gateways"""
         try:
-            ec2 = self._get_client('ec2', region_name=region)
+            ec2 = self.session.client('ec2', region_name=region)
             tgws = ec2.describe_transit_gateways().get('TransitGateways', [])
             self.inventory.transit_gateways = len(tgws)
         except Exception as e:
@@ -2489,7 +2419,7 @@ class AWSLandscapeScanner:
     def _scan_direct_connect(self, region: str):
         """Scan Direct Connect connections"""
         try:
-            dx = self._get_client('directconnect', region_name=region)
+            dx = self.session.client('directconnect', region_name=region)
             connections = dx.describe_connections().get('connections', [])
             
             for conn in connections:
@@ -2513,7 +2443,7 @@ class AWSLandscapeScanner:
     def _scan_global_accelerator(self):
         """Scan Global Accelerator"""
         try:
-            ga = self._get_client('globalaccelerator', region_name='us-west-2')
+            ga = self.session.client('globalaccelerator', region_name='us-west-2')
             accelerators = ga.list_accelerators().get('Accelerators', [])
             
             for acc in accelerators:
@@ -2535,7 +2465,7 @@ class AWSLandscapeScanner:
     def _scan_codepipeline(self, region: str):
         """Scan CodePipeline"""
         try:
-            cp = self._get_client('codepipeline', region_name=region)
+            cp = self.session.client('codepipeline', region_name=region)
             pipelines = cp.list_pipelines().get('pipelines', [])
             
             for pipeline in pipelines:
@@ -2567,7 +2497,7 @@ class AWSLandscapeScanner:
     def _scan_codebuild(self, region: str):
         """Scan CodeBuild projects"""
         try:
-            cb = self._get_client('codebuild', region_name=region)
+            cb = self.session.client('codebuild', region_name=region)
             projects = cb.list_projects().get('projects', [])
             
             for project_name in projects[:20]:
@@ -2594,7 +2524,7 @@ class AWSLandscapeScanner:
     def _scan_vpc_detailed(self, region: str):
         """Detailed VPC scanning including subnets, NACLs, endpoints"""
         try:
-            ec2 = self._get_client('ec2', region_name=region)
+            ec2 = self.session.client('ec2', region_name=region)
             
             # VPCs
             vpcs = ec2.describe_vpcs().get('Vpcs', [])
@@ -2646,8 +2576,8 @@ class AWSLandscapeScanner:
     def _scan_cloudwatch_detailed(self, region: str):
         """Detailed CloudWatch scanning"""
         try:
-            cw = self._get_client('cloudwatch', region_name=region)
-            logs = self._get_client('logs', region_name=region)
+            cw = self.session.client('cloudwatch', region_name=region)
+            logs = self.session.client('logs', region_name=region)
             
             # Alarms
             alarms = cw.describe_alarms().get('MetricAlarms', [])
@@ -2677,7 +2607,7 @@ class AWSLandscapeScanner:
     def _scan_service_catalog(self, region: str):
         """Scan Service Catalog"""
         try:
-            sc = self._get_client('servicecatalog', region_name=region)
+            sc = self.session.client('servicecatalog', region_name=region)
             portfolios = sc.list_portfolios().get('PortfolioDetails', [])
             # Just inventory for now
         except Exception as e:
@@ -2686,7 +2616,7 @@ class AWSLandscapeScanner:
     def _scan_control_tower(self, region: str):
         """Scan Control Tower status"""
         try:
-            ct = self._get_client('controltower', region_name=region)
+            ct = self.session.client('controltower', region_name=region)
             # Control Tower scanning
         except Exception as e:
             self.scan_errors['Control Tower'] = str(e)
@@ -2694,7 +2624,7 @@ class AWSLandscapeScanner:
     def _scan_dax(self, region: str):
         """Scan DAX clusters"""
         try:
-            dax = self._get_client('dax', region_name=region)
+            dax = self.session.client('dax', region_name=region)
             clusters = dax.describe_clusters().get('Clusters', [])
             
             for cluster in clusters:
@@ -2717,7 +2647,7 @@ class AWSLandscapeScanner:
     def _scan_cloudformation(self, region: str):
         """Scan CloudFormation stacks"""
         try:
-            cfn = self._get_client('cloudformation', region_name=region)
+            cfn = self.session.client('cloudformation', region_name=region)
             stacks = cfn.describe_stacks().get('Stacks', [])
             
             for stack in stacks:
@@ -2739,7 +2669,7 @@ class AWSLandscapeScanner:
     def _scan_cost_explorer(self):
         """Scan Cost Explorer for cost insights"""
         try:
-            ce = self._get_client('ce')
+            ce = self.session.client('ce')
             # Cost Explorer is used for recommendations - checking if data is available
             # Note: Cost Explorer requires permissions and may have costs
         except Exception as e:
@@ -2748,7 +2678,7 @@ class AWSLandscapeScanner:
     def _scan_fsx(self, region: str):
         """Scan FSx file systems"""
         try:
-            fsx = self._get_client('fsx', region_name=region)
+            fsx = self.session.client('fsx', region_name=region)
             filesystems = fsx.describe_file_systems().get('FileSystems', [])
             
             for fs in filesystems:
@@ -2770,7 +2700,7 @@ class AWSLandscapeScanner:
     def _scan_glacier(self, region: str):
         """Scan Glacier vaults"""
         try:
-            glacier = self._get_client('glacier', region_name=region)
+            glacier = self.session.client('glacier', region_name=region)
             vaults = glacier.list_vaults().get('VaultList', [])
             # Glacier inventory
         except Exception as e:
@@ -2779,7 +2709,7 @@ class AWSLandscapeScanner:
     def _scan_shield(self, region: str):
         """Scan Shield Advanced status"""
         try:
-            shield = self._get_client('shield', region_name='us-east-1')
+            shield = self.session.client('shield', region_name='us-east-1')
             
             try:
                 subscription = shield.get_subscription_state()
@@ -2793,7 +2723,7 @@ class AWSLandscapeScanner:
     def _scan_devops_guru(self, region: str):
         """Scan DevOps Guru status"""
         try:
-            devopsguru = self._get_client('devops-guru', region_name=region)
+            devopsguru = self.session.client('devops-guru', region_name=region)
             
             try:
                 health = devopsguru.describe_account_health()
@@ -2816,7 +2746,7 @@ class AWSLandscapeScanner:
     def _scan_fis(self, region: str):
         """Scan Fault Injection Simulator"""
         try:
-            fis = self._get_client('fis', region_name=region)
+            fis = self.session.client('fis', region_name=region)
             experiments = fis.list_experiments().get('experiments', [])
             # FIS inventory - having experiments is good for chaos engineering
         except Exception as e:
@@ -2825,7 +2755,7 @@ class AWSLandscapeScanner:
     def _scan_app_mesh(self, region: str):
         """Scan App Mesh"""
         try:
-            appmesh = self._get_client('appmesh', region_name=region)
+            appmesh = self.session.client('appmesh', region_name=region)
             meshes = appmesh.list_meshes().get('meshes', [])
             # App Mesh inventory
         except Exception as e:
@@ -2834,7 +2764,7 @@ class AWSLandscapeScanner:
     def _scan_service_health(self):
         """Check Service Health Dashboard events"""
         try:
-            health = self._get_client('health', region_name='us-east-1')
+            health = self.session.client('health', region_name='us-east-1')
             events = health.describe_events(filter={'eventStatusCodes': ['open', 'upcoming']}).get('events', [])
             
             for event in events:
@@ -2855,7 +2785,7 @@ class AWSLandscapeScanner:
     def _scan_parameter_store(self, region: str):
         """Scan Parameter Store"""
         try:
-            ssm = self._get_client('ssm', region_name=region)
+            ssm = self.session.client('ssm', region_name=region)
             params = ssm.describe_parameters(MaxResults=50).get('Parameters', [])
             
             for param in params:
@@ -2877,7 +2807,7 @@ class AWSLandscapeScanner:
     def _scan_iam_access_analyzer(self, region: str):
         """Scan IAM Access Analyzer"""
         try:
-            aa = self._get_client('accessanalyzer', region_name=region)
+            aa = self.session.client('accessanalyzer', region_name=region)
             analyzers = aa.list_analyzers().get('analyzers', [])
             
             if not analyzers:
@@ -2916,31 +2846,8 @@ class AWSLandscapeScanner:
 # COMPREHENSIVE run_scan METHOD - 50+ Services
 # =============================================================================
 
-    def run_scan(self, regions: List[str], progress_callback: Callable = None, use_cache: bool = True, cache_ttl: int = 300) -> LandscapeAssessment:
-        """
-        Run comprehensive scan with 60+ AWS services - ENHANCED VERSION
-        
-        Args:
-            regions: List of AWS regions to scan
-            progress_callback: Optional callback for progress updates
-            use_cache: Whether to use cached results if available (default True)
-            cache_ttl: Cache time-to-live in seconds (default 5 minutes)
-        
-        Returns:
-            LandscapeAssessment with all findings and scores
-        """
-        
-        # Check for cached results
-        cache_key = f"_landscape_scan_{self.account_id}_{','.join(sorted(regions))}"
-        
-        if use_cache and cache_key in st.session_state:
-            cached = st.session_state[cache_key]
-            if isinstance(cached, dict) and 'timestamp' in cached:
-                age = (datetime.now() - cached['timestamp']).total_seconds()
-                if age < cache_ttl:
-                    # Return cached result
-                    return cached['data']
-        
+    def run_scan(self, regions: List[str], progress_callback: Callable = None) -> LandscapeAssessment:
+        """Run comprehensive scan with 60+ AWS services - ENHANCED VERSION"""
         start_time = datetime.now()
         
         # COMPREHENSIVE SCAN TASKS - 60+ services for complete WAF coverage
@@ -3051,8 +2958,7 @@ class AWSLandscapeScanner:
         aiml_findings = [f for f in self.findings if f.source_service in 
                         ['SageMaker', 'Bedrock', 'Rekognition', 'Comprehend', 'Lex', 'Kendra', 'Personalize']]
         
-        # Build assessment result
-        assessment = LandscapeAssessment(
+        return LandscapeAssessment(
             assessment_id=f"scan-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
             timestamp=datetime.now(),
             accounts_scanned=[self.account_id] if self.account_id else [],
@@ -3068,15 +2974,6 @@ class AWSLandscapeScanner:
             aiml_health_score=aiml_health,
             aiml_findings=aiml_findings
         )
-        
-        # Cache the result for future use
-        if use_cache:
-            st.session_state[cache_key] = {
-                'data': assessment,
-                'timestamp': datetime.now()
-            }
-        
-        return assessment
 
 
 
