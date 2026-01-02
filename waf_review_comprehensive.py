@@ -1081,6 +1081,35 @@ class WAFReviewWorkflow:
         # Check if accounts are already connected from main app
         connected_accounts = st.session_state.get('connected_accounts', [])
         
+        # =============================================
+        # FIX: Also check for single account connection
+        # =============================================
+        if not connected_accounts:
+            # Check if single account is connected via AWS session
+            try:
+                from aws_connector import get_aws_session
+                session = get_aws_session()
+                if session:
+                    import boto3
+                    sts = session.client('sts')
+                    identity = sts.get_caller_identity()
+                    account_id = identity.get('Account', '')
+                    
+                    if account_id:
+                        # Auto-add the single connected account
+                        connected_accounts = [{
+                            'account_id': account_id,
+                            'account_name': f'Account {account_id}',
+                            'name': f'Account {account_id}',
+                            'region': st.session_state.get('aws_region', 'us-east-1'),
+                            'connection_type': 'single'
+                        }]
+                        # Also update session_state for consistency
+                        if 'connected_accounts' not in st.session_state or not st.session_state.connected_accounts:
+                            st.session_state.connected_accounts = connected_accounts
+            except Exception as e:
+                pass  # Silently fail if can't detect
+        
         col1, col2 = st.columns(2)
         
         with col1:
