@@ -9,7 +9,7 @@ Complete end-to-end WAF review workflow:
 5. Re-scan to verify fixes
 6. Updated scores with before/after comparison
 
-Version: 1.3.0 - Integrated real remediation engine with CloudFormation deployment
+Version: 1.4.0 - Added AI Question Helper for better user guidance
 Author: Enterprise WAF Scanner Team
 """
 
@@ -40,6 +40,16 @@ try:
 except ImportError:
     USE_COMPLETE_QUESTIONS = False
     WAFPillarComplete = None
+
+# Import AI Question Helper for user guidance
+try:
+    from waf_ai_question_helper import WAFAIQuestionHelper, AIProvider, WAF_QUESTION_KNOWLEDGE_BASE
+    AI_HELPER_AVAILABLE = True
+    ai_helper = WAFAIQuestionHelper(provider=AIProvider.MOCK)
+except ImportError:
+    AI_HELPER_AVAILABLE = False
+    ai_helper = None
+    WAF_QUESTION_KNOWLEDGE_BASE = {}
 
 # Import real remediation engine for CloudFormation deployment
 try:
@@ -1071,33 +1081,6 @@ class WAFReviewWorkflow:
         # Check if accounts are already connected from main app
         connected_accounts = st.session_state.get('connected_accounts', [])
         
-        # ALSO check for single account connection via AWS credentials
-        single_account_connected = False
-        single_account_info = None
-        
-        try:
-            from aws_connector import get_aws_session
-            session = get_aws_session()
-            if session:
-                sts = session.client('sts')
-                identity = sts.get_caller_identity()
-                single_account_id = identity['Account']
-                single_account_info = {
-                    'account_id': single_account_id,
-                    'account_name': st.session_state.get('account_name', f'Account-{single_account_id[-4:]}'),
-                    'name': st.session_state.get('account_name', f'Account-{single_account_id[-4:]}'),
-                    'region': st.session_state.get('aws_region', 'us-east-1'),
-                    'connection_type': 'direct'
-                }
-                single_account_connected = True
-                
-                # Add to connected_accounts if not already there
-                if not any(acc.get('account_id') == single_account_id for acc in connected_accounts):
-                    connected_accounts = connected_accounts.copy()
-                    connected_accounts.insert(0, single_account_info)
-        except Exception as e:
-            pass  # No single account connected
-        
         col1, col2 = st.columns(2)
         
         with col1:
@@ -1516,54 +1499,20 @@ class WAFReviewWorkflow:
                     region_name=account.get('region', 'us-east-1')
                 )
             
-            # Pattern 3: Direct connection from AWS Connector (Single Account mode)
-            elif account.get('connection_type') == 'direct':
-                # Use credentials from session state (set by AWS Connector)
-                access_key = st.session_state.get('aws_access_key')
-                secret_key = st.session_state.get('aws_secret_key')
-                region = account.get('region') or st.session_state.get('aws_region', 'us-east-1')
-                
-                if access_key and secret_key:
-                    return boto3.Session(
-                        aws_access_key_id=access_key,
-                        aws_secret_access_key=secret_key,
-                        region_name=region
-                    )
-                else:
-                    # Try using get_aws_session as fallback
-                    try:
-                        from aws_connector import get_aws_session
-                        session = get_aws_session()
-                        if session:
-                            return session
-                    except:
-                        pass
-                    st.warning(f"⚠️ Session state credentials not found for direct connection")
-                    return None
-            
-            # Pattern 4: Manual credentials in account dict
+            # Pattern 3: Direct manual credentials
             else:
                 access_key = account.get('access_key')
                 secret_key = account.get('secret_key')
                 
-                if access_key and secret_key:
-                    return boto3.Session(
-                        aws_access_key_id=access_key,
-                        aws_secret_access_key=secret_key,
-                        region_name=account.get('region', 'us-east-1')
-                    )
+                if not access_key or not secret_key:
+                    st.warning(f"⚠️ No credentials for {account.get('name', 'account')}")
+                    return None
                 
-                # Last resort: try get_aws_session
-                try:
-                    from aws_connector import get_aws_session
-                    session = get_aws_session()
-                    if session:
-                        return session
-                except:
-                    pass
-                
-                st.warning(f"⚠️ No credentials for {account.get('name', 'account')}")
-                return None
+                return boto3.Session(
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                    region_name=account.get('region', 'us-east-1')
+                )
                 
         except Exception as e:
             st.error(f"❌ Session creation failed for {account.get('name', 'account')}: {str(e)}")
@@ -1792,55 +1741,21 @@ class WAFReviewWorkflow:
         
         st.markdown("---")
         
-        # Initialize pillar selection in session state if not exists
-        if 'current_waf_pillar' not in st.session_state:
-            st.session_state.current_waf_pillar = WAFPillar.OPERATIONAL_EXCELLENCE.value
-        
-        # Build pillar selector with pending counts
-        pillar_options = []
-        pillar_labels = {}
+        # Build pillar tab labels with pending counts
+        pillar_tab_labels = []
         for p in WAFPillar:
             pillar_pending = pending_by_pillar.get(p.value, [])
             if pillar_pending:
-                label = f"{PILLAR_ICONS[p]} {p.value} ⚠️({len(pillar_pending)})"
+                pillar_tab_labels.append(f"{PILLAR_ICONS[p]} {p.value} ⚠️({len(pillar_pending)})")
             else:
-                label = f"{PILLAR_ICONS[p]} {p.value} ✅"
-            pillar_options.append(p.value)
-            pillar_labels[p.value] = label
+                pillar_tab_labels.append(f"{PILLAR_ICONS[p]} {p.value} ✅")
         
-        # Pillar selector using columns with buttons (preserves state on rerun)
-        st.markdown("##### Select Pillar:")
-        pillar_cols = st.columns(6)
+        # Render questions by pillar
+        pillar_tabs = st.tabs(pillar_tab_labels)
+        
         for idx, pillar in enumerate(WAFPillar):
-            with pillar_cols[idx]:
-                pillar_pending = pending_by_pillar.get(pillar.value, [])
-                is_selected = st.session_state.current_waf_pillar == pillar.value
-                
-                # Create button label
-                if pillar_pending:
-                    btn_label = f"{PILLAR_ICONS[pillar]} ({len(pillar_pending)})"
-                else:
-                    btn_label = f"{PILLAR_ICONS[pillar]} ✅"
-                
-                # Style based on selection
-                btn_type = "primary" if is_selected else "secondary"
-                
-                if st.button(
-                    btn_label, 
-                    key=f"pillar_btn_{pillar.value}",
-                    type=btn_type,
-                    use_container_width=True,
-                    help=pillar.value
-                ):
-                    st.session_state.current_waf_pillar = pillar.value
-                    st.rerun()
-        
-        # Show current pillar name
-        current_pillar_enum = next((p for p in WAFPillar if p.value == st.session_state.current_waf_pillar), WAFPillar.OPERATIONAL_EXCELLENCE)
-        st.markdown(f"### {PILLAR_ICONS[current_pillar_enum]} {current_pillar_enum.value}")
-        
-        # Render questions for selected pillar only
-        self._render_pillar_questions(current_pillar_enum, show_pending_only=show_pending_only)
+            with pillar_tabs[idx]:
+                self._render_pillar_questions(pillar, show_pending_only=show_pending_only)
         
         st.markdown("---")
         
@@ -1982,6 +1897,73 @@ class WAFReviewWorkflow:
             
             with st.expander(q_label, expanded=not has_answer):
                 st.markdown(f"*{q.get('description', '')}*")
+                
+                # =============================================
+                # AI QUESTION HELPER - Help users understand the question
+                # =============================================
+                if AI_HELPER_AVAILABLE:
+                    with st.expander("🤖 **AI Help** - Click to understand this question better", expanded=False):
+                        try:
+                            help_data = ai_helper.get_question_help(
+                                question_id=q['id'],
+                                question_text=q['question'],
+                                description=q.get('description', ''),
+                                best_practices=q.get('best_practices', []),
+                                detection_services=q.get('detection_services', [])
+                            )
+                            
+                            # Simple Explanation
+                            st.info(f"💡 **In Simple Terms:** {help_data.simple_explanation}")
+                            
+                            # Risk and Effort badges
+                            risk_colors = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "CRITICAL": "🔴"}
+                            risk_badge = risk_colors.get(help_data.risk_level, "⚪")
+                            st.markdown(f"**Risk Level:** {risk_badge} {help_data.risk_level} | **Effort:** ⏱️ {help_data.estimated_effort}")
+                            
+                            # What it means and why it matters
+                            col_a, col_b = st.columns(2)
+                            with col_a:
+                                st.markdown("**📌 What This Means:**")
+                                st.write(help_data.what_it_means)
+                            with col_b:
+                                st.markdown("**⚠️ Why It Matters:**")
+                                st.write(help_data.why_it_matters)
+                            
+                            # How to check
+                            st.markdown("**🔍 How to Verify:**")
+                            for i, step in enumerate(help_data.how_to_check[:5], 1):
+                                st.markdown(f"{i}. {step}")
+                            
+                            # AWS CLI Commands
+                            if help_data.aws_cli_commands:
+                                st.markdown("**💻 AWS CLI Commands:**")
+                                for cmd in help_data.aws_cli_commands[:3]:
+                                    st.markdown(f"*{cmd['description']}*")
+                                    st.code(cmd['command'], language="bash")
+                            
+                            # Console steps
+                            st.markdown("**🖥️ AWS Console Steps:**")
+                            for i, step in enumerate(help_data.console_steps[:4], 1):
+                                st.markdown(f"{i}. {step}")
+                            
+                            # Answer implications
+                            col_yes, col_no = st.columns(2)
+                            with col_yes:
+                                st.success(f"**If YES:** {help_data.if_yes_means}")
+                            with col_no:
+                                st.warning(f"**If NO:** {help_data.if_no_means}")
+                            
+                            # Recommendations
+                            st.markdown("**💡 Recommendations:**")
+                            for rec in help_data.recommendations[:4]:
+                                st.markdown(f"- {rec}")
+                            
+                            # Related services
+                            if help_data.related_services:
+                                st.markdown(f"**🔧 Related AWS Services:** {', '.join(help_data.related_services)}")
+                                
+                        except Exception as e:
+                            st.warning(f"AI Help unavailable for this question: {str(e)[:50]}")
                 
                 # Show auto-detection status
                 if response and response.auto_detected and response.response:
