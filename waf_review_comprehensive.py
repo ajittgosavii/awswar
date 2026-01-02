@@ -1083,33 +1083,71 @@ class WAFReviewWorkflow:
         
         # =============================================
         # FIX: Auto-detect single account connection
-        # Always try to detect if no accounts in list
         # =============================================
         if not connected_accounts:
-            try:
-                # Import the same function used by sidebar
-                from aws_connector import get_aws_session
-                session = get_aws_session()
+            # DEBUG: Show what we're checking
+            with st.expander("🔍 Debug: Connection Detection", expanded=False):
+                st.write("**Session State Keys:**", list(st.session_state.keys())[:20])
+                st.write("**aws_access_key present:**", 'aws_access_key' in st.session_state)
+                st.write("**aws_secret_key present:**", 'aws_secret_key' in st.session_state)
+                st.write("**connected_accounts:**", st.session_state.get('connected_accounts', []))
                 
-                if session:
-                    # Get account ID using STS
-                    sts = session.client('sts')
-                    identity = sts.get_caller_identity()
-                    account_id = identity.get('Account', '')
-                    
-                    if account_id:
-                        # Create account entry
-                        connected_accounts = [{
-                            'account_id': account_id,
-                            'account_name': f'Account {account_id}',
-                            'name': f'Account {account_id}',
-                            'region': st.session_state.get('aws_region', 'us-east-1'),
-                            'connection_type': 'single'
-                        }]
-                        # Store for this session
-                        st.session_state.connected_accounts = connected_accounts
-            except Exception as e:
-                pass  # Silently fail - will show "No accounts connected" below
+                # Try Method 1: Direct credentials from session state
+                if st.session_state.get('aws_access_key') and st.session_state.get('aws_secret_key'):
+                    st.success("✅ Found credentials in session_state")
+                    try:
+                        import boto3
+                        session = boto3.Session(
+                            aws_access_key_id=st.session_state.aws_access_key,
+                            aws_secret_access_key=st.session_state.aws_secret_key,
+                            region_name=st.session_state.get('aws_region', 'us-east-1')
+                        )
+                        sts = session.client('sts')
+                        identity = sts.get_caller_identity()
+                        account_id = identity.get('Account', '')
+                        st.success(f"✅ Got Account ID: {account_id}")
+                        
+                        if account_id:
+                            connected_accounts = [{
+                                'account_id': account_id,
+                                'account_name': f'Account {account_id}',
+                                'name': f'Account {account_id}',
+                                'region': st.session_state.get('aws_region', 'us-east-1'),
+                                'connection_type': 'single'
+                            }]
+                            st.session_state.connected_accounts = connected_accounts
+                    except Exception as e:
+                        st.error(f"❌ Method 1 failed: {str(e)}")
+                else:
+                    st.warning("⚠️ No credentials in session_state, trying get_aws_session()")
+                
+                # Try Method 2: get_aws_session()
+                if not connected_accounts:
+                    try:
+                        from aws_connector import get_aws_session
+                        session = get_aws_session()
+                        st.write("**get_aws_session() returned:**", type(session))
+                        
+                        if session:
+                            st.success("✅ get_aws_session() returned a session")
+                            sts = session.client('sts')
+                            identity = sts.get_caller_identity()
+                            account_id = identity.get('Account', '')
+                            st.success(f"✅ Got Account ID: {account_id}")
+                            
+                            if account_id:
+                                connected_accounts = [{
+                                    'account_id': account_id,
+                                    'account_name': f'Account {account_id}',
+                                    'name': f'Account {account_id}',
+                                    'region': st.session_state.get('aws_region', 'us-east-1'),
+                                    'connection_type': 'single'
+                                }]
+                                st.session_state.connected_accounts = connected_accounts
+                        else:
+                            st.error("❌ get_aws_session() returned None")
+                    except Exception as e:
+                        st.error(f"❌ Method 2 failed: {str(e)}")
         
         col1, col2 = st.columns(2)
         
